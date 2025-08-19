@@ -1,39 +1,34 @@
 // public/js/weaver.js
-// v0.5 — live/local bridge with reactive getters and persistence-friendly API.
-
+// Minimal live/local weaver bridge (no placeholders).
 export function makeWeaver(store, log, setTag){
-  let mode = 'local';
-  let endpoint = '/dm-turn';
+  let mode = store.get('dm_mode','local'); // 'local' | 'live'
+  let endpoint = store.get('dm_ep','/dm-turn');
 
-  const api = {
-    setMode(m){
-      mode = (m === 'live') ? 'live' : 'local';
-      setTag && setTag(mode==='live' ? 'Live' : 'Local');
-    },
-    setEndpoint(url){
-      endpoint = url || '/dm-turn';
-    },
-    async turn(payload, localFallback){
-      if (mode !== 'live') return localFallback(payload);
-      try{
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.json();
-      }catch(e){
-        log && log(`Live DM error: ${e.message}. Falling back.`);
-        api.setMode('local');
-        return localFallback(payload);
-      }
+  function setMode(m){
+    mode = m;
+    store.set('dm_mode', mode);
+    setTag && setTag(mode==='live' ? 'Live' : 'Local');
+  }
+  function setEndpoint(u){
+    endpoint = u || '/dm-turn';
+    store.set('dm_ep', endpoint);
+  }
+
+  async function turn(payload, fallback){
+    if (mode !== 'live') return fallback(payload);
+    try{
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {'content-type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('live endpoint returned '+res.status);
+      return await res.json();
+    }catch(err){
+      log && log('live DM error: '+err.message);
+      return fallback(payload);
     }
-  };
+  }
 
-  // reactive getters so Weaver.mode / Weaver.endpoint reflect current values
-  Object.defineProperty(api, 'mode',     { get: () => mode });
-  Object.defineProperty(api, 'endpoint', { get: () => endpoint });
-
-  return api;
+  return { mode, endpoint, setMode, setEndpoint, turn };
 }
