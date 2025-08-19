@@ -4,6 +4,12 @@
   --silver1:#bfc5cc; --silver2:#8d96a1; --link:#e0c98a;
   --success:#e5c36a; --fail:#9b3131;
 }
+/* global hide helper used by the engine */
+.hidden{ display:none !important; }
+
+/* the background shade should start hidden until a modal is opened */
+.shade{ display:none; }
+.shade:not(.hidden){ display:block; }
 
 /* ---------- Base ---------- */
 html,body{
