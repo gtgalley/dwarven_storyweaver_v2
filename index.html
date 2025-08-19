@@ -1,28 +1,23 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Dwarven Deco Storyweaver</title>
-  <script>window.__VER__='11';</script>
-  <link rel="stylesheet" href="./public/css/skin.css?v=11">
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Josefin+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Josefin+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./public/css/skin.css?v=12">
 </head>
 <body>
-  <div id="boot" class="boot"><div class="box">Loading…</div></div>
+  <div class="boot" id="boot"><div class="box">Loading…</div></div>
+
   <script type="module">
-    const v = window.__VER__;
-    import(`./public/js/engine.js?v=${v}`).then(m => {
-      m.boot();
+    import { boot } from './public/js/engine.js?v=12';
+    window.addEventListener('DOMContentLoaded', ()=>{ 
       document.getElementById('boot').classList.add('ok');
-    }).catch(err => {
-      const b = document.getElementById('boot');
-      b.querySelector('.box').innerHTML =
-        '<b>Failed to import engine.js</b><br><code>' + String(err) +
-        '</code><div style="margin-top:6px;font-size:12px;opacity:.8">'
-        + 'Check path /public/js/engine.js (case-sensitive) and that the file has no "..." ellipses.'
-        + '</div>';
+      boot();
     });
   </script>
+  <noscript>Please enable JavaScript to play.</noscript>
 </body>
 </html>
