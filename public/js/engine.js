@@ -300,34 +300,52 @@ function undoTurn(){
 
 /* ---------- choices ---------- */
 function renderChoices(choices){
-  const list=Engine.el.choiceList; if(!list) return;
-  // NEW: guard the history arrays
+  const list = Engine.el.choiceList;
+  if (!list) return;
+
+  // Ensure arrays exist (migrations / old saves)
   if (!Array.isArray(Engine.state._choiceHistory)) Engine.state._choiceHistory = [];
   if (!Array.isArray(Engine.state._lastChoices))   Engine.state._lastChoices   = [];
 
-  const history = Engine.state._choiceHistory;
-  const pool = [...(choices||[])];
-  // ... (rest of your function unchanged)
-  
-  const history=Engine.state._choiceHistory;
-  const pool=[...choices];
-  const fresh=pool.filter(c=>!history.includes(c.id));
-  let picked=[];
-  if(fresh.length){ picked.push(choice(fresh)); const rest=pool.filter(c=>c.id!==picked[0].id); picked.push(choice(rest)); }
-  else { picked=[choice(pool), choice(pool.filter(c=>c.id!==picked[0]?.id||true))]; }
-  history.push(...picked.map(c=>c.id)); while(history.length>8) history.shift();
-  const prev=Engine.state._lastChoices||[]; if(picked.map(c=>c.sentence).join('|')===prev.join('|')) picked = modulateChoices(picked);
-  Engine.state._lastChoices=picked.map(c=>c.sentence);
+  const choiceHist = Engine.state._choiceHistory;   // <-- renamed from "history"
+  const pool = [...(choices || [])];
 
-  list.innerHTML='';
-  picked.forEach(ch=>{
-    const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=ch.sentence;
-    btn.onclick=()=>{ Sound.click(); resolveChoice(ch); };
-    btn.addEventListener('mouseenter',()=>Sound.drop(),{once:false});
+  // Prefer a fresh option every turn
+  const fresh = pool.filter(c => !choiceHist.includes(c.id));
+
+  let picked = [];
+  if (fresh.length) {
+    picked.push(choice(fresh));
+    const rest = pool.filter(c => c.id !== picked[0].id);
+    if (rest.length) picked.push(choice(rest));
+  } else {
+    picked = [choice(pool)];
+    const secondPool = pool.filter(c => c.id !== picked[0]?.id);
+    if (secondPool.length) picked.push(choice(secondPool));
+  }
+
+  // Track recent ids; retire old ones
+  choiceHist.push(...picked.map(c => c.id));
+  while (choiceHist.length > 8) choiceHist.shift();
+
+  // If the two sentences are identical to last turn, modulate them
+  const prev = Engine.state._lastChoices || [];
+  if (picked.map(c => c.sentence).join('|') === prev.join('|')) {
+    picked = modulateChoices(picked);
+  }
+  Engine.state._lastChoices = picked.map(c => c.sentence);
+
+  // Paint buttons
+  list.innerHTML = '';
+  picked.forEach(ch => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = ch.sentence;
+    btn.onclick = () => { Sound.click(); resolveChoice(ch); };
+    btn.addEventListener('mouseenter', () => Sound.drop(), { once: false });
     list.appendChild(btn);
   });
 }
-
 function modulateChoices(arr){
   const suffix=[' — carefully',' — quickly',' — with a steady breath',' — in a roundabout way'];
   return arr.map(c=>({ ...c, sentence: c.sentence.replace(/\s+—.*$/,'') + suffix[rnd(0,suffix.length-1)] }));
