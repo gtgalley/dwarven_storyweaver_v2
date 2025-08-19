@@ -73,10 +73,124 @@ export function boot(){
   hydrate();
   bind();
   renderAll();
-  if(!Engine.state.storyBeats.length) beginTale();
+
+  // Intro gating (remember if seen)
+  const seen = store.get('intro_seen', false);
+  insertIntro();                     // create the overlay
+  if (seen) {
+    // Hide immediately & start tale
+    if (Engine.el.intro) Engine.el.intro.classList.add('hidden');
+    if (!Engine.state.storyBeats.length) beginTale();
+  } else {
+    // Keep the overlay; do NOT auto-begin until "Begin Story"
+  }
+
+  // wake ambience
   Sound.ambOn();
 }
 
+function insertIntro(){
+  // If already present (hot reload), bail.
+  if (Engine.el && Engine.el.intro) return;
+
+  const introHTML = `
+  <div id="intro" class="intro">
+    <!-- Slide 1 -->
+    <section class="slide s1 active" data-side="img-left" aria-label="Slide 1">
+      <div class="img" aria-hidden="true"></div>
+      <div class="copy">
+        <div class="scroll autoscroll">
+          <p>Lanterns wake the terraces of <span class="gloss" data-def="A dwarven hill-city cut in tiers above vast cisterns and service vaults.">Brassreach</span>, a place built atop tuned caverns the forebears called the <span class="gloss" data-def="The engineered maze beneath Brassreach: ribs of stone, collars of brass, and echoing channels.">under-works</span>. Stone remembers weight; brass remembers oath; echo remembers pattern. In this city, stories are woven into law, and those who carry the thread are named <span class="gloss" data-def="A delver who ties deeds to record so the city can ‘feel’ where it’s weak or strong.">thread-bearers</span>. You arrive at the <span class="gloss" data-def="The first tier of tunnels where rumor makes rough maps and first tests of nerve are set.">Halls</span>, where water breathes under the floor and old marks point downward toward the <span class="gloss" data-def="Sunless reservoirs that feed the city and carry sound like wire.">cisterns</span>. The Wardens clap the walls and listen; the Archivists wet their quills. The city waits for a steady hand—and a steady voice.</p>
+        </div>
+      </div>
+      <div class="nav">
+        <button class="btn secondary" id="introSkip1">Skip</button>
+        <button class="btn gold intro-next">Continue ▸</button>
+      </div>
+      <div class="mist" aria-hidden="true"></div>
+    </section>
+
+    <!-- Slide 2 -->
+    <section class="slide s2" data-side="img-right" aria-label="Slide 2">
+      <div class="img" aria-hidden="true"></div>
+      <div class="copy">
+        <div class="scroll autoscroll">
+          <p>Deep below gathers the <span class="gloss" data-def="A slow, deliberate tide that learns rhythm and pushes where the city is out of tune.">Unfathomer</span>, a standing <span class="gloss" data-def="Many tones sounding as one; where channels agree it stands firm, where they argue it reaches through.">chorus</span> taught by centuries of bells. Once, the <span class="gloss" data-def="The old rule that kept channels, bells, and gates in tune so the chorus rested.">Cadence Law</span> held it calm. Now cheap metal and careless renovations have pulled the city off pitch. Brassreach answers with the <span class="gloss" data-def="Ancient instruments of authority that bind by place, right, and pattern.">Three Seals</span>—<span class="gloss" data-def="Binds by weight and place; makes passages remember resistance.">Stone</span>, <span class="gloss" data-def="Binds by right; enforces oaths on gates and devices.">Brass</span>, and <span class="gloss" data-def="Binds by pattern; holds a spoken cadence after the voice is gone.">Echo</span>. In the stacks, <span class="gloss" data-def="Archivist of the Lower Stacks; believes the chorus can be bargained with using true measures.">Lithen the Wise</span> argues for treaty. In the foundries, <span class="gloss" data-def="Warden of the Brassworks; would retune the city by force and throttle the culverts.">Mullinen the Stout</span> argues for clamps and spikes. Between them stands your line in the dark.</p>
+        </div>
+      </div>
+      <div class="nav">
+        <button class="btn secondary" id="introBack2">◂ Back</button>
+        <button class="btn gold intro-next">Continue ▸</button>
+      </div>
+      <div class="mist" aria-hidden="true"></div>
+    </section>
+
+    <!-- Slide 3 -->
+    <section class="slide s3" data-side="img-left" aria-label="Slide 3">
+      <div class="img" aria-hidden="true"></div>
+      <div class="copy">
+        <div class="scroll autoscroll">
+          <p>Rumor says the <span class="gloss" data-def="An ancient tuning engine that once set the city’s measures with a single motion.">Gate of Measures</span> still turns in the cistern fields. To reach it you must map the <span class="gloss" data-def="The rumor-rich threshold where first paths are tried.">Halls</span>, steal or earn keys in the <span class="gloss" data-def="The deep library where ledgers, oaths, and tuning charts are kept.">Archives</span>, and descend into the <span class="gloss" data-def="The drowned, resonant galleries where the Unfathomer stands strongest.">Depths</span>. At places of clean <span class="gloss" data-def="A chamber’s agreement of tone where speech carries without drowning.">resonance</span> you may <span class="gloss" data-def="Quiet the chorus with truthful measures and working channels.">bind</span>, or <span class="gloss" data-def="Match cadence and make terms the city can keep.">bargain</span>, or—if all else fails—<span class="gloss" data-def="Drive the chorus back at a cost the city must bear.">banish</span>. Gather Seals, keep the ledger honest, and mark your way. The Unfathomer listens. The city remembers. Your choices decide which one the streets will follow.</p>
+        </div>
+      </div>
+      <div class="nav">
+        <button class="btn secondary" id="introBack3">◂ Back</button>
+        <button class="btn gold intro-begin">Begin Story</button>
+      </div>
+      <div class="mist" aria-hidden="true"></div>
+    </section>
+  </div>`;
+
+  // insert at top of body
+  document.body.insertAdjacentHTML('afterbegin', introHTML);
+
+  // cache
+  Engine.el.intro    = document.getElementById('intro');
+  Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
+  Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
+  Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
+
+  // helpers
+  let idx = 0, autoTimer = null;
+  const show = (i)=>{
+    idx = Math.max(0, Math.min(Engine.el.slides.length-1, i));
+    Engine.el.slides.forEach((s,k)=>s.classList.toggle('active', k===idx));
+
+    // gentle auto-scroll of paragraph; resets each slide
+    if (autoTimer) clearInterval(autoTimer);
+    const box = Engine.el.slides[idx].querySelector('.scroll');
+    if (box){
+      box.scrollTop = 0;
+      autoTimer = setInterval(()=>{ box.scrollTop += 1; }, 40);  // ~25px/sec
+      // stop auto if the user interacts
+      ['wheel','touchstart','keydown','mousedown'].forEach(ev => {
+        box.addEventListener(ev, ()=>{ clearInterval(autoTimer); autoTimer=null; }, { once:true });
+      });
+    }
+  };
+
+  // wire buttons
+  Engine.el.nextBtns.forEach(btn => btn.addEventListener('click', ()=>{
+    Sound.drop(); show(idx+1);
+  }));
+  const b2 = document.getElementById('introBack2');
+  const b3 = document.getElementById('introBack3');
+  const sk = document.getElementById('introSkip1');
+  if (b2) b2.onclick = ()=>{ Sound.click(); show(idx-1); };
+  if (b3) b3.onclick = ()=>{ Sound.click(); show(idx-1); };
+  if (sk)  sk.onclick  = ()=>{ Sound.click(); if (Engine.el.beginBtn) Engine.el.beginBtn.click(); };
+
+  if (Engine.el.beginBtn){
+    Engine.el.beginBtn.onclick = ()=>{
+      Sound.click();
+      Engine.el.intro.classList.add('hidden');
+      store.set('intro_seen', true);
+      if (!Engine.state.storyBeats.length) beginTale();
+    };
+  }
+
+  show(0);
+}
 /* ---------- DOM ---------- */
 function buildUI(){
   document.body.innerHTML = `
