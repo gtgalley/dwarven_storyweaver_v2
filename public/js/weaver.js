@@ -1,34 +1,28 @@
-// public/js/weaver.js
-// Minimal live/local weaver bridge (no placeholders).
+// Minimal pass-through "weaver" with Live/Local switch.
+// You can later plug your server endpoint at S.live.endpoint.
+
 export function makeWeaver(store, log, setTag){
-  let mode = store.get('dm_mode','local'); // 'local' | 'live'
-  let endpoint = store.get('dm_ep','/dm-turn');
+  async function turn(payload, local){
+    const liveOn = store.get('dm_on', false);
+    setTag(liveOn ? 'Live' : 'Local');
 
-  function setMode(m){
-    mode = m;
-    store.set('dm_mode', mode);
-    setTag && setTag(mode==='live' ? 'Live' : 'Local');
-  }
-  function setEndpoint(u){
-    endpoint = u || '/dm-turn';
-    store.set('dm_ep', endpoint);
-  }
+    if (!liveOn) return local(payload);
 
-  async function turn(payload, fallback){
-    if (mode !== 'live') return fallback(payload);
     try{
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {'content-type':'application/json'},
+      const ep = store.get('dm_ep', '/dm-turn');
+      const res = await fetch(ep, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error('live endpoint returned '+res.status);
-      return await res.json();
+      if(!res.ok) throw new Error('bad status');
+      const data = await res.json();
+      return data;
     }catch(err){
-      log && log('live DM error: '+err.message);
-      return fallback(payload);
+      log(`Live DM failed (${err?.message||'error'}) — falling back to local.`);
+      return local(payload);
     }
   }
 
-  return { mode, endpoint, setMode, setEndpoint, turn };
+  return { turn };
 }
