@@ -1,7 +1,7 @@
 // public/js/engine.js 
-// v0.4 — centered masthead; higher-contrast UI; two-choice structure; optional "Continue Story";
-// softer sounds; HP/Gold/Items logic; death/last-stand flow; boss cooldown & win paths;
-// success/fail beat glow; hover & click polish.
+// v0.4.2 — ambience melody & drips; italicized user input blended with prose;
+// evolving two-choice set with modulation; semantic anti-repetition;
+// softer dice thunk; success/fail glow preserved; death/last-stand flow.
 
 import { makeWeaver } from './weaver.js';
 
@@ -28,10 +28,11 @@ const Engine = {
     turn: 0,
     scene: 'Halls',
     log: [],
-    storyBeats: [],   // {text, rollInfo?, tone?:'good'|'bad'|'neutral'}
+    storyBeats: [],      // {text, rollInfo?, tone?, userText?}
     transcript: [],
     lastStandUsed: false,
     buffs: { nextDexBonus: 0 },
+    _lastChoices: [],    // remember last choice sentences to avoid repeats
     character: {
       name: 'Eldan',
       STR: 12, DEX: 14, INT: 12, CHA: 10,
@@ -57,7 +58,8 @@ const Weaver = makeWeaver(
 
 /* ---------- Sound (procedural; no files) ---------- */
 const Sound = (() => {
-  let ctx, master, ui, amb, flames, onAmb = false;
+  let ctx, master, ui, amb, flames;
+  let bass, bassGain, bassTimer = null, dripTimer = null;
 
   function init(){
     if (ctx) return;
@@ -67,7 +69,7 @@ const Sound = (() => {
     amb    = ctx.createGain(); amb.gain.value = 0.0; amb.connect(master);
     flames = ctx.createGain(); flames.gain.value = 0.0; flames.connect(master);
 
-    // A low forge-like ambience (two slow oscillators + filtered noise)
+    // Base room-tone: two slow oscillators + filtered noise
     const o1=ctx.createOscillator(); o1.type='sine';     o1.frequency.value=110;
     const g1=ctx.createGain(); g1.gain.value=0.02; o1.connect(g1).connect(amb); o1.start();
     const o2=ctx.createOscillator(); o2.type='triangle'; o2.frequency.value=165;
@@ -80,19 +82,59 @@ const Sound = (() => {
     const nf=ctx.createBiquadFilter(); nf.type='lowpass'; nf.frequency.value=600;
     const ng=ctx.createGain(); ng.gain.value=0.05; ns.connect(nf).connect(ng).connect(amb); ns.start();
 
-    // Flames (for death/last-stand screen)
+    // Flames for the death modal
     const ns2=ctx.createBufferSource(); ns2.buffer=noise; ns2.loop=true;
     const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1000; bp.Q.value=0.6;
     const fg=ctx.createGain(); fg.gain.value=0.0; ns2.connect(bp).connect(fg).connect(flames); ns2.start();
-    // gentle swell/ebb
     const l2=ctx.createOscillator(); const lg2=ctx.createGain(); l2.type='sine'; l2.frequency.value=0.2; lg2.gain.value=0.3; l2.connect(lg2).connect(fg.gain); l2.start();
   }
 
+  function startMelody(){
+    if (!ctx) init();
+    if (bassTimer) return;
+    bass = ctx.createOscillator(); bass.type='sawtooth';
+    const filt = ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=240; filt.Q.value=0.6;
+    bassGain = ctx.createGain(); bassGain.gain.value=0.03;
+    bass.connect(filt).connect(bassGain).connect(amb);
+    bass.start();
+
+    const notes = [110, 98, 123, 92, 82, 110]; // slow walking pattern
+    const step = (i=0) => {
+      if (!bass) return;
+      const f = notes[i % notes.length] * (1 + (Math.random()-0.5)*0.02);
+      bass.frequency.setTargetAtTime(f, ctx.currentTime, 0.05);
+      bassTimer = setTimeout(()=>step(i+1), 2400 + Math.floor(Math.random()*1200));
+    };
+    step(0);
+
+    // sparse “drips”
+    const dripTick = () => {
+      dripTimer = setTimeout(()=>{
+        const t = ctx.currentTime;
+        const o = ctx.createOscillator(); o.type='sine';
+        o.frequency.setValueAtTime(880, t);
+        o.frequency.exponentialRampToValueAtTime(520, t+0.35);
+        const g=ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.10, t+0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t+0.55);
+        o.connect(g).connect(amb); o.start(t); o.stop(t+0.6);
+        dripTick();
+      }, 4000 + Math.random()*8000);
+    };
+    dripTick();
+  }
+  function stopMelody(){
+    if (bassTimer){ clearTimeout(bassTimer); bassTimer=null; }
+    if (dripTimer){ clearTimeout(dripTimer); dripTimer=null; }
+    if (bass){ try{ bass.stop(); }catch{} bass.disconnect(); bass=null; }
+  }
+
   function toggleAmb(on=true){
-    init(); onAmb=on; if(ctx.state==='suspended') ctx.resume();
+    init(); if(ctx.state==='suspended') ctx.resume();
     amb.gain.cancelScheduledValues(ctx.currentTime);
     amb.gain.linearRampToValueAtTime(on?0.35:0, ctx.currentTime+0.6);
-    return onAmb;
+    if (on) startMelody(); else stopMelody();
+    return on;
   }
   function flamesOn(on=true){
     init(); if(ctx.state==='suspended') ctx.resume();
@@ -100,7 +142,7 @@ const Sound = (() => {
     flames.gain.linearRampToValueAtTime(on?0.25:0, ctx.currentTime+0.4);
   }
 
-  // Lower-pitched "wood thunk"
+  // Lower-pitched “wood thunk”
   function uiClick(){
     if(!ctx) return;
     const t=ctx.currentTime;
@@ -114,14 +156,14 @@ const Sound = (() => {
     o.connect(lp).connect(g).connect(ui); o.start(t); o.stop(t+0.2);
   }
 
-  // "Die cast" thunk-roll
+  // Die-cast thunk-roll (gentle)
   function dice(){
     if(!ctx) return; const t=ctx.currentTime;
     const o=ctx.createOscillator(); o.type='square';
     o.frequency.setValueAtTime(340,t);
     o.frequency.exponentialRampToValueAtTime(160,t+0.14);
     const g=ctx.createGain(); g.gain.value=0.0001;
-    g.gain.exponentialRampToValueAtTime(0.35, t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.32, t+0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t+0.26);
     const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=500;
     o.connect(lp).connect(g).connect(ui); o.start(t); o.stop(t+0.28);
@@ -166,19 +208,7 @@ function buildUI() {
   const root = document.body;
   root.innerHTML = `
   <div id="app" class="app">
-    <!-- Deco overlay -->
-    <div id="deco-chrome" aria-hidden="true" class="chrome">
-      <svg width="100%" height="100%" preserveAspectRatio="none">
-        <line x1="10%" y1="18" x2="90%" y2="18" stroke="#d5a84a" stroke-opacity=".55" stroke-width="3"/>
-        <rect x="18" y="18" width="120" height="120" fill="none" stroke="#d5a84a" stroke-width="3"/>
-        <rect x="calc(100% - 138)" y="18" width="120" height="120" fill="none" stroke="#d5a84a" stroke-width="3"/>
-        <rect x="18" y="calc(100% - 138)" width="120" height="120" fill="none" stroke="#d5a84a" stroke-width="3"/>
-        <rect x="calc(100% - 138)" y="calc(100% - 138)" width="120" height="120" fill="none" stroke="#d5a84a" stroke-width="3"/>
-      </svg>
-    </div>
-
-    <!-- Masthead -->
-    <header class="masthead">
+    <div class="masthead">
       <h1 class="brand-title">Dwarven Deco Storyweaver</h1>
       <div class="toolbar cardish">
         <div class="controls">
@@ -195,7 +225,7 @@ function buildUI() {
           <span class="tag">Engine: <b id="engineTag">Local</b></span>
         </div>
       </div>
-    </header>
+    </div>
 
     <main class="main">
       <section class="story">
@@ -230,7 +260,6 @@ function buildUI() {
     </main>
   </div>
 
-  <!-- Shade + Modals -->
   <div id="modalShade" class="shade hidden"></div>
 
   <div id="modalEdit" class="modal hidden">
@@ -406,11 +435,17 @@ function renderAll() {
     <div>Unfathomer dealt with: ${F.bossDealtWith ? 'yes' : 'no'}</div>
   `;
 
-  // story area
+  // story area (render with optional italic user input)
   Engine.el.storyScroll.innerHTML = '';
   for (const beat of Engine.state.storyBeats) {
     const p = document.createElement('p');
-    p.innerHTML = escapeHTML(beat.text);
+    if (beat.userText){
+      const em = document.createElement('em');
+      em.textContent = beat.userText;
+      p.appendChild(em);
+      p.appendChild(document.createTextNode(' — '));
+    }
+    p.appendChild(document.createTextNode(beat.text));
     if (beat.rollInfo) {
       const g = document.createElement('span');
       g.className = 'rollglyph'; g.textContent = ' ⟡';
@@ -422,7 +457,7 @@ function renderAll() {
   }
   Engine.el.storyScroll.scrollTop = Engine.el.storyScroll.scrollHeight;
 
-  // Hover chime for buttons (wire once)
+  // Hover/click polish (wire once)
   $$('.controls .btn, .choice-btn, .btn-act, .btn-continue').forEach(b => {
     if (!b._hoverWired) { b._hoverWired = true; b.addEventListener('mouseenter', () => Sound.uiHover()); }
     if (!b._pulseWired) { b._pulseWired = true; b.addEventListener('click', ()=>{ b.classList.add('pulse'); setTimeout(()=>b.classList.remove('pulse'), 180); }); }
@@ -500,6 +535,7 @@ function beginTale(){
   S.transcript = [];
   S.lastStandUsed = false;
   S.buffs = { nextDexBonus: 0 };
+  S._lastChoices = [];
   S.flags = { rumors: true, seals: [], bossReady: false, bossDealtWith: false, bossCooldown: 0 };
 
   appendBeat(
@@ -537,6 +573,14 @@ function undoTurn(){
 function renderChoices(choices, maybeBoss){
   const list = Engine.el.choiceList || Engine.el.choicesBox;
   if (!list) return;
+
+  // Ensure difference from last set
+  const prev = Engine.state._lastChoices || [];
+  let current = (choices || []).slice(0,2);
+  if (sameChoiceSet(prev, current)) current = modulateChoices(current);
+
+  Engine.state._lastChoices = current.map(c => c.sentence);
+
   list.innerHTML = '';
 
   const addBtn = (ch) => {
@@ -553,11 +597,30 @@ function renderChoices(choices, maybeBoss){
     list.appendChild(btn);
   };
 
-  // Two stronger choices max
-  (choices || []).slice(0,2).forEach(addBtn);
+  current.forEach(addBtn);
   if (maybeBoss) addBtn(maybeBoss);
-
   if (Engine.el.choicesBox) Engine.el.choicesBox.style.display = 'block';
+}
+function sameChoiceSet(a, b){
+  const A = (a||[]).map(x=>x.sentence||x).join('||');
+  const B = (b||[]).map(x=>x.sentence||x).join('||');
+  return A === B;
+}
+function modulateChoices(arr){
+  const t = Engine.state.turn, scene = Engine.state.scene;
+  const tweaks = (s) => {
+    // simple word-level modulation; keeps (STAT) suffix intact
+    const body = s.replace(/\s*\((STR|DEX|INT|CHA)\)\s*$/,'');
+    const stat = (s.match(/\((STR|DEX|INT|CHA)\)$/)||[])[1];
+    let out = body;
+    if (/\bStudy\b/i.test(out)) out = out.replace(/Study/i, (t%2? 'Re-examine' : 'Trace'));
+    else if (/\bSlip\b/i.test(out)) out = out.replace(/Slip/i, (t%2? 'Skirt' : 'Move past'));
+    else if (/\bCrosscheck\b/i.test(out)) out = out.replace(/Crosscheck/i, (t%2? 'Compare' : 'Recheck'));
+    else if (/\bTalk\b/i.test(out)) out = out.replace(/Talk/i, (t%2? 'Coax' : 'Press'));
+    out += (scene==='Halls' ? ' — quickly' : ' — carefully');
+    return stat ? `${out} (${stat})` : out;
+  };
+  return arr.map(c => ({...c, sentence: tweaks(c.sentence)}));
 }
 
 function doNarrate(ch){
@@ -569,13 +632,12 @@ function doNarrate(ch){
     history: recentHistory()
   };
   Promise.resolve(Weaver.turn(payload, localTurn))
-    .then(resp => applyTurnResult(resp, null))
-    .catch(()=>applyTurnResult(localTurn(payload), null));
+    .then(resp => applyTurnResult(resp, null, { userAction: ch.sentence }))
+    .catch(()=>applyTurnResult(localTurn(payload), null, { userAction: ch.sentence }));
 }
 
 function resolveChoice(choice){
   const S = Engine.state, C = S.character;
-
   const stat = choice.stat;
   if (!stat) return doNarrate(choice);
 
@@ -635,15 +697,15 @@ function freeTextAct(){
   };
 
   Promise.resolve(Weaver.turn(payload, localTurn))
-    .then(resp => applyTurnResult(resp, { r, mod, dc, total, passed }))
-    .catch(()=>applyTurnResult(localTurn(payload), { r, mod, dc, total, passed }));
+    .then(resp => applyTurnResult(resp, { r, mod, dc, total, passed }, { userAction: text }))
+    .catch(()=>applyTurnResult(localTurn(payload), { r, mod, dc, total, passed }, { userAction: text }));
 }
 
 function continueStory(){
   doNarrate({ sentence:'Continue', narrate:true });
 }
 
-function applyTurnResult(resp, roll){
+function applyTurnResult(resp, roll, meta){
   const S = Engine.state;
   const C = S.character;
 
@@ -655,16 +717,9 @@ function applyTurnResult(resp, roll){
     const remove = resp.inventory_delta.remove || [];
     C.inventory = C.inventory.filter(x => !remove.includes(x)).concat(add.filter(x => !C.inventory.includes(x)));
   }
-  if (typeof resp?.gold_delta === 'number') {
-    C.Gold = Math.max(0, C.Gold + resp.gold_delta);
-  }
-  if (typeof resp?.hp_delta === 'number') {
-    C.HP = Math.max(0, C.HP + resp.hp_delta);
-  }
-
-  if (resp?.buffs && typeof resp.buffs.nextDexBonus === 'number') {
-    S.buffs.nextDexBonus = resp.buffs.nextDexBonus;
-  }
+  if (typeof resp?.gold_delta === 'number') C.Gold = Math.max(0, C.Gold + resp.gold_delta);
+  if (typeof resp?.hp_delta === 'number')   C.HP   = Math.max(0, C.HP   + resp.hp_delta);
+  if (resp?.buffs && typeof resp.buffs.nextDexBonus === 'number') S.buffs.nextDexBonus = resp.buffs.nextDexBonus;
 
   // --- Tone for beat highlight ---
   let tone = 'neutral';
@@ -672,21 +727,18 @@ function applyTurnResult(resp, roll){
 
   // --- Beat text + roll glyph ---
   const rollInfo = roll ? `d20 ${roll.r} ${fmtMod(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}` : null;
-  appendBeat(resp?.story_paragraph || '(silence)', rollInfo, tone);
+  appendBeat(resp?.story_paragraph || '(silence)', rollInfo, tone, meta?.userAction || null);
 
   // --- Scene (optional) ---
   if (resp?.scene) S.scene = resp.scene;
 
-  // --- Boss gate heuristic ---
+  // --- Boss gate heuristic / cooldown tick ---
   if (!S.flags.bossReady && S.flags.seals.length >= 2) S.flags.bossReady = true;
   if (S.flags.bossCooldown > 0) S.flags.bossCooldown--;
 
-  // --- Next choices (single render) ---
+  // --- Next choices ---
   const maybeBoss = resp?.maybe_boss_option || null;
-  const next = (resp?.next_choices && resp.next_choices.length)
-    ? resp.next_choices
-    : makeChoiceSet(S.scene);
-
+  const next = (resp?.next_choices && resp.next_choices.length) ? resp.next_choices : makeChoiceSet(S.scene);
   renderChoices(next, maybeBoss);
 
   S.turn++;
@@ -699,7 +751,6 @@ function applyTurnResult(resp, roll){
 function localTurn(payload){
   const { action, passed, stat, source, game_state } = payload;
   const S = game_state;
-  const name = S.character?.name || 'You';
   const seals = S.flags?.seals || [];
   const have = new Set(seals);
 
@@ -713,42 +764,30 @@ function localTurn(payload){
   // ITEM rewards occasionally on success during exploration
   const maybeLoot = (source==='narrate' && rnd(1,6)===1) ? choice(['Bandage','Oil Flask','Brass Key']) : null;
 
-  // Simple HP consequences by stat bucket (with 0 included in range)
+  // Simple HP consequences by stat bucket (0 included)
   const hpFailRanges = { STR:[0,3], DEX:[0,2], INT:[0,1], CHA:[0,1] };
   let hp_delta = 0, gold_delta = 0;
   if (typeof passed === 'boolean') {
-    if (passed) {
-      gold_delta = rnd(0,6);
-    } else if (stat && hpFailRanges[stat]) {
-      const [a,b]=hpFailRanges[stat]; hp_delta = -rnd(a,b);
-    }
+    if (passed) gold_delta = rnd(0,6);
+    else if (stat && hpFailRanges[stat]) { const [a,b]=hpFailRanges[stat]; hp_delta = -rnd(a,b); }
   }
 
-  // Bandage/Oil simple effects (effects applied when used via modal; here we only award)
   const invAdd = []; if (maybeLoot) invAdd.push(maybeLoot);
 
-  // Narrative
-  const beat = craftBeat({ action, passed, stat, name, awardSeal, maybeLoot, source, scene:S.scene });
+  // Narrative with anti-repetition
+  const beat = craftBeat({ action, passed, stat, awardSeal, maybeLoot, source, scene:S.scene });
 
-  // Boss offering: only when ready, no cooldown, and in Depths or when action hints at confrontation
-  let maybe_boss_option = null;
+  // Boss offering & result
+  let maybe_boss_option = null, flags_patch = {};
   const sealsCount = (awardSeal ? (seals.length+1) : seals.length);
   const ready = (S.flags?.bossReady || sealsCount >= 2) && (S.flags?.bossCooldown||0)===0;
   if (ready && (S.scene==='Depths' || /confront|unfathomer/i.test(action||''))) {
-    // Allow three routes; CHA easiest
     maybe_boss_option = { sentence: 'Confront the Unfathomer (CHA)', stat: 'CHA', scene: 'Depths' };
   }
-
-  // If this was a direct confrontation and we rolled:
-  let flags_patch = {};
   if (/confront.*unfathomer/i.test(action||'')) {
     if (typeof passed==='boolean') {
-      if (passed) {
-        flags_patch = { bossDealtWith:true };
-      } else {
-        flags_patch = { bossCooldown: 2 }; // must take two turns before attempting again
-        hp_delta += -rnd(1,3);
-      }
+      if (passed) flags_patch = { bossDealtWith:true };
+      else { flags_patch = { bossCooldown: 2 }; hp_delta += -rnd(1,3); }
     }
   }
 
@@ -759,24 +798,22 @@ function localTurn(payload){
     if (S.scene==='Archives' && rnd(1,3)===1) nextScene = 'Depths';
   }
 
-  // Build next choices (two stronger ones)
   const next_choices = makeChoiceSet(nextScene);
 
   return {
     story_paragraph: beat,
     flags_patch,
     inventory_delta: { add: invAdd, remove: [] },
-    gold_delta,
-    hp_delta,
-    buffs: {},                 // reserved (e.g., Oil → nextDexBonus; applied when used)
+    gold_delta, hp_delta,
+    buffs: {},
     scene: nextScene,
     next_choices,
     maybe_boss_option
   };
 }
 
-function craftBeat({action, passed, stat, name, awardSeal, maybeLoot, source, scene}){
-  // More concrete, present-tense narration. Varies openings; avoids repetitive "You ..."
+function craftBeat({action, passed, stat, awardSeal, maybeLoot, source, scene}){
+  // variation seeds, avoiding repetitive openings
   const opens = [
     'Boots ring once on the tiles',
     'Lamplight searches the carvings',
@@ -784,7 +821,10 @@ function craftBeat({action, passed, stat, name, awardSeal, maybeLoot, source, sc
     'Dust hangs in a quiet braid',
     'Stone answers with a low note'
   ];
-  const open = choice(opens);
+  let open = choice(opens);
+  const last = Engine.state.transcript.slice(-2);
+  let attempts = 0;
+  while (attempts++ < 5 && last.some(t => tooSimilar(open, t))) open = choice(opens);
 
   if (source==='narrate' || !stat){
     const threads = {
@@ -805,17 +845,20 @@ function craftBeat({action, passed, stat, name, awardSeal, maybeLoot, source, sc
       ]
     };
     let base = choice(threads[scene] || threads.Halls);
+    attempts = 0;
+    while (attempts++ < 5 && last.some(t => tooSimilar(base, t))) {
+      base = choice(threads[scene] || threads.Halls);
+    }
     if (awardSeal) base += ` A sigil warms at your wrist — the Seal of ${awardSeal}.`;
     if (maybeLoot) base += ` Tucked behind a brace you find a ${maybeLoot}.`;
     if (scene!=='Depths') base += ` Rumors point downward; the cisterns hold the clearer answer.`;
     return base;
   }
 
-  // Rolled beats (clear consequences, varied phrasing)
   const successBy = {
     STR: [
       `You lean into the task and the bar gives; a dull crack opens the way.`,
-      `Bracing well, you shift the weight; the mechanism concedes a notch.`,
+      `Bracing well, you shift the weight; the mechanism concedes a notch.`
     ],
     DEX: [
       `Careful hands move cleanly; the catch slips without a sound.`,
@@ -838,11 +881,11 @@ function craftBeat({action, passed, stat, name, awardSeal, maybeLoot, source, sc
   };
   const tail = awardSeal ? ` A sigil warms at your wrist — the Seal of ${awardSeal}.` : '';
 
-  if (passed) return `${choice(successBy[stat])}.${tail}`;
-  return `${failBy[stat]}.`;
+  const line = passed ? choice(successBy[stat]) + '.' + tail : `${failBy[stat]}.`;
+  return line;
 }
 
-/* ---------- Choice generation (two strong choices + narrative) ---------- */
+/* ---------- Choice generation (two strong choices) ---------- */
 function makeChoiceSet(scene){
   const sets = {
     Halls: [
@@ -862,7 +905,6 @@ function makeChoiceSet(scene){
     ]
   };
   const pool = sets[scene] || sets.Halls;
-  // choose two skill checks, keep the narrate option available via Continue button instead
   const checks = pool.filter(p=>p.stat);
   const two = shuffle(checks).slice(0,2);
   return two;
@@ -873,8 +915,6 @@ function showDeath(){
   const D = Engine.el.deathOptions;
   if (!D) return;
   D.innerHTML = '';
-
-  // Flames ambience
   Sound.flamesOn(true);
 
   const bNew = document.createElement('button');
@@ -885,7 +925,6 @@ function showDeath(){
   bLoad.className='btn'; bLoad.textContent='Load'; bLoad.onclick=()=>{ Sound.uiClick(); const s=store.get('dds_state',null); if(s){Engine.state=s; renderAll();} closeModal(Engine.el.modalDeath); };
   D.appendChild(bLoad);
 
-  // Use items
   const C=Engine.state.character;
   if (C.inventory.includes('Bandage')){
     const bBand = document.createElement('button');
@@ -905,11 +944,20 @@ function showDeath(){
 }
 
 /* ---------- Helpers ---------- */
-function appendBeat(text, rollInfo, tone='neutral'){
-  Engine.state.storyBeats.push({text, rollInfo, tone});
-  Engine.state.transcript.push(text);
+function tooSimilar(a,b){
+  if (!a || !b) return false;
+  const A = a.toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).filter(Boolean);
+  const B = b.toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).filter(Boolean);
+  const setA = new Set(A), setB = new Set(B);
+  const inter = [...setA].filter(w => setB.has(w)).length;
+  const ratio = inter / Math.max(6, setA.size, setB.size); // soften for short phrases
+  return ratio > 0.6;
 }
 
+function appendBeat(text, rollInfo, tone='neutral', userText=null){
+  Engine.state.storyBeats.push({text, rollInfo, tone, userText});
+  Engine.state.transcript.push((userText?`${userText} — `:'') + text);
+}
 function snapshotState(){
   const S = Engine.state;
   return {
@@ -929,7 +977,6 @@ function inferStat(text){
   if (/\b(sneak|hide|slip|dodge|climb|balance|steal|pick)\b/.test(t)) return 'DEX';
   if (/\b(look|inspect|study|analyze|read|recall|solve|decipher|investigate)\b/.test(t)) return 'INT';
   if (/\b(speak|persuade|charm|intimidate|perform|negotiate|parley)\b/.test(t)) return 'CHA';
-  // No clear action verb: treat as pure narration
   return 'NARRATE';
 }
 function fmtMod(m){ return (m>=0?'+':'') + m; }
@@ -946,10 +993,14 @@ function exportTranscript(){
     h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}
     .meta{color:#555; margin-bottom:14px}
     p{line-height:1.55}
+    em{color:#555}
   </style>
   <h1>Dwarven Deco Storyweaver — Transcript</h1>
   <div class="meta">Engine: ${Weaver.mode==='live'?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>
-  ${S.transcript.map(t=>`<p>${escapeHTML(t)}</p>`).join('')}
+  ${Engine.state.storyBeats.map(b=>{
+    const user = b.userText?`<em>${escapeHTML(b.userText)}</em> — `:''; 
+    return `<p>${user}${escapeHTML(b.text)}</p>`;
+  }).join('')}
   `;
   const blob = new Blob([html], {type:'text/html'});
   const url = URL.createObjectURL(blob);
