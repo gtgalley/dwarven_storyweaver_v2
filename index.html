@@ -5,14 +5,57 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dwarven Deco Storyweaver</title>
 
-  <link rel="stylesheet" href="./public/css/skin.css?v=8">
+  <!-- One version knob. Bump when you want to bust cache. -->
+  <script>window.__APP_VER__ = '9';</script>
+
+  <link rel="stylesheet" href="./public/css/skin.css?v=9">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Josefin+Sans:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23d5a84a'/%3E%3C/svg%3E">
+
+  <style>
+    /* Simple loader/fault overlay */
+    #boot-status {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      background:#0b0f13; color:#e6d9a2; font: 15px/1.4 system-ui,Segoe UI,Roboto,sans-serif;
+      z-index: 999999;
+    }
+    #boot-status.ok { display: none; }
+    #boot-status .box{border:1px solid #9a6b24; padding:14px 16px; border-radius:8px;
+      background:#10151a; max-width: 72ch}
+    #boot-status .muted{opacity:.75}
+    #boot-status code{background:#0d141a; border:1px solid #27303a; padding:2px 4px; border-radius:4px}
+  </style>
 </head>
 <body>
+  <div id="boot-status">
+    <div class="box">
+      <div style="margin-bottom:6px"><b>Loading Storyweaver…</b></div>
+      <div class="muted">If this hangs, an import likely failed. Open <code>F12 → Console</code> for the exact error.</div>
+    </div>
+  </div>
+
   <script type="module">
-    import { boot } from './public/js/engine.js?v=8';
-    boot();
+    const ver = window.__APP_VER__ || '9';
+    let ok = false;
+
+    // If the engine throws while parsing, this handler surfaces it in the overlay.
+    window.addEventListener('error', (e) => {
+      const el = document.getElementById('boot-status');
+      if (!el || ok) return;
+      el.querySelector('.box').innerHTML =
+        `<div style="margin-bottom:6px"><b>Boot error</b></div><div><code>${(e && e.message) || 'Unknown error during load'}</code></div>`;
+    });
+
+    import(`./public/js/engine.js?v=${ver}`).then(({ boot }) => {
+      boot();
+      ok = true;
+      document.getElementById('boot-status')?.classList.add('ok');
+    }).catch(err => {
+      const el = document.getElementById('boot-status');
+      if (!el) return;
+      el.querySelector('.box').innerHTML =
+        `<div style="margin-bottom:6px"><b>Failed to import engine</b></div><div><code>${String(err)}</code></div>
+         <div class="muted" style="margin-top:6px">Check the path <code>/public/js/engine.js</code> and letter case. GitHub Pages paths are case-sensitive.</div>`;
+    });
   </script>
 </body>
 </html>
