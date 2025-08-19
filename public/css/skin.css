@@ -1,7 +1,10 @@
 :root{
   --bg:#0b0f13; --bg2:#131920; --ink:#e6d9a2; --ink2:#c8bb87;
   --gold:#d5a84a; --gold2:#9a6b24; --line:#2a3038; --silver:#c9cbd1;
-  --success:#e5c36a; --fail:#9b3131; --intro-img-1: url('public/img/intro_halls.jpg'); --intro-img-2: url('public/img/intro_seals.jpg'); --intro-img-3: url('public/img/intro_depths.jpg');
+  --success:#e5c36a; --fail:#9b3131;
+  --intro-img-1: '';
+  --intro-img-2: '';
+  --intro-img-3: '';
 }
 
 /* helpers */
@@ -20,13 +23,14 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
 
 /* masthead */
 .masthead{padding:16px 12px 8px}
-.brand-title{font-family:"Cinzel",serif;text-align:center;letter-spacing:.8px;margin:0 0 8px;color:var(--gold);font-weight:700;font-size:26px;text-shadow:0 0 10px rgba(213,168,74,.25)}
+.brand-title{font-family:"Cinzel",serif;text-align:center;letter-spacing:.8px;margin:0 0 8px;color:var(--gold);font-weight:700;font-size:28px;text-shadow:0 0 10px rgba(213,168,74,.25)}
 .toolbar{display:flex;justify-content:center}
 .cardish{background:linear-gradient(180deg,var(--bg2),#0b0f13);border:1px solid var(--gold2);border-radius:10px;padding:8px 12px;box-shadow:0 0 0 2px rgba(154,107,36,.18) inset}
 .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center}
 .btn{background:linear-gradient(180deg,#212833,#131921);color:var(--ink);border:1px solid var(--gold2);padding:8px 10px;border-radius:8px;cursor:pointer}
 .btn:hover{filter:brightness(1.06)}
 .btn.gold{background:linear-gradient(180deg,#4d3b18,#2c2313);border-color:var(--gold)}
+.btn.mini{padding:4px 8px;font-size:.9rem}
 .tag{margin-left:8px;border:1px solid var(--gold2);border-radius:999px;padding:2px 8px;font-size:.85rem;color:var(--gold)}
 
 /* main area */
@@ -37,19 +41,45 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
 .story-scroll p{margin:.4rem 0 1rem 0;line-height:1.55}
 .rollglyph{opacity:.7;margin-left:4px;cursor:help}
 .choices{border-top:1px solid var(--line);padding:10px 12px}
-.choice-btn{display:block;width:100%;text-align:left;margin:6px 0;padding:10px;background:#171a23;border:1px solid #2f3540;border-radius:8px;cursor:pointer}
+.choice-btn{display:block;width:100%;text-align:left;margin:6px 0;padding:12px 12px;background:#171a23;border:1px solid #2f3540;border-radius:8px;cursor:pointer;color:#f3ecd2}
 .choice-btn:hover{background:#202635}
 .free{display:flex;gap:8px;margin-top:8px}
-.free input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--gold2);background:#0d141a;color:var(--ink)}
+.free input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--gold2);background:#0d141a;color:#f3ecd2}
 .side{display:flex;flex-direction:column;gap:12px}
 .card{background:linear-gradient(180deg,#10151a,#0b0f13);border:1px solid var(--gold2);border-radius:10px;padding:12px}
+.centered{display:grid;gap:6px;justify-items:center}
+.deco{position:relative}
+.deco::before,.deco::after{
+  content:''; position:absolute; inset:6px; border:1px solid rgba(154,107,36,.28); pointer-events:none;
+  mask: linear-gradient(#000 0 0) top left/40px 2px no-repeat,
+        linear-gradient(#000 0 0) top left/2px 40px no-repeat,
+        linear-gradient(#000 0 0) top right/40px 2px no-repeat,
+        linear-gradient(#000 0 0) top right/2px 40px no-repeat,
+        linear-gradient(#000 0 0) bottom left/40px 2px no-repeat,
+        linear-gradient(#000 0 0) bottom left/2px 40px no-repeat,
+        linear-gradient(#000 0 0) bottom right/40px 2px no-repeat,
+        linear-gradient(#000 0 0) bottom right/2px 40px no-repeat;
+  -webkit-mask: linear-gradient(#000 0 0) top left/40px 2px no-repeat,
+                 linear-gradient(#000 0 0) top left/2px 40px no-repeat,
+                 linear-gradient(#000 0 0) top right/40px 2px no-repeat,
+                 linear-gradient(#000 0 0) top right/2px 40px no-repeat,
+                 linear-gradient(#000 0 0) bottom left/40px 2px no-repeat,
+                 linear-gradient(#000 0 0) bottom left/2px 40px no-repeat,
+                 linear-gradient(#000 0 0) bottom right/40px 2px no-repeat,
+                 linear-gradient(#000 0 0) bottom right/2px 40px no-repeat;
+}
+.deco::after{ inset:10px; border-color: rgba(213,168,74,.22) }
 
-/* modals */
+/* modals (restyled) */
 .shade{position:fixed;inset:0;background:#0008;z-index:9998}
 .modal{position:fixed;top:8%;left:50%;transform:translateX(-50%);width:min(720px,92vw);background:#0f141a;border:1px solid var(--gold2);border-radius:12px;z-index:9999}
 .modal header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--gold2)}
 .modal .content{padding:12px}
 .closeX{border:1px solid var(--gold2);padding:4px 8px;border-radius:6px;cursor:pointer}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal input[type="text"], .modal input[type="number"]{width:100%;padding:10px;border-radius:8px;border:1px solid var(--gold2);background:#0d141a;color:var(--ink)}
+.modal-actions, .btnrow{display:flex;gap:8px;margin-top:8px}
+.sep{border:0;border-top:1px solid #2a3038;margin:12px 0}
 
 /* typewriter + smoke */
 p.reveal span.ch{opacity:0}
@@ -63,56 +93,29 @@ p.reveal .cursor{display:inline-block;width:.6ch}
 .glow-fail{color:var(--fail);text-shadow:0 0 18px rgba(155,49,49,.35)}
 
 /* ——— Intro slideshow ——— */
-:root{
-  /* Optional image URLs; leave empty for deco placeholders */
-  --intro-img-1: '';
-  --intro-img-2: '';
-  --intro-img-3: '';
-}
-
-/* full-screen overlay above app */
 .intro{ position:fixed; inset:0; z-index:10000; background:#0b0f13; display:block; }
 .intro.hidden{ display:none !important; }
-
-/* each slide fills screen; we fade between them */
 .intro .slide{
   position:absolute; inset:0;
   display:grid; grid-template-columns: 1fr 1fr; gap:0;
   opacity:0; pointer-events:none; transition:opacity .55s ease;
 }
 .intro .slide.active{ opacity:1; pointer-events:auto; }
-
-.slide[data-side="img-right"]{ grid-template-columns: 1fr 1fr; direction: rtl; }
-.slide[data-side="img-right"] .copy{ direction:ltr; }
-.slide[data-side="img-left"] { direction:ltr; }
-
-/* image pane */
 .slide .img{
   position:relative; overflow:hidden;
   background:
     radial-gradient(1400px 800px at 20% 10%, #151a20, #0b0f13 60%),
     repeating-conic-gradient(from 0deg, rgba(213,168,74,.08) 0 6deg, transparent 6deg 18deg);
-  animation: introZoom 22s ease-in-out forwards;
 }
-.slide[data-side="img-left"] .img{ grid-column:1; }
-.slide[data-side="img-right"] .img{ grid-column:2; }
 .slide .img::before{
-  content:'';
-  position:absolute; inset:0;
-  background-size:cover; background-position:center;
+  content:''; position:absolute; inset:0; background-size:cover; background-position:center;
   mix-blend-mode:screen; opacity:.18;
-  /* swap per-slide via inline style or CSS variables below */
 }
-
-/* if you want to set images via CSS variables */
 .slide.s1 .img::before{ background-image: var(--intro-img-1); }
 .slide.s2 .img::before{ background-image: var(--intro-img-2); }
 .slide.s3 .img::before{ background-image: var(--intro-img-3); }
-
-@keyframes introZoom{
-  from{ transform:scale(1) translateZ(0); }
-  to  { transform:scale(1.07) translateZ(0); }
-}
+@keyframes introZoom{ from{ transform:scale(1) } to{ transform:scale(1.07) } }
+.intro .slide.active .img{ animation:introZoom 22s ease-in-out forwards; }
 
 /* mist overlay */
 .intro .mist{
@@ -122,10 +125,7 @@ p.reveal .cursor{display:inline-block;width:.6ch}
   filter: blur(8px) saturate(.9);
   animation: waft 24s ease-in-out infinite alternate;
 }
-@keyframes waft{
-  from{ transform:translate3d(-1%,0,0); opacity:.65; }
-  to  { transform:translate3d(1%,0,0);  opacity:.85; }
-}
+@keyframes waft{ from{ transform:translate3d(-1%,0,0); opacity:.65 } to{ transform:translate3d(1%,0,0); opacity:.85 } }
 
 /* text pane */
 .slide .copy{
@@ -135,40 +135,34 @@ p.reveal .cursor{display:inline-block;width:.6ch}
   box-shadow: inset 0 0 0 2px rgba(154,107,36,.3);
 }
 .slide .copy .scroll{
-  max-width: 56ch; max-height: 58vh; overflow:auto; scrollbar-width: thin;
+  max-width: 60ch; max-height: 58vh; overflow:hidden; /* hide scrollbars per request */
   line-height:1.6; font-size:1.1rem; color:var(--ink);
 }
-.slide .copy .scroll::-webkit-scrollbar{ height:8px; width:8px; }
-.slide .copy .scroll::-webkit-scrollbar-thumb{ background:#2a2f36; border-radius:8px; }
 
-/* auto-scroll helper (we will bump scrollTop via JS too) */
-.slide .copy .scroll.autoscroll{ scroll-behavior: smooth; }
-
-/* bronze gloss terms with tooltip */
+/* bronze gloss terms with tooltip (centered; anti-clip) */
 .gloss{ color:var(--gold); font-weight:600; position:relative; cursor:help; }
 .gloss::after{
   content: attr(data-def);
-  position:absolute; left:0; bottom:120%;
-  transform:translateY(6px); opacity:0; pointer-events:none;
+  position:absolute; left:50%; bottom:120%;
+  transform:translate(-50%, 6px); opacity:0; pointer-events:none;
   background:#0f151b; color:#eadaaa; border:1px solid var(--gold2);
-  padding:8px 10px; border-radius:8px; width: clamp(18ch, 36ch, 44ch);
+  padding:8px 10px; border-radius:8px; width: calc(var(--tip-ch, 36) * 1ch);
+  max-width:44ch; min-width:18ch;
   box-shadow: 0 10px 40px rgba(0,0,0,.5);
   transition: opacity .15s ease, transform .15s ease;
-  z-index:2; font-weight:500;
+  z-index:5; font-weight:500;
+  white-space:normal;
 }
-.gloss:hover::after{ opacity:1; transform:translateY(0); }
+.gloss:hover::after{ opacity:1; transform:translate(-50%, 0) }
+.gloss[data-edge="left"]::after{ left:0; transform:translate(0,6px) }
+.gloss[data-edge="left"]:hover::after{ transform:translate(0,0) }
+.gloss[data-edge="right"]::after{ left:auto; right:0; transform:translate(0,6px) }
+.gloss[data-edge="right"]:hover::after{ transform:translate(0,0) }
 
-/* nav buttons */
-.intro .nav{
-  position:absolute; bottom:24px; display:flex; gap:10px;
-}
-.slide[data-side="img-left"]  .nav{ right:24px; }
-.slide[data-side="img-right"] .nav{ left:24px; }
+/* nav buttons (always bottom-right now) */
+.intro .nav{ position:absolute; bottom:24px; right:24px; display:flex; gap:10px; }
 .intro .btn{ background:linear-gradient(180deg,#2b2312,#1a150c); color:var(--ink);
   border:1px solid var(--gold); padding:10px 14px; border-radius:8px; cursor:pointer;
 }
 .intro .btn:hover{ filter:brightness(1.06); }
 .intro .btn.secondary{ border-color:var(--gold2); background:linear-gradient(180deg,#1b2028,#12161c); }
-
-/* make the underlying app non-interactive while intro is visible */
-.intro + .app{ filter: none; }
