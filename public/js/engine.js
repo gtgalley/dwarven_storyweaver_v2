@@ -15,15 +15,23 @@ const choice=a=>a[rnd(0,a.length-1)];
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}},del(k){try{localStorage.removeItem(k)}catch{}}};
 
 /* ---------- state ---------- */
-const Engine={ el:{}, state:{
-  seed:rnd(1,9_999_999), turn:0, scene:'Halls',
-  storyBeats:[], transcript:[],
-  character:{ name:'Eldan', STR:12,DEX:14,INT:12,CHA:10, HP:14, Gold:5, inventory:['Torch','Canteen'] },
-  flags:{ rumors:true, seals:[], bossReady:false, bossDealtWith:false },
-  _choiceHistory:[], _lastChoices:[], settings:{ typewriter:true, cps:40, audio: {master:0.15,ui:0.2,amb:0.25,drums:0.25} },
-  live:{ on:store.get('dm_on',false), endpoint:store.get('dm_ep','/dm-turn') }
-}};
+function defaults(){
+  return {
+    seed: rnd(1, 9_999_999),
+    turn: 0,
+    scene: 'Halls',
+    storyBeats: [],
+    transcript: [],
+    character: { name:'Eldan', STR:12, DEX:14, INT:12, CHA:10, HP:14, Gold:5, inventory:['Torch','Canteen'] },
+    flags: { rumors:true, seals:[], bossReady:false, bossDealtWith:false },
+    _choiceHistory: [],
+    _lastChoices: [],
+    settings: { typewriter:true, cps:40, audio:{ master:0.15, ui:0.2, amb:0.25, drums:0.25 } },
+    live: { on: store.get('dm_on', false), endpoint: store.get('dm_ep', '/dm-turn') }
+  };
+}
 
+const Engine = { el:{}, state: defaults() };
 /* ---------- sound ---------- */
 const Sound=(()=>{
   let ctx, master, ui, amb, drums;
@@ -177,9 +185,26 @@ function buildUI(){
 }
 
 function hydrate(){
-  const s=store.get('dds_state',null); if(s) Engine.state=s;
-}
+  const saved = store.get('dds_state', null);
+  if (!saved) return;
 
+  const d = defaults();
+  // Deep-ish merge for nested objects you care about
+  Engine.state = {
+    ...d,
+    ...saved,
+    character: { ...d.character, ...(saved.character||{}) },
+    flags:     { ...d.flags,     ...(saved.flags||{}) },
+    settings:  {
+      ...d.settings,
+      ...(saved.settings||{}),
+      audio: { ...d.settings.audio, ...((saved.settings||{}).audio||{}) }
+    },
+    live: { ...d.live, ...(saved.live||{}) },
+    _choiceHistory: Array.isArray(saved._choiceHistory) ? saved._choiceHistory : [],
+    _lastChoices:   Array.isArray(saved._lastChoices)   ? saved._lastChoices   : []
+  };
+}
 function bind(){
   const S=Engine.state;
   const modalOpen=m=>{ Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); };
@@ -249,6 +274,9 @@ function renderAll(){
 
 /* ---------- flow ---------- */
 function beginTale(){
+  // Reinitialize per-run fields in case a very old save was loaded
+if (!Array.isArray(Engine.state._choiceHistory)) Engine.state._choiceHistory = [];
+if (!Array.isArray(Engine.state._lastChoices))   Engine.state._lastChoices   = [];
   const S=Engine.state;
   S.turn=0; S.scene='Halls'; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[];
   S.flags={rumors:true,seals:[],bossReady:false,bossDealtWith:false};
@@ -273,6 +301,14 @@ function undoTurn(){
 /* ---------- choices ---------- */
 function renderChoices(choices){
   const list=Engine.el.choiceList; if(!list) return;
+  // NEW: guard the history arrays
+  if (!Array.isArray(Engine.state._choiceHistory)) Engine.state._choiceHistory = [];
+  if (!Array.isArray(Engine.state._lastChoices))   Engine.state._lastChoices   = [];
+
+  const history = Engine.state._choiceHistory;
+  const pool = [...(choices||[])];
+  // ... (rest of your function unchanged)
+  
   const history=Engine.state._choiceHistory;
   const pool=[...choices];
   const fresh=pool.filter(c=>!history.includes(c.id));
