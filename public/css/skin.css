@@ -4,10 +4,9 @@
   --silver1:#bfc5cc; --silver2:#8d96a1; --link:#e0c98a;
   --success:#e5c36a; --fail:#9b3131;
 }
-/* global hide helper used by the engine */
 .hidden{ display:none !important; }
 
-/* the background shade should start hidden until a modal is opened */
+/* shade starts hidden; engine toggles .hidden on modals */
 .shade{ display:none; }
 .shade:not(.hidden){ display:block; }
 
@@ -67,7 +66,6 @@ a{ color:var(--link) }
 
 /* ---------- Layout ---------- */
 .app{ position:relative; }
-.chrome{ position:fixed; inset:0; pointer-events:none; z-index:1; }
 .main{ position:relative; z-index:2; display:grid; grid-template-columns: 1.1fr 0.9fr; gap:14px; padding:12px; }
 @media (max-width: 1100px){ .main{ grid-template-columns:1fr; } }
 
