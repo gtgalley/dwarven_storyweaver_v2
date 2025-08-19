@@ -1,7 +1,7 @@
 :root{
   --bg:#0b0f13; --bg2:#131920; --ink:#e6d9a2; --ink2:#c8bb87;
   --gold:#d5a84a; --gold2:#9a6b24; --line:#2a3038; --silver:#c9cbd1;
-  --success:#e5c36a; --fail:#9b3131;
+  --success:#e5c36a; --fail:#9b3131; --intro-img-1: url('public/img/intro_halls.jpg'); --intro-img-2: url('public/img/intro_seals.jpg'); --intro-img-3: url('public/img/intro_depths.jpg');
 }
 
 /* helpers */
