@@ -229,6 +229,7 @@ const Sound = (() => {
 /* ---------- UI boot ---------- */
 export function boot() {
   buildUI();
+  if (Engine.el.modalShade) Engine.el.modalShade.classList.add('hidden');
   hydrateFromStorage();
   bindHandlers();
 
@@ -243,7 +244,7 @@ export function boot() {
   Sound.setMix(Engine.state.opts.mix);
 
   renderAll();
-  if (Engine.state.storyBeats.length === 0) beginTale();
+  .state.storyBeats.length === 0) beginTale();
 }
 
 /* ---------- UI construction ---------- */
