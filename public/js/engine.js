@@ -1,3 +1,15 @@
+/* ---------- early boot diagnostics (safe to keep in production) ---------- */
+(() => {
+  // Surface errors to the loader overlay if index's overlay is still present.
+  const overlay = document.getElementById('boot-status');
+  if (!overlay) return;
+  const box = overlay.querySelector('.box');
+  window.addEventListener('error', (e) => {
+    if (!box) return;
+    box.innerHTML = `<div style="margin-bottom:6px"><b>Runtime error</b></div>
+      <div><code>${(e && e.message) || 'Unknown error'}</code></div>`;
+  });
+})();
 // public/js/engine.js
 // v0.5 — ambience melody + “drums in the deep”; italicized user input;
 // evolving two-choice set (one new per turn + retire after 4); semantic anti-repetition;
