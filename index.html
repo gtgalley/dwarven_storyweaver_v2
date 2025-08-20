@@ -11,14 +11,14 @@
   <!-- quiet favicon 404s -->
   <link rel="icon" href="data:,">
 
-  <!-- single stylesheet -->
-  <link rel="stylesheet" href="/public/css/skin.css?v=13e">
+  <!-- single stylesheet (RELATIVE path) -->
+  <link rel="stylesheet" href="./public/css/skin.css?v=13f">
 </head>
 <body>
   <div class="boot" id="boot"><div class="box">Loading…</div></div>
 
   <script type="module">
-    import { boot } from './public/js/engine.js?v=14';
+    import { boot } from './public/js/engine.js?v=14b';
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('boot').classList.add('ok');
       boot();
