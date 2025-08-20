@@ -1,7 +1,7 @@
-// v12 — slower 40 BPM ambience, richer harmony, intro per-slide typewriter with preserved gloss,
-// anti-clip tooltips, brighter choices, centered sidecards, race dropdown, sfx (success/fail/story),
-// choice hover sound removed, End Story in toolbar, Save/Load/Export/Undo in Settings,
-// Replay Intro + Restart Run, Scroll (lore) modal, edit-on-begin, louder default gains.
+// public/js/engine.js
+// v13 — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
+// Ledger panel (Inventory + revealed keys/rumors/gate/boss), 20 BPM ambience,
+// per-slide intro typewriter, success/fail/story SFX, silent continue, death modal.
 
 import { makeWeaver } from './weaver.js';
 
@@ -25,13 +25,13 @@ function defaults(){
     character:{ name:'Eldan', race:'Dwarf', STR:12,DEX:14,INT:12,CHA:10, HP:14, Gold:5, inventory:['Torch','Canteen'] },
     flags:{ rumors:true, seals:[], bossReady:false, bossDealtWith:false },
     _choiceHistory:[], _lastChoices:[], _arcStep:0, _pendingType:false,
-    settings:{ typewriter:true, cps:40, audio:{ master:0.38, ui:0.36, amb:0.4, drums:0.42 } },
+    settings:{ typewriter:true, cps:40, audio:{ master:0.5, ui:0.45, amb:0.5, drums:0.52 } },
     live:{ on:store.get('dm_on',false), endpoint:store.get('dm_ep','/dm-turn') }
   };
 }
 const Engine={ el:{}, state: defaults() };
 
-/* ---------- sound @ ~40 BPM ---------- */
+/* ---------- sound @ ~20 BPM base ---------- */
 const Sound=(()=>{
   let ctx, master, ui, amb, drums;
   const ensure=()=>{ if(ctx) return;
@@ -41,47 +41,49 @@ const Sound=(()=>{
     amb=ctx.createGain(); amb.gain.value=Engine.state.settings.audio.amb; amb.connect(master);
     drums=ctx.createGain(); drums.gain.value=Engine.state.settings.audio.drums; drums.connect(master);
 
-    // Harmonic motion: slow “walking” line w/ implied chords (I–IV–ii–V → vi detour)
-    const beat = 1500; // ms (≈40 BPM)
-    const notes = [55, 73.42, 61.74, 82.41, 65.41, 55, 92.5, 61.74]; // A2,D3,B2,E3,F3,A2,Bb3,B2
+    // Harmonic motion: slower line w/ implied chords & occasional contrary motion
+    const beat = 3000; // ≈20 BPM
+    const notesA = [55, 73.42, 61.74, 82.41, 65.41, 55, 92.5, 61.74];   // A/D/B/E/F/A/Bb/B
+    const notesB = [49, 65.41, 58.27, 77.78, 61.74, 49, 87.31, 58.27];  // E/F/Bb/etc (counter)
     const bass = ctx.createOscillator(); bass.type='sawtooth';
     const pad  = ctx.createOscillator(); pad.type='triangle';
-    const g1=ctx.createGain(), g2=ctx.createGain(); g1.gain.value=.022; g2.gain.value=.011;
+    const g1=ctx.createGain(), g2=ctx.createGain(); g1.gain.value=.020; g2.gain.value=.012;
     bass.connect(g1).connect(amb); pad.connect(g2).connect(amb);
     let i=0; bass.start(); pad.start();
     setInterval(()=>{ if(!ctx) return;
-      const n = notes[i%notes.length], fifth = n*1.5;
+      const a = notesA[i%notesA.length], b = notesB[i%notesB.length], fifth = a*1.5;
       const t=ctx.currentTime;
-      bass.frequency.linearRampToValueAtTime(n, t+.4);
-      pad.frequency.linearRampToValueAtTime(fifth, t+.6);
+      bass.frequency.linearRampToValueAtTime(a, t+.6);
+      pad.frequency.linearRampToValueAtTime((i%3===0? fifth : b), t+.7);
       i++;
     }, beat);
 
-    // Drums: thump on 1; ghost eighths & syncopation to keep it alive
-    const eighth=beat/2, bar=beat*4;
+    // Drums: heavy on 1 & 3, ghost 16ths and 32nds before downbeats
+    const bar=beat*4, eighth=beat/2, sixteenth=beat/4, thirty=beat/8;
     setInterval(()=>{
       if(!ctx) return; const t=ctx.currentTime;
 
-      hit(t, 80, 36, .18, .14);         // 1
-      tap(t+eighth/1000, 700,.06);
-      tap(t+3*eighth/1000, 560,.06);
-      hit(t+2*beat/1000, 76, 34, .16, .12); // 3
-      tap(t+5*eighth/1000, 620,.05);
-      tap(t+7*eighth/1000, 800,.05);       // upbeat into next bar
+      hit(t, 72, 34, .24, .18);                    // 1
+      ghost(t + (sixteenth/1000)*3, 700,.05);      // 16th before 2
+      ghost(t + (thirty/1000)*7,   820,.04);       // 32nd pick-up
+
+      hit(t+2*beat/1000, 68, 32, .22, .16);        // 3
+      ghost(t + 2*beat/1000 - sixteenth/1000*1, 620,.05);
+      ghost(t + 4*beat/1000 - thirty/1000*1,   760,.04); // lead into next bar
 
       function hit(at,f1,f2,dur,amp){
         const o=ctx.createOscillator(); o.type='sine';
         const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(amp||.12, at+.02);
+        g.gain.exponentialRampToValueAtTime(amp||.14, at+.02);
         g.gain.exponentialRampToValueAtTime(.0001, at+dur);
         o.frequency.setValueAtTime(f1,at);
         o.frequency.exponentialRampToValueAtTime(f2,at+dur*.85);
         o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
       }
-      function tap(at,f,dur){
+      function ghost(at,f,dur){
         const o=ctx.createOscillator(); o.type='triangle';
         const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(.075, at+.01);
+        g.gain.exponentialRampToValueAtTime(.06, at+.01);
         g.gain.exponentialRampToValueAtTime(.0001, at+dur);
         o.frequency.setValueAtTime(f,at);
         o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
@@ -94,22 +96,21 @@ const Sound=(()=>{
     amb.gain.value=Engine.state.settings.audio.amb;
     drums.gain.value=Engine.state.settings.audio.drums;
   };
-  const thunk=()=>{ ensure(); const t=ctx.currentTime;
+  const click=()=>{ ensure(); const t=ctx.currentTime;
     const o=ctx.createOscillator(); o.type='square';
     o.frequency.setValueAtTime(jitter(300),t);
     o.frequency.exponentialRampToValueAtTime(jitter(120),t+.09);
     const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(.25, t+.01);
+    g.gain.exponentialRampToValueAtTime(.28, t+.01);
     g.gain.exponentialRampToValueAtTime(.0001, t+.16);
     o.connect(g).connect(ui); o.start(t); o.stop(t+.18);
   };
-  // “result” sfx, each with slight detune variation
-  const sfx=(kind)=>{
+  const sfx=(kind)=>{ // success / fail / story
     ensure(); const t=ctx.currentTime;
     const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine';
-    const a = kind==='success' ? [jitter(520), jitter(880), .18, .22]
-              : kind==='fail' ? [jitter(180), jitter(90), .25, .28]
-              : [jitter(300), jitter(420), .2, .18]; // story
+    const a = kind==='success' ? [jitter(520,0.06), jitter(880,0.06), .18, .24]
+              : kind==='fail' ? [jitter(180,0.06), jitter(90,0.06), .28, .26]
+              : [jitter(320,0.06), jitter(440,0.06), .22, .20];
     o.frequency.setValueAtTime(a[0],t);
     o.frequency.exponentialRampToValueAtTime(a[1],t+a[2]*.9);
     g.gain.setValueAtTime(.0001,t);
@@ -118,7 +119,7 @@ const Sound=(()=>{
     o.connect(g).connect(ui); o.start(t); o.stop(t+a[2]+.05);
   };
   const ambOn=()=>ensure();
-  return {click:thunk, sfx, ambOn, setLevels, ensure};
+  return {click, sfx, ambOn, setLevels, ensure};
 })();
 
 /* ---------- weaver ---------- */
@@ -130,9 +131,9 @@ const Weaver = makeWeaver(store,
 /* ---------- boot ---------- */
 export function boot(){
   buildUI(); hydrate(); bind(); renderAll();
-  insertIntro();                         // overlay every load
+  insertIntro(); // overlay every load
   const seen = store.get('intro_seen', false);
-  if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); }
+  if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); mountScrollFab(); }
   Sound.ambOn();
 }
 
@@ -159,14 +160,13 @@ function insertIntro(){
     });
   };
 
-  // tooltips anti-clip
+  // anti-clip tooltips near edges
   Engine.el.intro.addEventListener('mousemove', ev=>{
     const g = ev.target.closest('.gloss'); if(!g) return;
     const r=g.getBoundingClientRect(), vw=Math.max(document.documentElement.clientWidth, innerWidth||0), pad=24;
     if(r.left<pad) g.dataset.edge='left'; else if(vw-r.right<pad) g.dataset.edge='right'; else g.dataset.edge='';
   });
 
-  // nav buttons (always bottom-right)
   Engine.el.nextBtns.forEach(b=>b.addEventListener('click',()=>{ Sound.sfx('story'); show(idx+1); }));
   $('#introBack2')?.addEventListener('click', ()=>{ Sound.click(); show(idx-1); });
   $('#introBack3')?.addEventListener('click', ()=>{ Sound.click(); show(idx-1); });
@@ -178,8 +178,8 @@ function insertIntro(){
       Engine.el.intro.classList.add('hidden');
       store.set('intro_seen', true);
       if (!Engine.state.storyBeats.length) beginTale();
-      // open character modal immediately
-      setTimeout(()=>Engine.el.btnEdit.click(), 120);
+      // open editor immediately and mount scroll icon
+      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
     };
   }
   show(0);
@@ -190,12 +190,10 @@ function buildUI(){
   document.body.innerHTML = `
   <div class="app">
     <div class="masthead">
-      <div class="brand-title">Dwarven Deco Storyweaver</div>
+      <div class="brand-title">Brassreach</div>
       <div class="toolbar cardish">
         <div class="controls">
-          <button id="btnLive" class="btn">Live DM: <span id="liveTxt">Off</span></button>
           <button id="btnEnd" class="btn">End the Story</button>
-          <button id="btnScroll" class="btn">Scroll</button>
           <button id="btnSettings" class="btn">Settings</button>
           <span class="tag">Engine: <b id="engineTag">Local</b></span>
         </div>
@@ -214,14 +212,15 @@ function buildUI(){
           </div>
         </div>
       </section>
+
       <aside class="side">
         <div class="card deco">
           <h3 style="text-align:center;">Character <button id="btnEdit" class="btn mini">Edit</button></h3>
           <div id="charPanel" class="centered"></div>
         </div>
         <div class="card deco">
-          <h3 style="text-align:center;">Flags & Seals</h3>
-          <div id="flagPanel" class="centered"></div>
+          <h3 style="text-align:center;">Ledger</h3>
+          <div id="ledgerPanel" class="centered"></div>
         </div>
         <div class="card deco">
           <h3 style="text-align:center;">Session</h3>
@@ -302,6 +301,7 @@ function buildUI(){
             <button id="btnUndo"   class="btn">Undo</button>
             <button id="btnReplayIntro" class="btn">Replay Intro</button>
             <button id="btnRestart" class="btn">Restart Run</button>
+            <button id="btnResetAll" class="btn red">Reset Everything</button>
           </div>
         </div>
       </div>
@@ -313,33 +313,64 @@ function buildUI(){
     <header><div>The Weaver’s Scroll</div><div id="xScroll" class="closeX">✕</div></header>
     <div class="content" id="scrollContent"></div>
   </div>
+
+  <!-- Epilogue / Game Over -->
+  <div id="modalEpi" class="modal hidden">
+    <header><div id="epiTitle">Epilogue</div><div id="xEpi" class="closeX">✕</div></header>
+    <div class="content" id="epiContent"></div>
+    <div class="modal-actions"><button id="btnEpiRestart" class="btn gold">New Run</button></div>
+  </div>
   `;
+
   // cache
   Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
-  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnScroll=$('#btnScroll');
-  Engine.el.charPanel=$('#charPanel'); Engine.el.flagPanel=$('#flagPanel');
+
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings');
+
+  Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
   Engine.el.btnEdit=$('#btnEdit');
-  Engine.el.btnLive=$('#btnLive'); Engine.el.liveTxt=$('#liveTxt'); Engine.el.btnSettings=$('#btnSettings');
   Engine.el.shade=$('#shade');
+
   // character modal refs
   Engine.el.modalEdit=$('#modalEdit'); Engine.el.xEdit=$('#xEdit');
   Engine.el.edName=$('#edName'); Engine.el.edRace=$('#edRace');
   Engine.el.edSTR=$('#edSTR'); Engine.el.edDEX=$('#edDEX'); Engine.el.edINT=$('#edINT'); Engine.el.edCHA=$('#edCHA');
   Engine.el.edHP=$('#edHP'); Engine.el.edGold=$('#edGold'); Engine.el.edInv=$('#edInv');
   Engine.el.btnAuto=$('#btnAuto'); Engine.el.btnEditSave=$('#btnEditSave'); Engine.el.btnEditCancel=$('#btnEditCancel');
-  // settings modal refs
+
+  // settings modal
   Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.twOn=$('#twOn'); Engine.el.twCps=$('#twCps');
   Engine.el.aMaster=$('#aMaster'); Engine.el.aUi=$('#aUi'); Engine.el.aAmb=$('#aAmb'); Engine.el.aDrums=$('#aDrums');
   Engine.el.dmEndpoint=$('#dmEndpoint'); Engine.el.btnLiveToggle=$('#btnLiveToggle');
   Engine.el.btnSave=$('#btnSave'); Engine.el.btnLoad=$('#btnLoad'); Engine.el.btnExport=$('#btnExport'); Engine.el.btnUndo=$('#btnUndo');
-  Engine.el.btnReplayIntro=$('#btnReplayIntro'); Engine.el.btnRestart=$('#btnRestart');
+  Engine.el.btnReplayIntro=$('#btnReplayIntro'); Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll');
+
   // scroll modal
   Engine.el.modalScroll=$('#modalScroll'); Engine.el.xScroll=$('#xScroll'); Engine.el.scrollContent=$('#scrollContent');
+
+  // epilogue modal
+  Engine.el.modalEpi=$('#modalEpi'); Engine.el.xEpi=$('#xEpi'); Engine.el.epiTitle=$('#epiTitle'); Engine.el.epiContent=$('#epiContent'); Engine.el.btnEpiRestart=$('#btnEpiRestart');
 }
 
+/* ---------- floating Scroll button (SVG) ---------- */
+function mountScrollFab(){
+  if ($('#scrollFab')) return;
+  const btn=document.createElement('button');
+  btn.id='scrollFab';
+  btn.className='scroll-fab';
+  btn.innerHTML = `
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M12 8h36a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H22l-8 6v-6h-2a6 6 0 0 1-6-6V14a6 6 0 0 1 6-6z" />
+      <path d="M18 18h28M18 28h22M18 38h26" />
+    </svg>`;
+  document.body.appendChild(btn);
+  btn.addEventListener('click', ()=>{ Engine.el.scrollContent.innerHTML=getIntroScrollHTML(); openModal(Engine.el.modalScroll); });
+}
+
+/* ---------- storage ---------- */
 function hydrate(){
   const saved=store.get('dds_state',null); if(!saved) return;
   const d=defaults();
@@ -355,6 +386,7 @@ function hydrate(){
   };
 }
 
+/* ---------- bind ---------- */
 function bind(){
   const S=Engine.state;
   const open=m=>{ Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); };
@@ -387,53 +419,57 @@ function bind(){
   Engine.el.twCps.onchange=()=>{S.settings.cps=clamp(+Engine.el.twCps.value||40,10,120); store.set('dds_state',S);};
   [Engine.el.aMaster,Engine.el.aUi,Engine.el.aAmb,Engine.el.aDrums].forEach(sl=>sl.oninput=()=>{S.settings.audio.master=+Engine.el.aMaster.value; S.settings.audio.ui=+Engine.el.aUi.value; S.settings.audio.amb=+Engine.el.aAmb.value; S.settings.audio.drums=+Engine.el.aDrums.value; Sound.setLevels(); store.set('dds_state',S);});
   Engine.el.dmEndpoint.onchange=()=>{S.live.endpoint=Engine.el.dmEndpoint.value.trim()||'/dm-turn'; store.set('dm_ep',S.live.endpoint);};
-  Engine.el.btnLiveToggle.onclick=()=>{ S.live.on=!S.live.on; store.set('dm_on',S.live.on); if(Engine.el.liveTxt) Engine.el.liveTxt.textContent=S.live.on?'On':'Off'; };
-  Engine.el.btnReplayIntro.onclick=()=>{ close(Engine.el.modalSet); store.set('intro_seen', false); insertIntro(); $('#intro').classList.remove('hidden'); };
+  Engine.el.btnLiveToggle.onclick=()=>{ S.live.on=!S.live.on; store.set('dm_on',S.live.on); };
+  Engine.el.btnReplayIntro.onclick=()=>{ close(Engine.el.modalSet); store.set('intro_seen', false); insertIntro(); $('#intro').classList.remove('hidden'); $('#scrollFab')?.remove(); };
   Engine.el.btnRestart.onclick=()=>{ close(Engine.el.modalSet); beginTale(); };
+  Engine.el.btnResetAll.onclick=()=>{ close(Engine.el.modalSet); localStorage.clear(); location.reload(); };
 
   // scroll modal
-  Engine.el.btnScroll.onclick=()=>{ Engine.el.scrollContent.innerHTML=getIntroScrollHTML(); open(Engine.el.modalScroll); };
   Engine.el.xScroll.onclick=()=>close(Engine.el.modalScroll);
 
+  // epilogue modal
+  Engine.el.xEpi.onclick=()=>close(Engine.el.modalEpi);
+  Engine.el.btnEpiRestart.onclick=()=>{ close(Engine.el.modalEpi); beginTale(); };
+
   // global overlay close
-  Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalSet,Engine.el.modalScroll].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); };
+  Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); };
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') Engine.el.shade.onclick(); });
 
   // main actions
-  Engine.el.btnCont.onclick=()=>doNarrate({ sentence:'Continue — the camera lingers; time moves.' });
+  Engine.el.btnCont.onclick=()=>doNarrate({ sentence:'' }); // silent advance
   Engine.el.btnAct.onclick=()=>freeText();
   Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
-  Engine.el.btnEnd.onclick=endTale;
 
-  // session (inside settings)
-  Engine.el.btnSave.onclick=()=>{ store.set('dds_state',S); toast('Saved'); };
-  Engine.el.btnLoad.onclick=()=>{ const s=store.get('dds_state',null); if(s){ Engine.state=s; renderAll(); toast('Loaded'); }};
-  Engine.el.btnExport.onclick=exportTranscript;
-  Engine.el.btnUndo.onclick=undoTurn;
+  Engine.el.btnEnd.onclick=endTale;
 }
 
+/* ---------- render ---------- */
 function renderAll(){
   const s=Engine.state, C=s.character, F=s.flags;
   $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn; $('#sceneVal').textContent=s.scene;
-  if (Engine.el.liveTxt) Engine.el.liveTxt.textContent=s.live.on?'On':'Off';
 
+  // Character (no Bag here; moved to Ledger)
   Engine.el.charPanel.innerHTML = `
     <div><b>${esc(C.name)}</b></div>
     <div>${esc(C.race)}</div>
     <div>STR ${C.STR} (${fmt(modFrom(C.STR))}) — DEX ${C.DEX} (${fmt(modFrom(C.DEX))})</div>
     <div>INT ${C.INT} (${fmt(modFrom(C.INT))}) — CHA ${C.CHA} (${fmt(modFrom(C.CHA))})</div>
-    <div>HP ${C.HP} — Gold ${C.Gold}</div>
-    <div>Bag: ${C.inventory.join(', ')||'—'}</div>`;
+    <div>HP ${C.HP} — Gold ${C.Gold}</div>`;
 
-  Engine.el.flagPanel.innerHTML = `
-    <div>Rumors heard: ${F.rumors?'yes':'no'}</div>
-    <div>Seals: ${F.seals.join(', ')||'—'}</div>
-    <div>Gate ready: ${F.bossReady?'yes':'no'}</div>
-    <div>Unfathomer dealt with: ${F.bossDealtWith?'yes':'no'}</div>`;
+  // Ledger — inventory always visible; other lines appear only when relevant
+  const lines = [];
+  lines.push(`<div>Inventory: ${C.inventory.join(', ')||'—'}</div>`);
+  if (F.rumors) lines.push(`<div>Rumors heard: yes</div>`);
+  if ((F.seals||[]).length) lines.push(`<div>Keys: ${(F.seals||[]).join(', ')}</div>`);
+  if (F.bossReady) lines.push(`<div>Gate ready: yes</div>`);
+  if (F.bossDealtWith) lines.push(`<div>Unfathomer dealt with: yes</div>`);
+  Engine.el.ledgerPanel.innerHTML = lines.join('');
 
+  // Story
   Engine.el.story.innerHTML='';
   for(const beat of s.storyBeats){
     const p=document.createElement('p');
+    p.classList.add('beat');
     p.innerHTML=beat.html?beat.html:esc(beat.text);
     if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
     if(beat.kind==='success') p.classList.add('glow-success');
@@ -460,7 +496,7 @@ function beginTale(){
 }
 function endTale(){
   const S=Engine.state, C=S.character;
-  const ep = `Epilogue — You carry ${C.Gold} gold and ${C.inventory.length} keepsakes. Seals gained: ${S.flags.seals.join(', ')||'none'}. ` +
+  const ep = `Epilogue — You carry ${C.Gold} gold and ${C.inventory.length} keepsakes. Keys gained: ${S.flags.seals.join(', ')||'none'}. ` +
     (S.flags.bossDealtWith?'The Unfathomer is quiet; people sleep deeply this week.':'The Unfathomer still turns beneath the streets. Quiet talk in ale-halls carries your name.');
   appendBeat(ep); renderChoices([]); renderAll();
 }
@@ -492,7 +528,6 @@ function renderChoices(choices){
   picked.forEach(ch=>{
     const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=ch.sentence;
     btn.onclick=()=>{ Sound.click(); resolveChoice(ch); };
-    // hover sound removed per request
     list.appendChild(btn);
   });
 }
@@ -534,7 +569,15 @@ function applyTurn(resp,roll){
   appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, (kind==='success'?'success':(kind==='fail'?'fail':null)), html);
   Sound.sfx(kind);
 
-  if (S.character.HP<=0){ appendBeat("Your pulse falters; the lantern’s ring dims. Companions—if any—carry a line back to daylight. The Unfathomer keeps its quiet measure."); renderChoices([]); S.turn++; renderAll(); return; }
+  if (S.character.HP<=0){
+    // modal epilogue
+    const dead = "Your pulse falters; the lantern’s ring dims. Companions—if any—carry a line back to daylight. The Unfathomer keeps its quiet measure.";
+    Engine.el.epiTitle.textContent = 'Fallen Line';
+    Engine.el.epiContent.textContent = dead;
+    openModal(Engine.el.modalEpi);
+    renderChoices([]);
+    S.turn++; renderAll(); return;
+  }
 
   const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
   renderChoices(next); S.turn++; renderAll();
@@ -555,31 +598,39 @@ function localTurn(payload){
   if(award) flags_patch.seals=[...seals, award];
 
   if(source==='narrate'){
+    const aText = stripHTML(action||'').trim();
     if(scene==='Halls'){
       const steps=[
         "You mark the older chisel-strokes, finding where surveyors left anchors yet to be used. The pitch carries true here; you set a chalk ring and breathe in the clean echo.",
         "A map resolves out of rumor: a side stair gritted with salt, a culvert where lantern smoke drifts sideways. Threads tug toward a ledger kept below.",
         "A Warden’s chalk note matches an Archivist’s inked correction. Together they point to the same door—its hinges cold, its lock polite."
       ];
-      story=`${stripHTML(action)} ${steps[Math.min(Engine.state._arcStep, steps.length-1)]}`; Engine.state._arcStep++; if(Engine.state._arcStep>=3){ scene='Archives'; }
+      const seg = steps[Math.min(Engine.state._arcStep, steps.length-1)];
+      story = aText ? `${aText} ${seg}` : seg;
+      Engine.state._arcStep++; if(Engine.state._arcStep>=3){ scene='Archives'; }
     }else if(scene==='Archives'){
       const steps=[
         "Stacks breathe like organ pipes. You copy a cadence table that names three safe rests and a forbidden vent.",
         "Lithen’s notes mention a trial in the cistern fields. The page is thin where the quill pressed—care and doubt in the same line.",
         "A key-drawing shows a gate with three collars—Stone, Brass, Echo—engraved with simple measures."
       ];
-      story=`${stripHTML(action)} ${steps[Math.min(Engine.state._arcStep-3, steps.length-1)]}`; Engine.state._arcStep++; if(Engine.state._arcStep>=6){ scene='Depths'; }
+      const seg = steps[Math.min(Engine.state._arcStep-3, steps.length-1)];
+      story = aText ? `${aText} ${seg}` : seg;
+      Engine.state._arcStep++; if(Engine.state._arcStep>=6){ scene='Depths'; }
     }else if(scene==='Depths'){
       const steps=[
         "The air cools. Water speaks in steady pulses. You test the floor: firm enough to bear a bargain.",
         "Two channels meet; one is silted. You clear a lip and the room answers with a kinder ring.",
         "The Gate of Measures waits a gallery away, its collars dark, its hand-wheel heavy."
       ];
-      story=`${stripHTML(action)} ${steps[Math.min(Engine.state._arcStep-6, steps.length-1)]}`; Engine.state._arcStep++;
+      const seg = steps[Math.min(Engine.state._arcStep-6, steps.length-1)];
+      story = aText ? `${aText} ${seg}` : seg;
+      Engine.state._arcStep++;
       if(!S.flags.bossReady && (seals.length>=2)) flags_patch.bossReady=true;
       if(Engine.state._arcStep>=9 && (S.flags.bossReady || (flags_patch.bossReady===true))) story+=" You stand where a choice will count double.";
     }else{
-      story=`${stripHTML(action)} The corridor opens on decisions that won’t wait long.`;
+      const seg = "The corridor opens on decisions that won’t wait long.";
+      story = aText ? `${aText} ${seg}` : seg;
     }
   }
 
@@ -588,7 +639,7 @@ function localTurn(payload){
     const fail={STR:"The metal creaks but holds.", DEX:"Grit shifts; a lantern notices.", INT:"Two claims cancel; your guess goes wide.", CHA:"Your tone misfires; the window closes for now."}[stat||'INT'];
     const tail=award?` A sigil warms at your wrist — the Seal of ${award}.`:"";
     const rumor=" The cisterns answer more clearly than the streets.";
-    story=`${stripHTML(action)} ${passed?success:fail}${tail}${rumor}`;
+    story=`${stripHTML(action||'')}${action?' ':''}${passed?success:fail}${tail}${rumor}`;
   }
 
   const next_choices=makeChoiceSet(scene);
@@ -633,7 +684,7 @@ function stripHTML(s){ const d=document.createElement('div'); d.innerHTML=s; ret
 function autoGen(){ const n=['Eldan','Brassa','Keled','Varek','Moriah','Thrain','Ysolda','Kael']; const C=Engine.state.character;
   C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.Gold=rnd(0,25); C.inventory=['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)); renderAll(); }
 function toast(txt){ const t=document.createElement('div'); t.textContent=txt; Object.assign(t.style,{position:'fixed',bottom:'14px',left:'14px',background:'#1e1e28',color:'#fff',padding:'8px 10px',border:'1px solid #3a3a48',borderRadius:'6px',opacity:'0.96',zIndex:9999}); document.body.appendChild(t); setTimeout(()=>t.remove(),1200); }
-function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Dwarven Deco Storyweaver — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='storyweaver_transcript.html'; a.click(); URL.revokeObjectURL(url); }
+function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url); }
 
 /* ---------- typewriter (story) ---------- */
 function typewrite(node, text, cps=40, ondone){
@@ -662,10 +713,10 @@ function typewriteRich(p, cps=40){
 
   const queue=[];
   clone.childNodes.forEach(n=>{
-    if(n.nodeType===3){ // text
+    if(n.nodeType===3){
       const t=n.textContent||'';
       for(const ch of t) queue.push({kind:'ch', ch});
-    }else if(n.nodeType===1){ // element (e.g., gloss)
+    }else if(n.nodeType===1){
       queue.push({kind:'el', el:n});
     }
   });
@@ -725,8 +776,12 @@ function getIntroSlidesHTML(){
 function getIntroScrollHTML(){
   return `
     <div class="scroll">
-      ${$('#intro .s1 .scroll').innerHTML}
-      ${$('#intro .s2 .scroll').innerHTML}
-      ${$('#intro .s3 .scroll').innerHTML}
+      ${$('#intro .s1 .scroll')?.innerHTML||''}
+      ${$('#intro .s2 .scroll')?.innerHTML||''}
+      ${$('#intro .s3 .scroll')?.innerHTML||''}
     </div>`;
 }
+
+/* ---------- modal helpers ---------- */
+function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); }
+function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
