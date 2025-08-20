@@ -32,13 +32,17 @@ function defaults(){
 }
 const Engine={ el:{}, state: defaults() };
 window.Engine=Engine;
+window.Engine=Engine;
 
 /* ---------- sound @ ~20 BPM base ---------- */
 const Sound=(()=>{
   let ctx, master, ui, amb, drums;
   const ensure=()=>{ if(ctx) return;
     ctx=new (window.AudioContext||window.webkitAudioContext)();
-    master=ctx.createGain(); master.gain.value=Engine.state.settings.audio.master; master.connect(ctx.destination);
+    master=ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+    const _targetMaster=Engine.state.settings.audio.master;
+    master.gain.setValueAtTime(0, ctx.currentTime);
+    master.gain.linearRampToValueAtTime(_targetMaster, ctx.currentTime + 0.25);
     ui=ctx.createGain(); ui.gain.value=Engine.state.settings.audio.ui; ui.connect(master);
     amb=ctx.createGain(); amb.gain.value=Engine.state.settings.audio.amb; amb.connect(master);
     drums=ctx.createGain(); drums.gain.value=Engine.state.settings.audio.drums; drums.connect(master);
@@ -52,6 +56,12 @@ const Sound=(()=>{
     const g1=ctx.createGain(), g2=ctx.createGain(); g1.gain.value=.020; g2.gain.value=.012;
     bass.connect(g1).connect(amb); pad.connect(g2).connect(amb);
     let i=0; bass.start(); pad.start();
+    // Melody — slow modal line
+    const mel = ctx.createOscillator(); mel.type='sine';
+    const gmel=ctx.createGain(); gmel.gain.value=.028; mel.connect(gmel).connect(amb);
+    const melody=[146.83,164.81,174.61,196.00,174.61,164.81,146.83,130.81]; // D Dorian-ish
+    mel.start(); let mi=0; setInterval(()=>{ if(!ctx) return; const t=ctx.currentTime; const n=melody[mi%melody.length]; mi++; mel.frequency.linearRampToValueAtTime(n, t+.5); }, beat*2);
+
     setInterval(()=>{ if(!ctx) return;
       const a = notesA[i%notesA.length], b = notesB[i%notesB.length], fifth = a*1.5;
       const t=ctx.currentTime;
@@ -140,6 +150,7 @@ export function boot(){
   const seen = store.get('intro_seen', false);
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); mountScrollFab(); }
   Sound.ambOn();
+  spawnMotes(24);
 }
 
 // --- Edge-aware glossary tooltips -------------------------------
@@ -299,21 +310,32 @@ function insertIntro(){
 function buildUI(){
   document.body.innerHTML = `
   <div class="app">
+    <div class="crest" aria-hidden="true"></div>
+    <div id="motes" aria-hidden="true"></div>
+    <div id="letterbox" class="letterbox hidden"><div class="bar top"></div><div class="bar bottom"></div></div>
     <div class="masthead">
       <div class="brand-title">Brassreach</div>
-      <div class="toolbar cardish">
+      <div class="toolbar cardish frame">
         <div class="controls">
+          <svg id="sealsRing" viewBox="0 0 100 100" aria-label="Seals">
+            <circle class="bg" cx="50" cy="50" r="40" />
+            <circle id="sealsArc" class="arc" cx="50" cy="50" r="40" />
+          </svg>
           <button id="btnEnd" class="btn">End the Story</button>
           <button id="btnSettings" class="btn">Settings</button>
+          <button id="btnGloss" class="btn">Highlight Terms</button>
+          <button id="btnSnap" class="btn">Snapshot</button>
           <span class="tag">Engine: <b id="engineTag">Local</b></span>
         </div>
       </div>
     </div>
 
+    <div class="pacing" id="pacing"><div class="chip" data-i="0">Explore</div><div class="chip" data-i="1">Light Check</div><div class="chip" data-i="2">Explore</div><div class="chip" data-i="3">Risk Choice</div></div>
+
     <div class="main">
       <section class="storywrap">
-        <div id="story" class="story-scroll"></div>
-        <div class="choices">
+        <div id="story" class="story-scroll frame"></div>
+        <div class="choices frame">
           <div id="choices"></div>
           <div class="free">
             <input id="freeText" placeholder="Write your own action (e.g., search the alcove, read the tablet)" />
@@ -324,15 +346,15 @@ function buildUI(){
       </section>
 
       <aside class="side">
-        <div class="card deco">
+        <div class="card deco frame">
           <h3 style="text-align:center;">Character <button id="btnEdit" class="btn mini">Edit</button></h3>
           <div id="charPanel" class="centered"></div>
         </div>
-        <div class="card deco">
+        <div class="card deco frame">
           <h3 style="text-align:center;">Ledger</h3>
           <div id="ledgerPanel" class="centered"></div>
         </div>
-        <div class="card deco">
+        <div class="card deco frame">
           <h3 style="text-align:center;">Session</h3>
           <div class="centered" style="line-height:1.6">
             <div>Seed: <span id="seedVal"></span></div>
@@ -380,6 +402,10 @@ function buildUI(){
     <header><div>Settings</div><div id="xSet" class="closeX">✕</div></header>
     <div class="content">
       <div class="grid2">
+        <div>
+          <h4>Accessibility</h4>
+          <label><input type="checkbox" id="hcMode"> High-contrast mode</label>
+        </div>
         <div>
           <h4>Typewriter</h4>
           <label><input type="checkbox" id="twOn"> Enable</label><br>
@@ -435,10 +461,11 @@ function buildUI(){
   `;
 
   // cache
+  document.querySelectorAll('.frame').forEach(el=>{['tl','tr','bl','br'].forEach(pos=>{const s=document.createElement('span'); s.className='chev '+pos; el.appendChild(s);});});
   Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
-  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings');
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.btnGloss=$('#btnGloss'); Engine.el.btnSnap=$('#btnSnap'); Engine.el.sealsArc=$('#sealsArc'); Engine.el.pacing=$('#pacing');
 
   Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
@@ -454,6 +481,9 @@ function buildUI(){
 
   
   // settings
+  if(Engine.el.btnGloss){ Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); }; }
+  if(Engine.el.btnSnap){ Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); }; }
+  if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
   if(Engine.el.btnGloss){
     Engine.el.btnGloss.onclick=()=>{
       document.body.classList.add('show-gloss');
@@ -473,7 +503,7 @@ Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.aMaster=$('#aMaster'); Engine.el.aUi=$('#aUi'); Engine.el.aAmb=$('#aAmb'); Engine.el.aDrums=$('#aDrums'); Engine.el.sfxSuccess=$('#sfxSuccess'); Engine.el.sfxFail=$('#sfxFail'); Engine.el.sfxStory=$('#sfxStory');
   Engine.el.dmEndpoint=$('#dmEndpoint'); Engine.el.btnLiveToggle=$('#btnLiveToggle');
   Engine.el.btnSave=$('#btnSave'); Engine.el.btnLoad=$('#btnLoad'); Engine.el.btnExport=$('#btnExport'); Engine.el.btnUndo=$('#btnUndo');
-  Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll');
+  Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll'); Engine.el.hcMode=$('#hcMode');
 
   // scroll modal
   Engine.el.modalScroll=$('#modalScroll'); Engine.el.xScroll=$('#xScroll'); Engine.el.scrollContent=$('#scrollContent');
@@ -542,7 +572,10 @@ function bind(){
   Engine.el.btnEditCancel.onclick=()=>close(Engine.el.modalEdit);
 
   // settings
-  Engine.el.btnSettings.onclick=()=>{ Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps;
+  if(Engine.el.btnGloss){ Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); }; }
+  if(Engine.el.btnSnap){ Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); }; }
+  if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
+  Engine.el.btnSettings.onclick=()=>{ Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps; if(Engine.el.hcMode) Engine.el.hcMode.checked=document.body.classList.contains('hc');
     Engine.el.aMaster.value=S.settings.audio.master; Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aAmb.value=S.settings.audio.amb; Engine.el.aDrums.value=S.settings.audio.drums;
     Engine.el.dmEndpoint.value=S.live.endpoint; Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On';
     Engine.el.sfxSuccess.checked = (S.settings.audio.sfx_success!==false);
@@ -573,7 +606,7 @@ function bind(){
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') Engine.el.shade.onclick(); });
 
   // main actions
-  Engine.el.btnCont.onclick=()=>doNarrate({ sentence:'' }); // silent advance
+  Engine.el.btnCont.onclick=()=>{ if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(); return; } doNarrate({ sentence:'' }); }; // silent advance
   Engine.el.btnAct.onclick=()=>freeText();
   Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
 
@@ -602,7 +635,20 @@ function renderAll(){
   if (F.bossDealtWith) lines.push(`<div>Unfathomer dealt with: yes</div>`);
   Engine.el.ledgerPanel.innerHTML = lines.join('');
 
+
+  // Seals ring arc
+  try{
+    const sealsCt = (F.seals||[]).length; const circ = 2*Math.PI*40; const frac = Math.min(1, sealsCt/3); 
+    const dash = Math.max(0.0001, circ*frac);
+    if(Engine.el.sealsArc){ Engine.el.sealsArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
+  }catch{}
+  // Pacing chips
+  try{
+    if(Engine.el.pacing){ const k = s.turn % 4; Array.from(Engine.el.pacing.children).forEach((c,i)=>c.classList.toggle('on', i===k)); }
+  }catch{}
+
   // Story
+
   Engine.el.story.innerHTML='';
   for(const beat of s.storyBeats){
     const p=document.createElement('p');
@@ -611,6 +657,7 @@ function renderAll(){
     if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
     if(beat.kind==='success') p.classList.add('glow-success');
     if(beat.kind==='fail') p.classList.add('glow-fail');
+    if(beat.kind==='story') p.classList.add('glow-story');
     Engine.el.story.appendChild(p);
   }
   Engine.el.story.scrollTop=Engine.el.story.scrollHeight;
@@ -703,7 +750,7 @@ function applyTurn(resp,roll){
 
   const kind = roll ? (roll.total>=roll.dc ? 'success':'fail') : 'story';
   const html = resp?.story_paragraph_html || null;
-  appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, (kind==='success'?'success':(kind==='fail'?'fail':null)), html);
+  appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, kind, html);
   Sound.sfx(kind);
 
   if (S.character.HP<=0){
@@ -716,6 +763,7 @@ function applyTurn(resp,roll){
     S.turn++; renderAll(); return;
   }
 
+  if(kind==='story'){ cinematicFocus(); }
   const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
   renderChoices(next); S.turn++; renderAll();
 }
@@ -954,3 +1002,41 @@ function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden')
 function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
 
 
+
+/* ---------- cinematic focus (letterbox) ---------- */
+function cinematicFocus(){
+  const lb = document.getElementById('letterbox'); if(!lb) return;
+  lb.classList.remove('hidden');
+  setTimeout(()=> lb.classList.add('hidden'), 1800);
+}
+/* ---------- snapshot export ---------- */
+function exportSnapshot(){
+  try{
+    const canvas = document.createElement('canvas'); const W=1200,H=675; canvas.width=W; canvas.height=H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle='#0c0f12'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#715322'; ctx.globalAlpha=.28; ctx.lineWidth=6;
+    ctx.beginPath(); ctx.arc(W/2, H/2-20, 180, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=1; ctx.fillStyle='#f1e6bb'; ctx.font='700 42px Cinzel, serif'; ctx.textAlign='center';
+    ctx.fillText('BRASSREACH', W/2, 70);
+    const seals=(Engine.state.flags.seals||[]).join(', ')||'—';
+    ctx.font='18px Josefin Sans, sans-serif'; ctx.fillText('Keys: '+seals, W/2, 105);
+    const lines=Engine.state.transcript.slice(-6); ctx.textAlign='left'; ctx.font='20px Georgia, serif'; let y=170; const x=90;
+    for(const line of lines){ const words=line.split(' '); let cur=''; for(const w of words){ const t=cur+w+' '; if(ctx.measureText(t).width>W-180){ ctx.fillText(cur,x,y); y+=30; cur=w+' '; } else cur=t; } if(cur){ ctx.fillText(cur,x,y); y+=36; } if(y>H-80) break; }
+    ctx.font='16px Josefin Sans, sans-serif'; ctx.textAlign='right'; ctx.fillText(`Turn ${Engine.state.turn} · Scene ${Engine.state.scene}`, W-40, H-30);
+    canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='brassreach_snapshot.png'; a.click(); URL.revokeObjectURL(a.href); }, 'image/png', .92);
+  }catch(e){ console.error(e); }
+}
+
+/* ---------- motes ---------- */
+function spawnMotes(n=20){
+  const root=document.getElementById('motes'); if(!root) return;
+  for(let i=0;i<n;i++){
+    const s=document.createElement('span'); s.className='mote';
+    s.style.left=(Math.random()*100)+'vw';
+    s.style.setProperty('--x', (Math.random()*30-15)+'px');
+    s.style.setProperty('--dur', (14+Math.random()*12)+'s');
+    s.style.top=(60+Math.random()*40)+'vh';
+    root.appendChild(s);
+  }
+}
