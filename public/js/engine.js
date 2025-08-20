@@ -138,46 +138,159 @@ export function boot(){
   Sound.ambOn();
 }
 
-/* ---------- Intro slideshow ---------- */
-function insertIntro(){
-  if (Engine.el && Engine.el.intro) return;
+// --- Edge-aware glossary tooltips -------------------------------
+function attachGlossTips(root){
+  // Works with: <span class="gloss" data-def="Meaning...">Key term</span>
+  const MARGIN = 12;                // keep tips off the edges
+  const SHOW_DELAY = 100;           // ms
+  let showTimer = null;
 
-  const slidesHTML = getIntroSlidesHTML();
+  // Create or reuse a tip element on a term
+  function ensureTip(term){
+    let tip = term.querySelector('.gloss-tip');
+    if (!tip){
+      tip = document.createElement('span');
+      tip.className = 'gloss-tip';
+      tip.textContent = term.dataset.def || '';
+      tip.style.position = 'fixed';
+      tip.style.left = '0';
+      tip.style.top = '0';
+      tip.style.maxWidth = 'min(28rem, calc(100vw - 32px))';
+      tip.style.pointerEvents = 'none';
+      tip.style.opacity = '0';
+      tip.style.transform = 'translate3d(0,0,0)';
+      term.appendChild(tip);
+    }
+    return tip;
+  }
+  function placeTip(tip, x, y){
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // pre-measure so we can nudge
+    tip.style.opacity = '0';
+    tip.style.visibility = 'hidden';
+    tip.style.transform = 'translate3d(-9999px,-9999px,0)';
+    // force layout
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+
+    let nx = x + 16, ny = y + 8; // default offset from cursor
+    if (nx + w + MARGIN > vw) nx = vw - w - MARGIN;
+    if (ny + h + MARGIN > vh) ny = vh - h - MARGIN;
+    if (nx < MARGIN) nx = MARGIN;
+    if (ny < MARGIN) ny = MARGIN;
+
+    tip.style.visibility = 'visible';
+    tip.style.transform = `translate3d(${nx}px, ${ny}px, 0)`;
+    tip.style.opacity = '1';
+  }
+
+  root.addEventListener('mouseenter', (ev)=>{
+    const term = ev.target.closest('.gloss');
+    if (!term) return;
+    const tip = ensureTip(term);
+    clearTimeout(showTimer);
+    showTimer = setTimeout(()=> {
+      tip.classList.add('on');
+      // initial placement near the term
+      const r = term.getBoundingClientRect();
+      placeTip(tip, r.right, r.bottom);
+    }, SHOW_DELAY);
+  }, true);
+
+  root.addEventListener('mousemove', (ev)=>{
+    const term = ev.target.closest('.gloss');
+    if (!term) return;
+    const tip = term.querySelector('.gloss-tip');
+    if (!tip || tip.style.opacity === '0') return;
+    placeTip(tip, ev.clientX, ev.clientY);
+  }, true);
+
+  root.addEventListener('mouseleave', (ev)=>{
+    const term = ev.target.closest('.gloss');
+    if (!term) return;
+    clearTimeout(showTimer);
+    const tip = term.querySelector('.gloss-tip');
+    if (tip){
+      tip.classList.remove('on');
+      tip.style.opacity = '0';
+      tip.style.visibility = 'hidden';
+    }
+  }, true);
+}
+// ----------------------------------------------------------------
+
+
+// --- COMPLETE, DROP-IN INTRO ------------------------------------
+function insertIntro(){
+  // DOM-aware guard so we never stack duplicate intros
+  const existing = document.getElementById('intro');
+  if (existing){
+    Engine.el.intro  = existing;
+    Engine.el.slides = Array.from(existing.querySelectorAll('.slide'));
+    return;
+  }
+
+  // Build and inject the overlay
+  const slidesHTML = getIntroSlidesHTML(); // your existing factory
   document.body.insertAdjacentHTML('afterbegin', slidesHTML);
 
-  Engine.el.intro    = $('#intro');
-  Engine.el.slides   = $$('.slide', Engine.el.intro);
-  Engine.el.nextBtns = $$('.intro-next', Engine.el.intro);
-  Engine.el.beginBtn = $('.intro-begin', Engine.el.intro);
+  // Cache refs
+  Engine.el.intro    = document.getElementById('intro');
+  Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
+  Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
+  Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
 
-  // inject tooltips once
+  // Glossary tooltips (edge-aware)
   attachGlossTips(Engine.el.intro);
 
-  let idx=0;
+  // One-at-a-time slides + per-slide typewriter & zoom reset
+  let idx = 0;
   const show = (i)=>{
-    idx = Math.max(0, Math.min(Engine.el.slides.length-1, i));
-    Engine.el.slides.forEach((s,k)=>{
-      s.classList.toggle('active', k===idx);
-      const img=$('.img',s); if(img){ img.style.animation='none'; img.offsetHeight; img.style.animation='introZoom 22s ease-in-out forwards'; }
-      const p=$('.scroll p',s);
-      if(p && !p.dataset.typed){ p.dataset.typed='1'; typewriteRich(p, Engine.state.settings.cps); }
+    idx = Math.max(0, Math.min(Engine.el.slides.length - 1, i));
+    Engine.el.slides.forEach((s, k)=>{
+      const active = (k === idx);
+      s.classList.toggle('active', active);
+      if (!active) return;
+
+      // restart zoom animation on the active image
+      const img = s.querySelector('.img');
+      if (img){ img.style.animation = 'none'; img.offsetHeight; img.style.animation = 'introZoom 22s ease-in-out forwards'; }
+
+      // trigger typewriter once per slide
+      const p = s.querySelector('.scroll p');
+      if (p && !p.dataset.typed){
+        p.dataset.typed = '1';
+        typewriteRich(p, Engine.state.settings.cps); // your existing typed routine
+      }
     });
   };
 
-  // edge-aware nudging for glossary tips (coarse but safe)
-  Engine.el.intro.addEventListener('mouseenter', ev=>{
-    const g = ev.target.closest?.('.gloss'); if(!g) return;
-    const tip=g.querySelector('.tip'); if(!tip) return;
-    tip.style.left='0'; tip.style.right='auto';
-    const r=g.getBoundingClientRect(), vw=innerWidth||document.documentElement.clientWidth, pad=24;
-    if (r.left < pad) { tip.style.left = `${pad - r.left}px`; tip.style.right='auto'; }
-    if (vw - r.right < 280) { tip.style.left='auto'; tip.style.right = `${pad - (vw - r.right)}px`; }
-  }, true);
+  // Button wiring
+  Engine.el.nextBtns.forEach(b => b.addEventListener('click', ()=>{
+    Sound.sfx('story'); show(idx + 1);
+  }));
+  const back2 = Engine.el.intro.querySelector('#introBack2');
+  const back3 = Engine.el.intro.querySelector('#introBack3');
+  const skip1 = Engine.el.intro.querySelector('#introSkip1');
 
-  Engine.el.nextBtns.forEach(b=>b.addEventListener('click',()=>{ Sound.sfx('story'); show(idx+1); }));
-  $('#introBack2')?.addEventListener('click', ()=>{ Sound.click(); show(idx-1); });
-  $('#introBack3')?.addEventListener('click', ()=>{ Sound.click(); show(idx-1); });
-  $('#introSkip1')?.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn.click(); });
+  back2 && back2.addEventListener('click', ()=>{ Sound.click(); show(idx - 1); });
+  back3 && back3.addEventListener('click', ()=>{ Sound.click(); show(idx - 1); });
+  skip1 && skip1.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
+
+  if (Engine.el.beginBtn){
+    Engine.el.beginBtn.onclick = ()=>{
+      Sound.click();
+      Engine.el.intro.classList.add('hidden');
+      store.set('intro_seen', true);
+      if (!Engine.state.storyBeats.length) beginTale();
+      // open editor and mount scroll icon
+      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
+    };
+  }
+
+  // Start at the first slide
+  show(0);
+}
+// ----------------------------------------------------------------
 
   // --- inside insertIntro(), after creating DOM refs, idx, and show() helper ---
 
