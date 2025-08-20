@@ -4,19 +4,22 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Brassreach</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Josefin+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./public/css/skin.css?v=14">
+
+  <!-- quiet favicon 404s -->
   <link rel="icon" href="data:,">
-  <script type="module" src="./public/js/engine.js?v=14"></script>
+
+  <!-- single stylesheet -->
+  <link rel="stylesheet" href="./public/css/skin.css?v=14">
 </head>
 <body>
-  <!-- Minimal boot cover -->
   <div class="boot" id="boot"><div class="box">Loading…</div></div>
 
   <script type="module">
-    import { boot } from './public/js/engine.js?v=13';
-    window.addEventListener('DOMContentLoaded', ()=>{ 
+    import { boot } from './public/js/engine.js?v=14';
+    window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('boot').classList.add('ok');
       boot();
     });
