@@ -1,7 +1,8 @@
 // public/js/engine.js
-// v13 — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
+// v13b — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
 // Ledger panel (Inventory + revealed keys/rumors/gate/boss), 20 BPM ambience,
-// per-slide intro typewriter, success/fail/story SFX, silent continue, death modal.
+// per-slide intro typewriter, success/fail/story SFX, silent continue, death modal,
+// injected glossary tooltips with edge-aware positioning.
 
 import { makeWeaver } from './weaver.js';
 
@@ -41,10 +42,10 @@ const Sound=(()=>{
     amb=ctx.createGain(); amb.gain.value=Engine.state.settings.audio.amb; amb.connect(master);
     drums=ctx.createGain(); drums.gain.value=Engine.state.settings.audio.drums; drums.connect(master);
 
-    // Harmonic motion: slower line w/ implied chords & occasional contrary motion
+    // Harmonic motion: longer ostinato w/ implied chords + contrary motion
     const beat = 3000; // ≈20 BPM
     const notesA = [55, 73.42, 61.74, 82.41, 65.41, 55, 92.5, 61.74];   // A/D/B/E/F/A/Bb/B
-    const notesB = [49, 65.41, 58.27, 77.78, 61.74, 49, 87.31, 58.27];  // E/F/Bb/etc (counter)
+    const notesB = [49, 65.41, 58.27, 77.78, 61.74, 49, 87.31, 58.27];  // counter line
     const bass = ctx.createOscillator(); bass.type='sawtooth';
     const pad  = ctx.createOscillator(); pad.type='triangle';
     const g1=ctx.createGain(), g2=ctx.createGain(); g1.gain.value=.020; g2.gain.value=.012;
@@ -58,23 +59,23 @@ const Sound=(()=>{
       i++;
     }, beat);
 
-    // Drums: heavy on 1 & 3, ghost 16ths and 32nds before downbeats
-    const bar=beat*4, eighth=beat/2, sixteenth=beat/4, thirty=beat/8;
+    // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
+    const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
     setInterval(()=>{
       if(!ctx) return; const t=ctx.currentTime;
 
-      hit(t, 72, 34, .24, .18);                    // 1
-      ghost(t + (sixteenth/1000)*3, 700,.05);      // 16th before 2
-      ghost(t + (thirty/1000)*7,   820,.04);       // 32nd pick-up
+      hit(t, 72, 34, .24, .24);                        // beat 1
+      ghost(t + (sixteenth/1000)*3, 700,.05);          // 16th pickup
+      ghost(t + (thirty/1000)*7,   820,.04);           // 32nd pickup
 
-      hit(t+2*beat/1000, 68, 32, .22, .16);        // 3
+      hit(t+2*beat/1000, 68, 32, .22, .22);            // beat 3
       ghost(t + 2*beat/1000 - sixteenth/1000*1, 620,.05);
-      ghost(t + 4*beat/1000 - thirty/1000*1,   760,.04); // lead into next bar
+      ghost(t + 4*beat/1000 - thirty/1000*1,   760,.04);
 
       function hit(at,f1,f2,dur,amp){
         const o=ctx.createOscillator(); o.type='sine';
         const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(amp||.14, at+.02);
+        g.gain.exponentialRampToValueAtTime(amp, at+.02);
         g.gain.exponentialRampToValueAtTime(.0001, at+dur);
         o.frequency.setValueAtTime(f1,at);
         o.frequency.exponentialRampToValueAtTime(f2,at+dur*.85);
@@ -149,6 +150,9 @@ function insertIntro(){
   Engine.el.nextBtns = $$('.intro-next', Engine.el.intro);
   Engine.el.beginBtn = $('.intro-begin', Engine.el.intro);
 
+  // inject tooltips once
+  attachGlossTips(Engine.el.intro);
+
   let idx=0;
   const show = (i)=>{
     idx = Math.max(0, Math.min(Engine.el.slides.length-1, i));
@@ -160,12 +164,15 @@ function insertIntro(){
     });
   };
 
-  // anti-clip tooltips near edges
-  Engine.el.intro.addEventListener('mousemove', ev=>{
-    const g = ev.target.closest('.gloss'); if(!g) return;
-    const r=g.getBoundingClientRect(), vw=Math.max(document.documentElement.clientWidth, innerWidth||0), pad=24;
-    if(r.left<pad) g.dataset.edge='left'; else if(vw-r.right<pad) g.dataset.edge='right'; else g.dataset.edge='';
-  });
+  // edge-aware nudging for glossary tips (coarse but safe)
+  Engine.el.intro.addEventListener('mouseenter', ev=>{
+    const g = ev.target.closest?.('.gloss'); if(!g) return;
+    const tip=g.querySelector('.tip'); if(!tip) return;
+    tip.style.left='0'; tip.style.right='auto';
+    const r=g.getBoundingClientRect(), vw=innerWidth||document.documentElement.clientWidth, pad=24;
+    if (r.left < pad) { tip.style.left = `${pad - r.left}px`; tip.style.right='auto'; }
+    if (vw - r.right < 280) { tip.style.left='auto'; tip.style.right = `${pad - (vw - r.right)}px`; }
+  }, true);
 
   Engine.el.nextBtns.forEach(b=>b.addEventListener('click',()=>{ Sound.sfx('story'); show(idx+1); }));
   $('#introBack2')?.addEventListener('click', ()=>{ Sound.click(); show(idx-1); });
@@ -367,7 +374,11 @@ function mountScrollFab(){
       <path d="M18 18h28M18 28h22M18 38h26" />
     </svg>`;
   document.body.appendChild(btn);
-  btn.addEventListener('click', ()=>{ Engine.el.scrollContent.innerHTML=getIntroScrollHTML(); openModal(Engine.el.modalScroll); });
+  btn.addEventListener('click', ()=>{
+    Engine.el.scrollContent.innerHTML=getIntroScrollHTML();
+    attachGlossTips(Engine.el.modalScroll);
+    openModal(Engine.el.modalScroll);
+  });
 }
 
 /* ---------- storage ---------- */
@@ -785,3 +796,22 @@ function getIntroScrollHTML(){
 /* ---------- modal helpers ---------- */
 function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); }
 function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
+
+/* ---------- glossary tip injector ---------- */
+function attachGlossTips(root){
+  (root||document).querySelectorAll('.gloss').forEach(el=>{
+    if (el.querySelector('.tip')) return;
+    const tip=document.createElement('span');
+    tip.className='tip';
+    tip.textContent = el.getAttribute('data-def') || '';
+    el.appendChild(tip);
+
+    el.addEventListener('mouseenter', ()=>{
+      // reset positioning; CSS fades it in
+      tip.style.left='0'; tip.style.right='auto';
+      const r=el.getBoundingClientRect(), vw=innerWidth||document.documentElement.clientWidth, pad=24;
+      if (r.left < pad) { tip.style.left = `${pad - r.left}px`; tip.style.right='auto'; }
+      if (vw - r.right < 280) { tip.style.left='auto'; tip.style.right = `${pad - (vw - r.right)}px`; }
+    });
+  });
+}
