@@ -31,6 +31,7 @@ function defaults(){
   };
 }
 const Engine={ el:{}, state: defaults() };
+window.Engine=Engine;
 
 /* ---------- sound @ ~20 BPM base ---------- */
 const Sound=(()=>{
@@ -138,6 +139,14 @@ export function boot(){
   insertIntro(); // overlay every load
   const seen = store.get('intro_seen', false);
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); mountScrollFab(); }
+  
+  // Robust start: if intro is hidden and no beats yet, begin tale
+  try{
+    if((store.get('intro_seen', false)) && (!Engine.state.storyBeats || Engine.state.storyBeats.length===0)){
+      beginTale();
+      mountScrollFab();
+    }
+  }catch(err){ console.error('Boot begin guard:', err); }
   Sound.ambOn();
   spawnMotes(24);
 }
@@ -469,8 +478,8 @@ function buildUI(){
   Engine.el.btnAuto=$('#btnAuto'); Engine.el.btnEditSave=$('#btnEditSave'); Engine.el.btnEditCancel=$('#btnEditCancel');
 
   // settings
-  Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); };
-  Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); };
+  Engine.el.btnGloss && (Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); };
+  Engine.el.btnSnap && (Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); };
   Engine.el.hcMode && (Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }); modal
   Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.twOn=$('#twOn'); Engine.el.twCps=$('#twCps');
@@ -546,11 +555,12 @@ function bind(){
   Engine.el.btnEditCancel.onclick=()=>close(Engine.el.modalEdit);
 
   // settings
-  Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); };
-  Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); };
+  Engine.el.btnGloss && (Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); };
+  Engine.el.btnSnap && (Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); };
   Engine.el.hcMode && (Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); });
-  Engine.el.btnSettings.onclick=()=>{ if(Engine.el.hcMode) Engine.el.hcMode.checked=document.body.classList.contains('hc'); Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps;
-    Engine.el.aMaster.value=S.settings.audio.master; Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aAmb.value=S.settings.audio.amb; Engine.el.aDrums.value=S.settings.audio.drums;
+  Engine.el.btnSettings.onclick=()=>{
+    try{ if(Engine.el.hcMode) Engine.el.hcMode.checked=document.body.classList.contains('hc'); Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps;
+    Engine.el.aMaster && (Engine.el.aMaster.value=S.settings.audio.master); Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aAmb && (Engine.el.aAmb.value=S.settings.audio.amb); Engine.el.aDrums && (Engine.el.aDrums.value=S.settings.audio.drums);
     Engine.el.dmEndpoint.value=S.live.endpoint; Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On';
     Engine.el.sfxSuccess.checked = (S.settings.audio.sfx_success!==false);
     Engine.el.sfxFail.checked    = (S.settings.audio.sfx_fail!==false);
