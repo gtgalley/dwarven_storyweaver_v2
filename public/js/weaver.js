@@ -1,3 +1,4 @@
+// public/js/weaver.js
 // Minimal pass-through "weaver" with Live/Local switch.
 // You can later plug your server endpoint at S.live.endpoint.
 
