@@ -176,3 +176,44 @@ input[type="range"]{width:100%}
 
 /* Number inputs accent */
 input[type="number"]{accent-color:var(--gold)}
+
+/* Intro overlay must sit above the app and receive clicks */
+#intro.intro{
+  position: fixed; inset: 0; z-index: 9999;
+  display: block; pointer-events: auto;
+  background: rgba(6,6,10,.82); /* subtle veil */
+}
+
+/* Each slide stacks its nav above any art */
+#intro .slide{ position: relative; }
+#intro .slide .nav{
+  position: absolute; right: 18px; bottom: 18px;
+  z-index: 3;
+}
+
+/* Decorative layers never eat clicks */
+#intro .slide .img,
+#intro .slide .mist{ pointer-events: none; }
+
+/* Make the copy area non-scrolling (no scrollbar) but roomy */
+#intro .copy .scroll{
+  overflow: visible; /* no scrollbar */
+  max-width: 70ch;   /* more elbow-room for tooltip popouts */
+  padding: 12px 18px;
+}
+
+/* Glossary tips: edge-aware defaults; fade in/out quickly */
+.gloss{ position: relative; cursor: help; }
+.gloss .tip{
+  position: absolute; top: 100%; left: 0;
+  transform: translateY(6px);
+  background: #0f1016; color: #f1e6d4;
+  border: 1px solid #b7822b; padding: 8px 10px;
+  max-width: 36ch; filter: drop-shadow(0 4px 8px rgba(0,0,0,.4));
+  opacity: 0; pointer-events: none; transition: opacity .12s ease;
+  white-space: normal; line-height: 1.35;
+}
+.gloss:hover .tip{ opacity: 1; }
+
+/* Ensure the app underneath never steals focus while intro is open */
+#intro:not(.hidden) ~ .app{ pointer-events: none; }
