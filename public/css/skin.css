@@ -158,17 +158,6 @@ input[type="range"]{width:100%}
 .intro .nav{display:flex;justify-content:flex-end;gap:10px;padding:10px 20px;border-top:2px solid var(--line);background:#0d1218}
 .intro .btn{min-width:120px}
 
-/* Tooltips for glossary (never clipped) */
-.gloss{position:relative;color:var(--accent);cursor:help}
-.gloss-tip {
-  background: rgba(20,20,26,.96);
-  border: 1px solid #a67b2d; /* bronze */
-  padding: .35rem .5rem;
-  border-radius: 4px;
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,.45));
-  transition: opacity .12s ease, transform .12s ease;
-  z-index: 9999;
-}
 .gloss:hover .tip{opacity:1}
 /* auto shift when near edges; JS adjusts left dynamically */
 
@@ -215,18 +204,34 @@ input[type="number"]{accent-color:var(--gold)}
      otherwise use flex or block to match your CSS */
   display: block;   /* or: display:flex; or display:block; */
 }
-/* Glossary tips: edge-aware defaults; fade in/out quickly */
-.gloss{ position: relative; cursor: help; }
-.gloss .tip{
-  position: absolute; top: 100%; left: 0;
-  transform: translateY(6px);
-  background: #0f1016; color: #f1e6d4;
-  border: 1px solid #b7822b; padding: 8px 10px;
-  max-width: 36ch; filter: drop-shadow(0 4px 8px rgba(0,0,0,.4));
-  opacity: 0; pointer-events: none; transition: opacity .12s ease;
-  white-space: normal; line-height: 1.35;
+/* Edge-aware glossary tooltip */
+.gloss { position: relative; font-weight: 600; color: var(--bronze-400); text-shadow: 0 0 6px rgba(255,180,60,.15); cursor: help; }
+.gloss:hover { color: var(--bronze-300); }
+
+.gloss-tip {
+  position: fixed;
+  z-index: 9999;
+  max-width: min(28rem, calc(100vw - 32px));
+  pointer-events: none;
+  background: rgba(14,14,18,.96);
+  color: var(--ink-100);
+  border: 1px solid rgba(255,184,84,.45);
+  outline: 1px solid rgba(255,184,84,.18);
+  padding: 10px 12px;
+  line-height: 1.25;
+  border-radius: 6px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.45), inset 0 0 18px rgba(255,184,84,.06);
+  filter: drop-shadow(0 0 4px rgba(255, 184, 84, 0.25));
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(-9999px,-9999px,0) scale(.98);
+  transition: opacity .15s ease, visibility .15s ease, transform .15s ease;
 }
-.gloss:hover .tip{ opacity: 1; }
+.gloss-tip.on {
+  opacity: 1;
+  visibility: visible;
+  transform: translate3d(var(--gx,0), var(--gy,0), 0) scale(1);
+}
 
 /* Ensure the app underneath never steals focus while intro is open */
 #intro:not(.hidden) ~ .app{ pointer-events: none; }
