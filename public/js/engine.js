@@ -179,40 +179,40 @@ function insertIntro(){
   $('#introBack3')?.addEventListener('click', ()=>{ Sound.click(); show(idx-1); });
   $('#introSkip1')?.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn.click(); });
 
-  if (Engine.el.beginBtn){
-    Engine.el.beginBtn.onclick=()=>{
-      Sound.click();
-      Engine.el.intro.classList.add('hidden');
-      store.set('intro_seen', true);
-      if (!Engine.state.storyBeats.length) beginTale();
-      // open editor immediately and mount scroll icon
-      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
-    // Robust, delegated clicks for all intro buttons
-  Engine.el.intro.addEventListener('click', (ev) => {
-    const b = ev.target.closest('button');
-    if (!b) return;
-    if (b.classList.contains('intro-next')) {       // Continue ▸
-      Sound.sfx('story'); show(idx + 1);
-    } else if (b.classList.contains('intro-begin')) { // Begin Story
-      Sound.click();
-      Engine.el.intro.classList.add('hidden');
-      store.set('intro_seen', true);
-      if (!Engine.state.storyBeats.length) beginTale();
-      setTimeout(() => { Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
-    } else if (b.id === 'introBack2' || b.id === 'introBack3') {
-      Sound.click(); show(idx - 1);
-    } else if (b.id === 'introSkip1') {
-      Sound.click();
-      // behave like "Begin Story"
-      Engine.el.intro.classList.add('hidden');
-      store.set('intro_seen', true);
-      if (!Engine.state.storyBeats.length) beginTale();
-      setTimeout(() => { Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
-    }
-  });
-    };
+  // --- inside insertIntro(), after creating DOM refs, idx, and show() helper ---
+
+function onBegin() {
+  Sound.click();
+  Engine.el.intro.classList.add('hidden');
+  store.set('intro_seen', true);
+  if (!Engine.state.storyBeats.length) beginTale();
+  // open editor immediately and mount scroll icon
+  setTimeout(() => { Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
+}
+
+if (Engine.el.beginBtn) {
+  Engine.el.beginBtn.onclick = onBegin;
+}
+
+// Robust, delegated clicks for ALL intro buttons (works even if DOM changes)
+Engine.el.intro.addEventListener('click', (ev) => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+
+  if (b.classList.contains('intro-next')) {          // Continue ▸
+    Sound.sfx('story');
+    show(idx + 1);
+  } else if (b.classList.contains('intro-begin')) {  // Begin Story
+    onBegin();
+  } else if (b.id === 'introBack2' || b.id === 'introBack3') {
+    Sound.click();
+    show(idx - 1);
+  } else if (b.id === 'introSkip1') {
+    onBegin(); // behave like Begin Story
   }
-  show(0);
+});
+
+show(0);
 }
 
 /* ---------- DOM ---------- */
