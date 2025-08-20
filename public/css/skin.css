@@ -316,3 +316,13 @@ body.hc .frame::after{ border-color: #6d5120; }
 /* Gloss highlight finder */
 body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: glossPulse 1.8s ease-in-out infinite; }
 @keyframes glossPulse{ 0%,100%{ text-underline-offset:2px } 50%{ text-underline-offset:6px } }
+
+/* Now Playing widget */
+.nowplay{ position:fixed; left:50%; transform:translateX(-50%); bottom:10px; width:min(920px, 96vw);
+  background: linear-gradient(180deg,#0f1419,#0a0f14); border:2px solid var(--line); box-shadow:0 0 0 2px var(--line2) inset;
+  padding:8px 12px; z-index: 8888; }
+.nowplay .np-inner{ display:flex; align-items:center; gap:10px; }
+.nowplay .np-dot{ width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 10px rgba(213,168,74,.6); }
+.nowplay .np-label{ color: var(--muted); font-weight:600; letter-spacing:.3px }
+.nowplay #npTitle{ color: var(--ink2); font-weight:700 }
+.nowplay .btn.mini{ padding:6px 10px; font-size:.9rem }
