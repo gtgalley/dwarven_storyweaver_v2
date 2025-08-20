@@ -187,6 +187,29 @@ function insertIntro(){
       if (!Engine.state.storyBeats.length) beginTale();
       // open editor immediately and mount scroll icon
       setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
+    // Robust, delegated clicks for all intro buttons
+  Engine.el.intro.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    if (b.classList.contains('intro-next')) {       // Continue ▸
+      Sound.sfx('story'); show(idx + 1);
+    } else if (b.classList.contains('intro-begin')) { // Begin Story
+      Sound.click();
+      Engine.el.intro.classList.add('hidden');
+      store.set('intro_seen', true);
+      if (!Engine.state.storyBeats.length) beginTale();
+      setTimeout(() => { Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
+    } else if (b.id === 'introBack2' || b.id === 'introBack3') {
+      Sound.click(); show(idx - 1);
+    } else if (b.id === 'introSkip1') {
+      Sound.click();
+      // behave like "Begin Story"
+      Engine.el.intro.classList.add('hidden');
+      store.set('intro_seen', true);
+      if (!Engine.state.storyBeats.length) beginTale();
+      setTimeout(() => { Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
+    }
+  });
     };
   }
   show(0);
