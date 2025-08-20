@@ -290,43 +290,6 @@ function insertIntro(){
   // Start at the first slide
   show(0);
 }
-// ----------------------------------------------------------------
-
-  // --- inside insertIntro(), after creating DOM refs, idx, and show() helper ---
-
-function onBegin() {
-  Sound.click();
-  Engine.el.intro.classList.add('hidden');
-  store.set('intro_seen', true);
-  if (!Engine.state.storyBeats.length) beginTale();
-  // open editor immediately and mount scroll icon
-  setTimeout(() => { Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
-}
-
-if (Engine.el.beginBtn) {
-  Engine.el.beginBtn.onclick = onBegin;
-}
-
-// Robust, delegated clicks for ALL intro buttons (works even if DOM changes)
-Engine.el.intro.addEventListener('click', (ev) => {
-  const b = ev.target.closest('button');
-  if (!b) return;
-
-  if (b.classList.contains('intro-next')) {          // Continue ▸
-    Sound.sfx('story');
-    show(idx + 1);
-  } else if (b.classList.contains('intro-begin')) {  // Begin Story
-    onBegin();
-  } else if (b.id === 'introBack2' || b.id === 'introBack3') {
-    Sound.click();
-    show(idx - 1);
-  } else if (b.id === 'introSkip1') {
-    onBegin(); // behave like Begin Story
-  }
-});
-
-show(0);
-}
 
 /* ---------- DOM ---------- */
 function buildUI(){
@@ -933,21 +896,4 @@ function getIntroScrollHTML(){
 function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); }
 function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
 
-/* ---------- glossary tip injector ---------- */
-function attachGlossTips(root){
-  (root||document).querySelectorAll('.gloss').forEach(el=>{
-    if (el.querySelector('.tip')) return;
-    const tip=document.createElement('span');
-    tip.className='tip';
-    tip.textContent = el.getAttribute('data-def') || '';
-    el.appendChild(tip);
 
-    el.addEventListener('mouseenter', ()=>{
-      // reset positioning; CSS fades it in
-      tip.style.left='0'; tip.style.right='auto';
-      const r=el.getBoundingClientRect(), vw=innerWidth||document.documentElement.clientWidth, pad=24;
-      if (r.left < pad) { tip.style.left = `${pad - r.left}px`; tip.style.right='auto'; }
-      if (vw - r.right < 280) { tip.style.left='auto'; tip.style.right = `${pad - (vw - r.right)}px`; }
-    });
-  });
-}
