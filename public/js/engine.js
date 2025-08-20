@@ -34,6 +34,71 @@ const Engine={ el:{}, state: defaults() };
 window.Engine=Engine;
 window.Engine=Engine;
 
+
+/* ---------- background music manager (file-based, crossfades) ---------- */
+const BGM = (function(){
+  let ctx, bus, cur = null, nextGain=null, curGain=null, fadeMs=1400;
+  const tracks = {
+    intro:    { title:"Overture of the Foundry", srcs:["./public/audio/034842c5-ddc2-4b5c-abc3-bff6ab9c455f.mp3"] },
+    prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a","./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.mp3"] },
+    halls:    { title:"Halls of the Brassreach", srcs:["./public/audio/8b264fe3-26f0-4c6c-9356-60a270d2ef21.mp3"] },
+    depths2:  { title:"When the Unfathomer Stirs", srcs:["./public/audio/66bf880d-6cea-470f-8dba-7de081c046fa.mp3"] },
+    depths:   { title:"Beneath the Cistern Fields", srcs:["./public/audio/662478af-b29d-4034-a2fc-d2ea9fd75dc4.mp3"] },
+    archives: { title:"Whispers of the Archives", srcs:["./public/audio/73a9c81f-6be8-45a2-8338-2b8b7a53d596.mp3"] },
+  };
+  const cache = new Map();
+  function getCtx(){ try{ Sound.ensure(); }catch{}; return (Sound.getCtx? Sound.getCtx() : new (window.AudioContext||window.webkitAudioContext)()); }
+  async function load(name){
+    if(cache.has(name)) return cache.get(name);
+    const t = tracks[name]; if(!t) return null;
+    const C = getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.amb ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+    for(const url of t.srcs){
+      try{
+        const res = await fetch(url, {cache:"force-cache"}); if(!res.ok) continue;
+        const arr = await res.arrayBuffer();
+        const buf = await C.decodeAudioData(arr.slice(0));
+        const o = {buffer: buf}; cache.set(name,o); return o;
+      }catch(e){}
+    }
+    return null;
+  }
+  function setBus(v){ if(bus) bus.gain.value=v; }
+  async function crossTo(name){
+    try{
+      const data = await load(name); if(!data) return;
+      const C = ctx || getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.amb ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+      // next source
+      const src = C.createBufferSource(); src.buffer=data.buffer; src.loop=true;
+      const ng = C.createGain(); ng.gain.value=0; src.connect(ng).connect(bus); const now=C.currentTime;
+      src.start(now+0.02);
+      const fade = Math.max(0.10, fadeMs/1000);
+      ng.gain.cancelScheduledValues(now); ng.gain.setValueAtTime(0, now); ng.gain.linearRampToValueAtTime(1, now+fade);
+      if(curGain){
+        curGain.gain.cancelScheduledValues(now);
+        curGain.gain.setValueAtTime(curGain.gain.value, now);
+        curGain.gain.linearRampToValueAtTime(0, now+fade);
+      }
+      const prev = cur;
+      cur = src; curGain = ng;
+      if(prev){ setTimeout(()=>{ try{ prev.stop(); }catch{} }, fade*1000+120); }
+      const t=tracks[name]; if(t) setNowPlaying(t.title);
+    }catch(e){ console.error('BGM crossTo error', e); }
+  }
+  function stop(){ try{ if(cur){ const C=ctx||getCtx(); const now=C.currentTime; curGain.gain.cancelScheduledValues(now); curGain.gain.linearRampToValueAtTime(0, now+.25); setTimeout(()=>{ try{cur.stop()}catch{} }, 360);} }catch{} }
+  function updateForState(S){
+    const introOpen = !!(Engine.el?.intro && !Engine.el.intro.classList.contains('hidden'));
+    if(introOpen) return crossTo('intro');
+    if(S.turn < 2) return crossTo('prelude');
+    if(S.scene==='Archives') return crossTo('archives');
+    if(S.scene==='Depths'){ if(S.flags?.bossDealtWith || S.flags?.bossReady) return crossTo('depths2'); return crossTo('depths'); }
+    return crossTo('halls');
+  }
+  function attachWidget(){
+    const mute=document.getElementById('npMute'); if(mute){ mute.onclick=()=>{ const v=bus?bus.gain.value:1; const nv=(v>0)?0:(Engine.state?.settings?.audio?.amb ?? .5); setBus(nv); mute.textContent = nv>0 ? 'Mute' : 'Unmute'; }; }
+  }
+  function setNowPlaying(t){ const e=document.getElementById('npTitle'); if(e) e.textContent=t; }
+  return {crossTo, stop, updateForState, attachWidget};
+})();
 /* ---------- sound @ ~20 BPM base ---------- */
 const Sound=(()=>{
   let ctx, master, ui, amb, drums;
@@ -133,7 +198,7 @@ const Sound=(()=>{
     o.connect(g).connect(ui); o.start(t); o.stop(t+a[2]+.05);
   };
   const ambOn=()=>ensure();
-  return {click, sfx, ambOn, setLevels, ensure};
+  return {click, sfx, ambOn, setLevels, ensure, getCtx:()=>{ensure(); return ctx;}, getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
@@ -144,12 +209,12 @@ const Weaver = makeWeaver(store,
 
 /* ---------- boot ---------- */
 export function boot(){
-  buildUI(); hydrate(); bind(); renderAll();
+  buildUI(); hydrate(); bind(); renderAll(); BGM.attachWidget();
   attachGlossTips(document.body);
   insertIntro(); // overlay every load
   const seen = store.get('intro_seen', false);
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); mountScrollFab(); }
-  Sound.ambOn();
+  Sound.ambOn(); BGM.updateForState(Engine.state);
   spawnMotes(24);
 }
 
@@ -292,7 +357,7 @@ function insertIntro(){
   skip1 && skip1.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
 
   if (Engine.el.beginBtn){
-    Engine.el.beginBtn.onclick = ()=>{
+    Engine.el.beginBtn.onclick=()=>{ BGM.crossTo('prelude');
       Sound.click();
       Engine.el.intro.classList.add('hidden');
       store.set('intro_seen', true);
@@ -363,10 +428,17 @@ function buildUI(){
           </div>
         </div>
       </aside>
+    
+    <div id="nowplay" class="nowplay frame">
+      <div class="np-inner">
+        <span class="np-dot" aria-hidden="true"></span>
+        <span class="np-label">Now Playing:</span>
+        <span id="npTitle">—</span>
+        <button id="npMute" class="btn mini" style="margin-left:auto;">Mute</button>
+      </div>
     </div>
-  </div>
 
-  <div id="shade" class="shade hidden"></div>
+  <div id="shade"  class="shade hidden"></div>
 
   <!-- Character modal -->
   <div id="modalEdit" class="modal hidden">
@@ -470,7 +542,7 @@ function buildUI(){
   Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
   Engine.el.btnEdit=$('#btnEdit');
-  Engine.el.shade=$('#shade');
+  Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle'); Engine.el.npMute=$('#npMute');
 
   // character modal refs
   Engine.el.modalEdit=$('#modalEdit'); Engine.el.xEdit=$('#xEdit');
@@ -676,7 +748,7 @@ function beginTale(){
   S.flags={rumors:false,seals:[],bossReady:false,bossDealtWith:false};
   appendBeat("Lanterns throw steady light across carved lintels and iron mosaics. Word passes of a slow, otherworldly tide called the Unfathomer, pooling in the buried cisterns. You wait at the mouth of the Halls, where corridors open like patient books.");
   renderChoices(makeChoiceSet(S.scene));
-  S.turn++; renderAll();
+  S.turn++; renderAll(); BGM.updateForState(Engine.state);
 }
 function endTale(){
   const S=Engine.state, C=S.character;
@@ -760,12 +832,12 @@ function applyTurn(resp,roll){
     Engine.el.epiContent.textContent = dead;
     openModal(Engine.el.modalEpi);
     renderChoices([]);
-    S.turn++; renderAll(); return;
+    S.turn++; renderAll(); BGM.updateForState(Engine.state); return;
   }
 
   if(kind==='story'){ cinematicFocus(); }
   const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
-  renderChoices(next); S.turn++; renderAll();
+  renderChoices(next); S.turn++; renderAll(); BGM.updateForState(Engine.state);
 }
 
 /* ---------- local DM with four-beat spine ---------- */
