@@ -180,7 +180,7 @@ input[type="number"]{accent-color:var(--gold)}
 #intro.intro{
   position: fixed; inset: 0; z-index: 9999;
   display: block; pointer-events: auto;
-  background: rgba(6,6,10,.82); /* subtle veil */
+  background: #0a0f14; /* subtle veil */
 }
 
 /* Each slide stacks its nav above any art */
@@ -212,7 +212,7 @@ input[type="number"]{accent-color:var(--gold)}
   display: block;   /* or: display:flex; or display:block; */
 }
 /* Edge-aware glossary tooltip */
-.gloss { position: relative; font-weight: 700; color: var(--gold); text-shadow: 0 0 8px rgba(213,168,74,.25); cursor: help; }
+.gloss { position: relative; font-weight: 800; color: var(--gold); text-shadow: 0 0 8px rgba(213,168,74,.3); cursor: help; }
 .gloss:hover { color: var(--bronze-300); }
 
 .gloss-tip {
@@ -245,3 +245,74 @@ input[type="number"]{accent-color:var(--gold)}
 /* Intro solid backgrounds for contrast */
 .intro .pane{ background:#0a0f14; }
 .intro .txt{ background:#0d1218; }
+
+/* Story brightness pulse */
+.glow-story{ color:var(--ink2); animation:storyGlow 5.5s ease-in-out 1; }
+@keyframes storyGlow{ 0%{ filter:brightness(1) } 50%{ filter:brightness(1.25) } 100%{ filter:brightness(1) } }
+
+/* Chevron glow */
+.frame::after{ filter: drop-shadow(0 0 6px rgba(213,168,74,.18)); }
+.frame:hover::after{ filter: drop-shadow(0 0 10px rgba(213,168,74,.38)); }
+
+/* Double-outline frame with reliable corners + chevrons */
+.frame{ position:relative; }
+.frame::before, .frame::after{ content:""; position:absolute; inset:0; pointer-events:none; }
+.frame::before{ border:2px solid var(--line); }
+.frame::after{ inset: -3px; border:2px solid var(--line2); }
+
+/* Chevron detailing at corners */
+.frame{ --chev: 14px; }
+.frame > .chev{ position:absolute; width:var(--chev); height:var(--chev); pointer-events:none; opacity:.9; }
+.frame > .chev.tl{ left:6px; top:6px; transform: rotate(45deg); }
+.frame > .chev.tr{ right:6px; top:6px; transform: rotate(135deg); }
+.frame > .chev.bl{ left:6px; bottom:6px; transform: rotate(-45deg); }
+.frame > .chev.br{ right:6px; bottom:6px; transform: rotate(-135deg); }
+.frame > .chev::before{ content:""; position:absolute; inset:0;
+  background: linear-gradient(90deg, var(--gold) 0 40%, transparent 40% 60%, var(--gold2) 60%);
+  box-shadow: 0 0 6px rgba(213,168,74,.35);
+  opacity:.85;
+}
+
+/* Crest watermark */
+.crest{ position:fixed; inset:0; pointer-events:none; opacity:.06;
+  background:
+    radial-gradient(1200px 800px at 20% 8%, #121921 0%, #0c0f12 55%),
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"> <g fill="none" stroke="#715322" stroke-width="8" opacity="0.8">  <circle cx="600" cy="580" r="320"/>  <path d="M280,580 L600,240 L920,580 L600,920 Z"/>  <path d="M430,580 L600,400 L770,580 L600,760 Z"/>  <path d="M600,260 L600,900"/>  <path d="M260,580 L940,580"/> </g></svg>') center/60vmin 60vmin no-repeat;
+  z-index:0;
+}
+
+/* Ambient motes */
+#motes{ position:fixed; inset:0; pointer-events:none; z-index:1; }
+.mote{ position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(213,168,74,.8);
+  animation: drift var(--dur, 18s) linear infinite; filter:blur(.2px); opacity:.35; }
+@keyframes drift{ from{ transform:translate3d(var(--x,0), 100vh, 0) } to{ transform:translate3d(calc(var(--x,0) + 12px), -8vh, 0) } }
+
+/* Cinematic letterbox */
+#letterbox{ position:fixed; inset:0; pointer-events:none; z-index:9990; }
+#letterbox .bar{ position:absolute; left:0; right:0; height:9vh; background:rgba(0,0,0,.5);
+  transform:translateY(0); transition: transform .35s ease; }
+#letterbox.hidden .bar{ transform: translateY(-100%); }
+#letterbox.hidden .bar.bottom{ transform: translateY(100%); }
+#letterbox .bar.top{ top:0 } #letterbox .bar.bottom{ bottom:0 }
+
+/* Pacing chips */
+.pacing{ display:flex; justify-content:center; gap:8px; margin-top:8px }
+.pacing .chip{ padding:4px 8px; border:1px solid var(--gold2); background:#0b1117; border-radius:999px; font-size:.9rem; opacity:.75 }
+.pacing .chip.on{ opacity:1; box-shadow:0 0 0 1px var(--gold) inset }
+
+/* Seals ring */
+#sealsRing{ width:72px; height:72px; display:inline-block; }
+#sealsRing circle.bg{ fill:none; stroke:#2b2212; stroke-width:6; }
+#sealsRing circle.arc{ fill:none; stroke:var(--gold); stroke-width:6; stroke-linecap:round; stroke-dasharray: 0 999; transition: stroke-dasharray .4s ease; filter: drop-shadow(0 0 6px rgba(213,168,74,.35)); }
+
+/* Focus outlines */
+:focus-visible{ outline:2px dashed var(--gold); outline-offset:3px; }
+
+/* High-contrast */
+body.hc{ --ink:#f8f1cf; --ink2:#fff7d9; --gold:#edc062; --gold2:#b07a2c; --crimson:#a23b3b; --bg:#070a0e; --bg2:#0e141b; }
+body.hc .frame::before{ border-color: #e7c57a; }
+body.hc .frame::after{ border-color: #6d5120; }
+
+/* Gloss highlight finder */
+body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: glossPulse 1.8s ease-in-out infinite; }
+@keyframes glossPulse{ 0%,100%{ text-underline-offset:2px } 50%{ text-underline-offset:6px } }
