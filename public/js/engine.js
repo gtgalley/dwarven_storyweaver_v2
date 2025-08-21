@@ -1,4 +1,10 @@
 // public/js/engine.js
+// v13c — intro right-pane + chevrons; animated motes; fixed Scroll modal; removed Highlight Terms;
+// edit modal blue+gold fields; now-playing fade; vignette fade; story box bottom line fixed;
+// glossary '?' suppressed; roll glyphs gold/crimson with hover bloom.
+// Built from your attached engine.js + prior merged foundation. Date: 2025-08-21
+
+// public/js/engine.js
 // v13b — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
 // Ledger panel (Inventory + revealed keys/rumors/gate/boss), 20 BPM ambience,
 // per-slide intro typewriter, success/fail/story SFX, silent continue, death modal,
@@ -95,7 +101,7 @@ const BGM = (function(){
   function attachWidget(){
     const mute=document.getElementById('npMute'); if(mute){ mute.onclick=()=>{ const v=bus?bus.gain.value:1; const nv=(v>0)?0:(Engine.state?.settings?.audio?.amb ?? .5); setBus(nv); mute.textContent = nv>0 ? 'Mute' : 'Unmute'; }; }
   }
-  function setNowPlaying(t){ const e=document.getElementById('npTitle'); if(e) e.textContent=t; }
+  function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
   return {crossTo, stop, updateForState, attachWidget};
 })();
 /* ---------- sound @ ~20 BPM base ---------- */
@@ -138,12 +144,18 @@ export function boot(){
   buildUI(); hydrate(); bind(); renderAll(); BGM.attachWidget();
   attachGlossTips(document.body);
   insertIntro(); // overlay every load
+  tuneIntroLayout();
   mountScrollFab();
   const seen = store.get('intro_seen', false);
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); }
   /* ambience removed */ BGM.updateForState(Engine.state);
   spawnMotes('motes', 24);
 }
+
+(function(){
+  const st=document.createElement('style'); st.id='runtime-patches'; st.textContent='\n/* runtime style patches */\n#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {\n  background:#0d141a !important; color:#D5A84A !important; border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);\n}\n#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }\n#nowplay{ position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; opacity: 0; transition: opacity .35s ease; pointer-events: none; }\n#nowplay.show{ opacity: 1; }\n#letterbox{ transition: opacity .45s ease; }\n#letterbox.hidden{ opacity: 0; }\n#story{ overflow-y:auto; overflow-x:hidden; position:relative; }\n.glow-success:hover, .glow-fail:hover { text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45); }\n.gloss::after { content: \'\' !important; } /* suppress ? icon */\n'; document.head.appendChild(st);
+})();
+
 
 // --- Glossary tooltips (debounced, fade-only; optional Alt to pin) ---
 function attachGlossTips(root){
@@ -183,7 +195,7 @@ function attachGlossTips(root){
     const term = ev.target.closest('.gloss'); if (!term) return;
     if (term === lastTerm && (Date.now() - lastHideAt) < REARM_DELAY) return;
     const tip = ensureTip(term);
-    tip.textContent = term.getAttribute('data-def') || term.dataset.def || tip.textContent || '';
+    tip.textContent = term.getAttribute('data-def') || term.dataset.def || '';
     clearTimeout(showTimer);
     showTimer = setTimeout(()=>{
       placeNear(term, tip);
@@ -221,6 +233,45 @@ function attachGlossTips(root){
 // ----------------------------------------------------------------
 
 // --- COMPLETE, DROP-IN INTRO ------------------------------------
+
+// Ensure intro copy sits on right half (left-justified), with chevron markers.
+function tuneIntroLayout(){
+  const intro = document.getElementById('intro'); if(!intro) return;
+  intro.classList.add('two-pane');
+  intro.querySelectorAll('.slide .copy').forEach(copy=>{
+    Object.assign(copy.style, {
+      position:'relative',
+      display:'flex',
+      alignItems:'flex-start',
+      justifyContent:'flex-end',
+      padding:'10vh 6vw 4vh 4vw'
+    });
+  });
+  intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
+    Object.assign(sc.style, {
+      width:'46vw',
+      maxWidth:'46vw',
+      textAlign:'left',
+      lineHeight:'1.65',
+      marginTop:'1.5vh'
+    });
+    sc.querySelectorAll('p').forEach(p=>{
+      p.style.position='relative';
+      if(!p.querySelector('.para-chevron')){
+        const mark=document.createElement('span');
+        mark.className='para-chevron';
+        Object.assign(mark.style, {
+          position:'absolute', left:'18px', top:'0.2em', width:'10px', height:'10px',
+          borderLeft:'2px solid rgba(213,168,74,0.9)',
+          borderBottom:'2px solid rgba(213,168,74,0.9)',
+          transform:'skew(-8deg) rotate(-45deg)',
+          filter:'drop-shadow(0 0 4px rgba(213,168,74,.45))'
+        });
+        p.prepend(mark);
+      }
+    });
+  });
+}
 function insertIntro(){
   // DOM-aware guard so we never stack duplicate intros
   const existing = document.getElementById('intro');
@@ -306,6 +357,7 @@ if (!Engine.el.intro.querySelector('.intro-title')){
 
   // Start at the first slide
   show(0);
+  tuneIntroLayout();
 }
 
 /* ---------- DOM ---------- */
@@ -472,6 +524,7 @@ function buildUI(){
   // cache
   document.querySelectorAll('.frame').forEach(el=>{['tl','tr','bl','br'].forEach(pos=>{const s=document.createElement('span'); s.className='chev '+pos; el.appendChild(s);});});
   Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
+  if(!document.getElementById('storyBottomLine')){ const line=document.createElement('div'); line.id='storyBottomLine'; Object.assign(line.style,{position:'absolute',left:'0',right:'0',bottom:'0',height:'2px',boxShadow:'inset 0 -2px 0 0 rgba(213,168,74,.75)'}); Engine.el.story.appendChild(line);}
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
   Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.btnGloss=$('#btnGloss'); Engine.el.btnSnap=$('#btnSnap'); Engine.el.sealsArc=$('#sealsArc'); Engine.el.pacing=$('#pacing');
@@ -520,6 +573,9 @@ Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   // epilogue modal
   Engine.el.modalEpi=$('#modalEpi'); Engine.el.xEpi=$('#xEpi'); Engine.el.epiTitle=$('#epiTitle'); Engine.el.epiContent=$('#epiContent'); Engine.el.btnEpiRestart=$('#btnEpiRestart');
 }
+// runtime cleanup: remove deprecated Highlight Terms button
+try{ const g=document.getElementById('btnGloss'); if(g) g.remove(); }catch{};
+
 
 /* ---------- floating Scroll button (SVG) ---------- */
 function mountScrollFab(){
@@ -670,8 +726,8 @@ function renderAll(){
     p.classList.add('beat');
     p.innerHTML=beat.html?beat.html:esc(beat.text);
     if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
-    if(beat.kind==='success') p.classList.add('glow-success');
-    if(beat.kind==='fail') p.classList.add('glow-fail');
+    if(beat.kind==='success'){ p.classList.add('glow-success'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#D5A84A'; }
+    if(beat.kind==='fail'){ p.classList.add('glow-fail'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#A12525'; }
     if(beat.kind==='story') p.classList.add('glow-story');
     Engine.el.story.appendChild(p);
   }
@@ -973,9 +1029,9 @@ function getIntroSlidesHTML(){
     </section>
   </div>`;
 }
-function getIntroScrollHTML(){
+
 function getQuickTablesHTML(){
-  return `
+  return ``
     <hr class="sep"/>
     <div class="quick-tables">
       <h4>Codex: Keys & Measures</h4>
@@ -1004,13 +1060,36 @@ function getQuickTablesHTML(){
     </div>`;
 }
 
-  return `
-    <div class="scroll">
-      ${$('#intro .s1 .scroll')?.innerHTML||''}
-      ${$('#intro .s2 .scroll')?.innerHTML||''}
-      ${$('#intro .s3 .scroll')?.innerHTML||''}
+function getIntroScrollHTML(){
+  return ``
+    <hr class="sep"/>
+    <div class="quick-tables">
+      <h4>Codex: Keys & Measures</h4>
+      <div class="grid2">
+        <div>
+          <h5>Three Seals (Keys)</h5>
+          <ul>
+            <li><b>Stone</b> — Authority of the makers.</li>
+            <li><b>Brass</b> — Trade, craft, and oaths.</li>
+            <li><b>Echo</b> — Memory of the waters.</li>
+          </ul>
+          <p><em>Two</em> Seals wake the Gate; <em>all three</em> open the richest endings.</p>
+        </div>
+        <div>
+          <h5>Four Measures</h5>
+          <ul>
+            <li><b>Tune</b> — Align yourself to a rhythm; listen and adapt.</li>
+            <li><b>Name</b> — Call a thing truly; identify patterns and forces.</li>
+            <li><b>Measure</b> — Quantify and map; compare, test, and verify.</li>
+            <li><b>Decide</b> — Commit and act; accept consequences with resolve.</li>
+          </ul>
+        </div>
+      </div>
+      <h5>Complications (Examples)</h5>
+      <ul><li>Flood pulse forces a detour</li><li>Warden patrol crosses your path</li><li>Old mechanism shifts the floor plates</li></ul>
     </div>`;
 }
+
 
 /* ---------- modal helpers ---------- */
 function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); }
@@ -1021,8 +1100,8 @@ function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shad
 /* ---------- cinematic focus (letterbox) ---------- */
 function cinematicFocus(){
   const lb = document.getElementById('letterbox'); if(!lb) return;
-  lb.classList.remove('hidden');
-  setTimeout(()=> lb.classList.add('hidden'), 1800);
+  lb.classList.remove('hidden'); lb.style.opacity='1';
+  setTimeout(()=>{ lb.style.opacity='0'; setTimeout(()=> lb.classList.add('hidden'), 480); }, 1220);
 }
 /* ---------- snapshot export ---------- */
 function exportSnapshot(){
@@ -1060,3 +1139,38 @@ function spawnMotes(where='motes', n=20){
     root.appendChild(s);
   }
 }
+
+
+/* ----- override: JS-animated motes (non-linear rise, fade out) ----- */
+function spawnMotes(where='motes', count=24){
+  const host = document.getElementById(where);
+  if(!host) return;
+  host.style.pointerEvents='none';
+  function addOne(){
+    const m = document.createElement('span');
+    m.className='mote';
+    const vx = Math.random()*window.innerWidth;
+    const startY = window.innerHeight*0.92 + Math.random()*40;
+    const dur = 14000 + Math.random()*11000; // 14–25s
+    const size = 3 + Math.random()*4;
+    const amp = 16 + Math.random()*18;
+    const born = performance.now();
+    m.style.position='fixed'; m.style.left='0'; m.style.top='0'; m.style.width=size+'px'; m.style.height=size+'px'; m.style.borderRadius='50%';
+    m.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,.95), rgba(255,200,140,0) 68%)';
+    m.style.filter='brightness(1.2)';
+    host.appendChild(m);
+    function tick(t){
+      const s = Math.min(1, (t-born)/dur);
+      const ease = s<.18 ? (s/0.18)**1.4 : s; // quicker lift, then steady
+      const y = startY - ease*(window.innerHeight*0.55);
+      const x = vx + Math.sin((t-born)/1300)*amp;
+      m.style.transform = `translate(${x}px, ${y}px)`;
+      m.style.opacity = (s<.08? s*12 : 1 - (s-0.08)/0.92);
+      if(s < 1) requestAnimationFrame(tick); else m.remove();
+    }
+    requestAnimationFrame(tick);
+  }
+  for(let i=0;i<count;i++) setTimeout(addOne, i*220);
+  setInterval(addOne, 700);
+}
+
