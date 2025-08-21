@@ -100,110 +100,32 @@ const BGM = (function(){
   return {crossTo, stop, updateForState, attachWidget};
 })();
 /* ---------- sound @ ~20 BPM base ---------- */
-const Sound=(()=>{
-  const AMBIENCE_ENABLED = false;
-  const AMBIENCE_ENABLED = false;
-  let ctx, master, ui, amb, drums;
-  const ensure=()=>{ if(ctx) return;
-    ctx=new (window.AudioContext||window.webkitAudioContext)();
-    master=ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
-    const _targetMaster=Engine.state.settings.audio.master;
-    master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(_targetMaster, ctx.currentTime + 0.25);
-    ui=ctx.createGain(); ui.gain.value=Engine.state.settings.audio.ui; ui.connect(master);
-    amb=ctx.createGain(); amb.gain.value=0;  amb.connect(master);
-    drums=ctx.createGain(); drums.gain.value=0; drums.connect(master);
 
-    // Harmonic motion: longer ostinato w/ implied chords + contrary motion
-  if (AMBIENCE_ENABLED) {
-    const beat = 3000; // ≈20 BPM
-    const notesA = [55, 73.42, 61.74, 82.41, 65.41, 55, 92.5, 61.74];   // A/D/B/E/F/A/Bb/B
-    const notesB = [49, 65.41, 58.27, 77.78, 61.74, 49, 87.31, 58.27];  // counter line
-    const bass = ctx.createOscillator(); bass.type='sawtooth';
-    const pad  = ctx.createOscillator(); pad.type='triangle';
-    const g1=ctx.createGain(), g2=ctx.createGain(); g1.gain.value=.020; g2.gain.value=.012;
-    bass.connect(g1).connect(amb); pad.connect(g2).connect(amb);
-    let i=0; bass.start(); pad.start();
-    // Melody — slow modal line
-    const mel = ctx.createOscillator(); mel.type='sine';
-    const gmel=ctx.createGain(); gmel.gain.value=.028; mel.connect(gmel).connect(amb);
-    const melody=[146.83,164.81,174.61,196.00,174.61,164.81,146.83,130.81]; // D Dorian-ish
-    mel.start(); let mi=0; setInterval(()=>{ if(!ctx) return; const t=ctx.currentTime; const n=melody[mi%melody.length]; mi++; mel.frequency.linearRampToValueAtTime(n, t+.5); }, beat*2);
-
-    setInterval(()=>{ if(!ctx) return;
-      const a = notesA[i%notesA.length], b = notesB[i%notesB.length], fifth = a*1.5;
-      const t=ctx.currentTime;
-      bass.frequency.linearRampToValueAtTime(a, t+.6);
-      pad.frequency.linearRampToValueAtTime((i%3===0? fifth : b), t+.7);
-      i++;
-    }, beat);
-  }
-    // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
-if (AMBIENCE_ENABLED) {
-    const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
-    setInterval(()=>{
-      if(!ctx) return; const t=ctx.currentTime;
-
-      hit(t, 72, 34, .24, .24);                        // beat 1
-      ghost(t + (sixteenth/1000)*3, 700,.05);          // 16th pickup
-      ghost(t + (thirty/1000)*7,   820,.04);           // 32nd pickup
-
-      hit(t+2*beat/1000, 68, 32, .22, .22);            // beat 3
-      ghost(t + 2*beat/1000 - sixteenth/1000*1, 620,.05);
-      ghost(t + 4*beat/1000 - thirty/1000*1,   760,.04);
-
-      function hit(at,f1,f2,dur,amp){
-        const o=ctx.createOscillator(); o.type='sine';
-        const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(amp, at+.02);
-        g.gain.exponentialRampToValueAtTime(.0001, at+dur);
-        o.frequency.setValueAtTime(f1,at);
-        o.frequency.exponentialRampToValueAtTime(f2,at+dur*.85);
-        o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
-      }
-      function ghost(at,f,dur){
-        const o=ctx.createOscillator(); o.type='triangle';
-        const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(.06, at+.01);
-        g.gain.exponentialRampToValueAtTime(.0001, at+dur);
-        o.frequency.setValueAtTime(f,at);
-        o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
-      }
-    }, bar);
-}
+const Sound = (()=>{
+  let ctx, master, ui;
+  const ensure = ()=>{
+    if (ctx) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = Engine.state.settings.audio.master; master.connect(ctx.destination);
+    ui = ctx.createGain(); ui.gain.value = Engine.state.settings.audio.ui; ui.connect(master);
   };
-  const setLevels=()=>{ if(!ctx) return;
-    master.gain.value=Engine.state.settings.audio.master;
-    ui.gain.value=Engine.state.settings.audio.ui;
-    amb.gain.value=Engine.state.settings.audio.amb;
-    drums.gain.value=Engine.state.settings.audio.drums;
-  };
-  const click=()=>{ ensure(); const t=ctx.currentTime;
-    const o=ctx.createOscillator(); o.type='square';
-    o.frequency.setValueAtTime(jitter(300),t);
-    o.frequency.exponentialRampToValueAtTime(jitter(120),t+.09);
-    const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(.28, t+.01);
-    g.gain.exponentialRampToValueAtTime(.0001, t+.16);
+  const setLevels = ()=>{ if(!ctx) return; master.gain.value = Engine.state.settings.audio.master; ui.gain.value = Engine.state.settings.audio.ui; };
+  const click = ()=>{ ensure(); const t=ctx.currentTime; const o=ctx.createOscillator(); o.type='square';
+    o.frequency.setValueAtTime(300,t); o.frequency.exponentialRampToValueAtTime(120,t+.09);
+    const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.28,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+.16);
     o.connect(g).connect(ui); o.start(t); o.stop(t+.18);
   };
-  const sfx=(kind)=>{ // success / fail / story
+  const sfx=(kind)=>{
     const sa=Engine.state.settings.audio||{};
     if((kind==='success' && sa.sfx_success===false) || (kind==='fail' && sa.sfx_fail===false) || (kind==='story' && sa.sfx_story===false)) return;
-    ensure(); const t=ctx.currentTime;
-    const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine';
-    const a = kind==='success' ? [jitter(520,0.06), jitter(880,0.06), .18, .24]
-              : kind==='fail' ? [jitter(180,0.06), jitter(90,0.06), .28, .26]
-              : [jitter(320,0.06), jitter(440,0.06), .22, .20];
-    o.frequency.setValueAtTime(a[0],t);
-    o.frequency.exponentialRampToValueAtTime(a[1],t+a[2]*.9);
-    g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(a[3],t+.015);
-    g.gain.exponentialRampToValueAtTime(.0001,t+a[2]);
+    ensure(); const t=ctx.currentTime; const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine';
+    const a = kind==='success' ? [520, 880, .18, .24] : kind==='fail' ? [180,  90, .28, .26] : [320, 440, .22, .20];
+    o.frequency.setValueAtTime(a[0],t); o.frequency.exponentialRampToValueAtTime(a[1],t+a[2]*.9);
+    g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(a[3],t+.015); g.gain.exponentialRampToValueAtTime(.0001,t+a[2]);
     o.connect(g).connect(ui); o.start(t); o.stop(t+a[2]+.05);
   };
-  const ambOn=()=>ensure();
-  return {click, sfx, ambOn, setLevels, ensure, getCtx:()=>{ensure(); return ctx;}, getMaster:()=>master};
+  const ambOn = ()=>ensure(); // for legacy calls
+  return {click, sfx, ambOn, setLevels, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
@@ -313,6 +235,7 @@ function insertIntro(){
 
   // Cache refs
   Engine.el.intro    = document.getElementById('intro');
+  if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
   if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
   Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
