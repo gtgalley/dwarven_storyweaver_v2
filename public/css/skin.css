@@ -8,20 +8,20 @@
 /* === Global cursor: spearhead === */
 /* Applies everywhere, including the intro overlay */
 html, body, .app, #intro {
-  cursor: url("./public/img/cursor-spear.png") 3 2, auto;
+  cursor: url("../img/cursor-spear.png") 3 2, auto;
 }
 
 /* Keep the “clickable” semantics for interactive elements.
    If the custom image can't load, fallback shows the pointer hand. */
 a, button, .btn, [role="button"], [onclick] {
-  cursor: url("./public/img/cursor-spear.png") 3 2, pointer;
+  cursor: url("../img/cursor-spear.png") 3 2, pointer;
 }
 
 /* Preserve the I-beam where text editing is expected */
 input[type="text"], input[type="search"], input[type="email"],
 input[type="password"], textarea, [contenteditable="true"] {
   cursor: text; /* system I-beam */
-}  
+  
   /* === Hover shimmer for interactive elements === */
 /* NOTE: provide a glow version of your cursor at:
    public/img/cursor-spear-glow.png  (24–32px, same hotspot ~ 3 2)
@@ -39,7 +39,7 @@ button:hover,
 [role="button"]:hover,
 [onclick]:hover {
   /* swap to glowing cursor art on hover; falls back to pointer if the asset is missing */
-  cursor: url("./public/img/cursor-spear-glow.png") 3 2, pointer;
+  cursor: url("../img/cursor-spear-glow.png") 3 2, pointer;
 
   /* bright, brazen shimmer on the element itself */
   animation: spearShimmer .9s ease-in-out infinite;
@@ -481,3 +481,35 @@ body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: 
 .nowplay .np-label{ color: var(--muted); font-weight:600; letter-spacing:.3px }
 .nowplay #npTitle{ color: var(--ink2); font-weight:700 }
 .nowplay .btn.mini{ padding:6px 10px; font-size:.9rem }
+
+
+/* --- Intro two-pane layout & molten seam --- */
+.intro { position: fixed; inset: 0; z-index: 9995; }
+.intro .slide { position: relative; height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
+.intro.two-pane .slide .img { grid-column: 1; }
+.intro.two-pane .slide .copy{ grid-column: 2; display:flex; align-items:center; }
+.intro.two-pane .slide .copy .scroll{ margin:0 auto; max-width:min(46ch, 44vw); text-align:center; }
+.intro .slide .nav { position: absolute; right: 24px; bottom: 22px; z-index: 5; }
+
+/* molten divider, fades near the top 20% to leave room for the logo */
+.intro.two-pane .slide::before{
+  content:""; position:absolute; top:0; bottom:0; left:50%; width:2px; transform:translateX(-50%); pointer-events:none;
+  background: linear-gradient(to bottom,
+    rgba(213,168,74,0) 0%,
+    rgba(213,168,74,.75) 20%,
+    rgba(213,168,74,.45) 60%,
+    rgba(213,168,74,0) 100%);
+  filter: drop-shadow(0 0 8px rgba(213,168,74,.45));
+  animation: seamPulse 4.5s ease-in-out infinite;
+}
+@keyframes seamPulse{ 50%{ filter: drop-shadow(0 0 14px rgba(213,168,74,.62)); } }
+
+/* overlay title at top center with underline (JS injects .intro-title) */
+.intro-title{
+  position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:7;
+  font-family:"Cinzel",serif; font-weight:700; letter-spacing:1.2px;
+  font-size:clamp(1.8rem,3.2vw,2.3rem); color:var(--ink2); text-transform:uppercase;
+  text-shadow:0 0 22px rgba(213,168,74,.35),0 0 6px rgba(213,168,74,.55),0 0 1px rgba(255,200,120,.9);
+  filter: drop-shadow(0 0 24px rgba(255,140,40,.25));
+}
+
