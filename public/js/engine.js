@@ -283,22 +283,26 @@ function tuneIntroLayout(){
   });
   intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
     Object.assign(sc.style, {
-      width:'46vw',
-      maxWidth:'46vw',
+      width:'42vw',
+      maxWidth:'42vw',
       textAlign:'left',
       lineHeight:'1.65',
-      marginTop:'1.5vh'
+      marginTop:'1.5vh',
+      marginLeft:'auto',
+      marginRight:'6vw'
     });
     sc.querySelectorAll('p').forEach(p=>{
       p.style.position='relative';
+      p.style.paddingLeft = '22px';
       if(!p.querySelector('.para-chevron')){
         const mark=document.createElement('span');
         mark.className='para-chevron';
         Object.assign(mark.style, {
-          position:'absolute', left:'18px', top:'0.2em', width:'10px', height:'10px',
-          borderLeft:'2px solid rgba(213,168,74,0.9)',
-          borderBottom:'2px solid rgba(213,168,74,0.9)',
-          transform:'skew(-8deg) rotate(-45deg)',
+          position:'absolute', left:'4px', top:'0.35em', width:'10px', height:'10px',
+          borderTop: '2px solid rbga(213,168,74,0.9)',
+          borderRight:'2px solid rgba(213,168,74,0.9)',
+          borderLeft:'0', borderBottom:'0',
+          transform:'skew(-8deg) rotate(-45deg)', // faces → now
           filter:'drop-shadow(0 0 4px rgba(213,168,74,.45))'
         });
         p.prepend(mark);
@@ -413,7 +417,6 @@ function buildUI(){
           </svg>
           <button id="btnEnd" class="btn">End the Story</button>
           <button id="btnSettings" class="btn">Settings</button>
-          <button id="btnGloss" class="btn">Highlight Terms</button>
           <button id="btnSnap" class="btn">Snapshot</button>
           <span class="tag">Engine: <b id="engineTag">Local</b></span>
         </div>
@@ -1202,7 +1205,8 @@ function spawnMotesCSS(where='motes', n=20){
       m.style.height=size+'px';
       m.style.borderRadius='50%';
       m.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,0.95), rgba(255,200,140,0) 68%)';
-      m.style.filter='brightness(1.2)';
+      m.style.filter='brightness(1.4)';
+      m.style.transition='opacity .28s ease-out';
       host.appendChild(m);
 
       function tick(t){
@@ -1212,7 +1216,12 @@ function spawnMotesCSS(where='motes', n=20){
         const x = vx + Math.sin((t-born)/1300)*amp;
         m.style.transform = `translate(${x}px, ${y}px)`;
         m.style.opacity = (s<.08 ? s*12 : 1 - (s-0.08)/0.92);
-        if(s < 1) requestAnimationFrame(tick); else m.remove();
+        if(s < 1){
+          requestAnimationFrame(tick);
+        } else {
+          m.style.opacity = '0';
+          setTimeout(()=> m.remove(), 240);
+        }
       }
       requestAnimationFrame(tick);
     }
