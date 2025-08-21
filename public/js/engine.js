@@ -129,8 +129,22 @@ const Sound = (()=>{
     g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(a[3],t+.015); g.gain.exponentialRampToValueAtTime(.0001,t+a[2]);
     o.connect(g).connect(ui); o.start(t); o.stop(t+a[2]+.05);
   };
+  const gong = ()=>{
+  ensure(); const t=ctx.currentTime;
+  // detuned oscillators + long decay for a gong-ish swell
+  const o1=ctx.createOscillator(), o2=ctx.createOscillator(), g=ctx.createGain();
+  o1.type='sine'; o2.type='sine';
+  o1.frequency.setValueAtTime(196, t);     // ~G3
+  o2.frequency.setValueAtTime(147, t);     // ~D3 (a fifth below)
+  o2.detune.setValueAtTime(-8, t);         // slight beating
+  g.gain.setValueAtTime(.0001, t);
+  g.gain.exponentialRampToValueAtTime(.7, t+.05);
+  g.gain.exponentialRampToValueAtTime(.0001, t+3.2); // long tail
+  o1.connect(g); o2.connect(g); g.connect(ui);
+  o1.start(t); o2.start(t); o1.stop(t+3.3); o2.stop(t+3.3);
+};
   const ambOn = ()=>ensure(); // for legacy calls
-  return {click, sfx, ambOn, setLevels, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
+  return {click, sfx, gong, ambOn, setLevels, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
@@ -190,7 +204,25 @@ function attachGlossTips(root){
     tip.style.transform = `translate(${nx}px, ${ny}px)`;
     tip.classList.add('on'); // CSS handles fade only
   }
+  function trackCursor(term, tip){
+    const MARGIN = 12;
+    function onMove(e){
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, e.clientX + 16));
+      let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, e.clientY + 20));
+      tip.style.transform = `translate(${nx}px, ${ny}px)`;
+    }
+    term.__glossMove = onMove;
+    term.addEventListener('mousemove', onMove);
+  }
 
+  function untrackCursor(term){
+    if(term && term.__glossMove){
+      term.removeEventListener('mousemove', term.__glossMove);
+      term.__glossMove = null;
+    }
+  }
   root.addEventListener('mouseenter', (ev)=>{
     const term = ev.target.closest('.gloss'); if (!term) return;
     if (term === lastTerm && (Date.now() - lastHideAt) < REARM_DELAY) return;
@@ -200,6 +232,7 @@ function attachGlossTips(root){
     showTimer = setTimeout(()=>{
       placeNear(term, tip);
       lastTerm = term;
+      trackCursor(term, tip);
     }, SHOW_DELAY);
   }, true);
 
@@ -211,6 +244,7 @@ function attachGlossTips(root){
       tip.classList.remove('on');
       tip.style.visibility = 'hidden';
       lastHideAt = Date.now();
+    untrackCursor(term);
     }
   }, true);
 
@@ -304,7 +338,7 @@ if (!document.getElementById('motesIntro')){
 if (!Engine.el.intro.querySelector('.intro-title')){
   const t = document.createElement('div');
   t.className = 'intro-title u-double-underline';
-  t.textContent = 'Brassreach';
+  t.innerHTML = '<span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>';
   Engine.el.intro.appendChild(t);
 }
   // Glossary tooltips (edge-aware)
@@ -346,7 +380,7 @@ if (!Engine.el.intro.querySelector('.intro-title')){
 
   if (Engine.el.beginBtn){
     Engine.el.beginBtn.onclick=()=>{ BGM.crossTo('prelude');
-      Sound.click();
+      Sound.gong();
       Engine.el.intro.classList.add('hidden');
       store.set('intro_seen', true);
       if (!Engine.state.storyBeats.length) beginTale();
@@ -368,7 +402,9 @@ function buildUI(){
     <div id="motes" aria-hidden="true"></div>
     <div id="letterbox" class="letterbox hidden"><div class="bar top"></div><div class="bar bottom"></div></div>
     <div class="masthead">
-      <div class="brand-title u-double-underline">Brassreach</div>
+      <div class="brand-title u-double-underline">
+        <span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>
+      </div>
       <div class="toolbar cardish frame">
         <div class="controls">
           <svg id="sealsRing" viewBox="0 0 100 100" aria-label="Seals">
@@ -591,7 +627,7 @@ function mountScrollFab(){
     </svg>`;
   document.body.appendChild(btn);
   btn.addEventListener('click', ()=>{
-    Engine.el.scrollContent.innerHTML=getIntroScrollHTML()+getQuickTablesHTML();
+    Engine.el.scrollContent.innerHTML = getIntroScrollHTML();
     attachGlossTips(Engine.el.modalScroll);
     openModal(Engine.el.modalScroll);
   });
@@ -1123,7 +1159,7 @@ function exportSnapshot(){
 }
 
 /* ---------- motes ---------- */
-function spawnMotes(where='motes', n=20){
+function spawnMotesCSS(where='motes', n=20){
   const root=document.getElementById(where); if(!root) return;
   for(let i=0;i<n;i++){
     const s=document.createElement('span'); s.className='mote';
@@ -1151,7 +1187,7 @@ function spawnMotes(where='motes', n=20){
     function addOne(){
       const m = document.createElement('span');
       m.className='mote';
-
+      m.style.animation = 'none';   // prevent CSS keyframes from overriding JS transform
       const vx = Math.random()*window.innerWidth;
       const startY = window.innerHeight*0.92 + Math.random()*40;
       const dur = 14000 + Math.random()*11000; // 14–25s
@@ -1187,5 +1223,7 @@ function spawnMotes(where='motes', n=20){
 
   // Promote override without redeclaring the top-level name:
   window.spawnMotes = jsAnimatedSpawnMotes;
+  // module-scope alias so boot() can call spawnMotes(...)
+  const spawnMotes = window.spawnMotes;
 })();
 
