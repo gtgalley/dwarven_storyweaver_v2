@@ -286,13 +286,14 @@ function tuneIntroLayout(){
   });
   intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
     Object.assign(sc.style, {
-      width: '38vw',
-      maxWidth: '38vw',
+      width: '36vw',
+      maxWidth: '36vw',
       textAlign: 'left',
-      lineHeight: '1.68',
+      fontSize: '1.2em',
+      lineHeight: '1.85',
       marginTop: '1.5vh',
       marginLeft: 'auto',
-      marginRight: '8vw'
+      marginRight: '9vw'
     });
     sc.querySelectorAll('p').forEach(p=>{
       p.style.position='relative';
@@ -300,16 +301,14 @@ function tuneIntroLayout(){
       if(!p.querySelector('.para-chevron')){
         const mark=document.createElement('span');
         mark.className='para-chevron';
+        mark.textContent = '❯';
         Object.assign(mark.style, {
           position: 'absolute',
-          left: '12px',
-          top: '0.25em',
-          width: '10px',
-          height: '10px',
-          borderLeft: '2px solid rgba(213,168,74,0.9)',
-          borderBottom: '2px solid rgba(213,168,74,0.9)',
-          transform: 'skew(-8deg) rotate(-45deg)', // faces →
-          filter: 'drop-shadow(0 0 4px rgba(213,168,74,0.45))'
+          left: '8px',
+          top: '0.15em',
+          fontSize: '1.15em',
+          color: 'var(--gold)',
+          textShadow: '0 0 6px rgba(213,168,74,.35)'
         });
         p.style.paddingLeft = '28px';
         p.prepend(mark);
