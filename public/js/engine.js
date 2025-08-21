@@ -112,7 +112,7 @@ const Sound=(()=>{
     ui=ctx.createGain(); ui.gain.value=Engine.state.settings.audio.ui; ui.connect(master);
     amb=ctx.createGain(); amb.gain.value=0;  amb.connect(master);
     drums=ctx.createGain(); drums.gain.value=0; drums.connect(master);
-const beat = 3000; // ≈ 20 BPM
+
     // Harmonic motion: longer ostinato w/ implied chords + contrary motion
   if (AMBIENCE_ENABLED) {
     const beat = 3000; // ≈20 BPM
@@ -138,7 +138,6 @@ const beat = 3000; // ≈ 20 BPM
     }, beat);
   }
     // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
-  if (AMBIENCE_ENABLED) {
     const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
     setInterval(()=>{
       if(!ctx) return; const t=ctx.currentTime;
@@ -169,7 +168,6 @@ const beat = 3000; // ≈ 20 BPM
         o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
       }
     }, bar);
-  }
   };
   const setLevels=()=>{ if(!ctx) return;
     master.gain.value=Engine.state.settings.audio.master;
@@ -234,7 +232,7 @@ function attachGlossTips(root){
     if (!tip){
       tip = document.createElement('span');
       tip.className = 'gloss-tip';
-      tip.textContent = term.dataset.def || '';
+      tip.textContent = term.getAttribute('data-def') || term.dataset.def || '';
       term.appendChild(tip);
     }
     return tip;
@@ -312,6 +310,7 @@ function insertIntro(){
 
   // Cache refs
   Engine.el.intro    = document.getElementById('intro');
+  Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
@@ -1027,7 +1026,7 @@ function getIntroSlidesHTML(){
       <div class="mist" aria-hidden="true"></div>
     </section>
 
-    <section class="slide s2" data-side="img-right" aria-label="Slide 2">
+    <section class="slide s2" data-side="img-left" aria-label="Slide 2">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
         <p>Deep below gathers the <span class="gloss" data-def="A slow, deliberate tide that learns rhythm and pushes where the city is out of tune.">Unfathomer</span>, a standing <span class="gloss" data-def="Many tones sounding as one; where channels agree it stands firm, where they argue it reaches through.">chorus</span> taught by centuries of bells. Once, the <span class="gloss" data-def="The old rule that kept channels, bells, and gates in tune so the chorus rested.">Cadence Law</span> held it calm. Now cheap metal and careless renovations have pulled the city off pitch. Brassreach answers with the <span class="gloss" data-def="Ancient instruments of authority that bind by place, right, and pattern.">Three Seals</span>—<span class="gloss" data-def="Binds by weight and place; makes passages remember resistance.">Stone</span>, <span class="gloss" data-def="Binds by right; enforces oaths on gates and devices.">Brass</span>, and <span class="gloss" data-def="Binds by pattern; holds a spoken cadence after the voice is gone.">Echo</span>. In the stacks, <span class="gloss" data-def="Archivist of the Lower Stacks; believes the chorus can be bargained with using true measures.">Lithen the Wise</span> argues for treaty. In the foundries, <span class="gloss" data-def="Warden of the Brassworks; would retune the city by force and throttle the culverts.">Mullinen the Stout</span> argues for clamps and spikes. Between them stands your line in the dark.</p>
