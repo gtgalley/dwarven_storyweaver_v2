@@ -371,7 +371,7 @@ input[type="number"]{accent-color:var(--gold)}
   filter: drop-shadow(0 0 4px rgba(255,184,84,.25));
   opacity: 0;
   visibility: hidden;
-  transform: none !important;
+  transform: none;
   transition: opacity .15s ease, visibility .15s ease;
 }
 .gloss-tip.on {
@@ -389,6 +389,7 @@ input[type="number"]{accent-color:var(--gold)}
 /* Intro solid backgrounds for contrast */
 .intro .pane{ background:#0a0f14; }
 .intro .txt{ background:#0d1218; }
+#intro .gloss::after { content: '' !important; }
 
 /* Story brightness pulse */
 .glow-story{ color:var(--ink2); animation:storyGlow 5.5s ease-in-out 1; }
