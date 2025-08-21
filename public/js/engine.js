@@ -101,6 +101,7 @@ const BGM = (function(){
 })();
 /* ---------- sound @ ~20 BPM base ---------- */
 const Sound=(()=>{
+  const AMBIENCE_ENABLED = false;
   let ctx, master, ui, amb, drums;
   const ensure=()=>{ if(ctx) return;
     ctx=new (window.AudioContext||window.webkitAudioContext)();
@@ -109,10 +110,11 @@ const Sound=(()=>{
     master.gain.setValueAtTime(0, ctx.currentTime);
     master.gain.linearRampToValueAtTime(_targetMaster, ctx.currentTime + 0.25);
     ui=ctx.createGain(); ui.gain.value=Engine.state.settings.audio.ui; ui.connect(master);
-    amb=ctx.createGain(); amb.gain.value=Engine.state.settings.audio.amb; amb.connect(master);
-    drums=ctx.createGain(); drums.gain.value=Engine.state.settings.audio.drums; drums.connect(master);
+    amb=ctx.createGain(); amb.gain.value=0;  amb.connect(master);
+    drums=ctx.createGain(); drums.gain.value=0; drums.connect(master);
 
     // Harmonic motion: longer ostinato w/ implied chords + contrary motion
+  if (AMBIENCE_ENABLED) {
     const beat = 3000; // ≈20 BPM
     const notesA = [55, 73.42, 61.74, 82.41, 65.41, 55, 92.5, 61.74];   // A/D/B/E/F/A/Bb/B
     const notesB = [49, 65.41, 58.27, 77.78, 61.74, 49, 87.31, 58.27];  // counter line
@@ -134,7 +136,7 @@ const Sound=(()=>{
       pad.frequency.linearRampToValueAtTime((i%3===0? fifth : b), t+.7);
       i++;
     }, beat);
-
+  }
     // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
     const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
     setInterval(()=>{
@@ -215,89 +217,82 @@ export function boot(){
   const seen = store.get('intro_seen', false);
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); mountScrollFab(); }
   Sound.ambOn(); BGM.updateForState(Engine.state);
-  spawnMotes(24);
+  spawnMotes('motes', 24);
 }
 
-// --- Edge-aware glossary tooltips -------------------------------
+// --- Glossary tooltips (debounced, fade-only; optional Alt to pin) ---
 function attachGlossTips(root){
-  // Works with: <span class="gloss" data-def="Meaning...">Key term</span>
-  const MARGIN = 12;                // keep tips off the edges
-  const SHOW_DELAY = 100;           // ms
-  let showTimer = null;
+  const MARGIN = 12;
+  const SHOW_DELAY = 100;
+  const REARM_DELAY = 500; // prevent rapid re-triggers on the same term
+  let showTimer = null, lastTerm = null, lastHideAt = 0, pinned = null;
 
-  // Create or reuse a tip element on a term
   function ensureTip(term){
     let tip = term.querySelector('.gloss-tip');
     if (!tip){
       tip = document.createElement('span');
       tip.className = 'gloss-tip';
       tip.textContent = term.dataset.def || '';
-      tip.style.position = 'fixed';
-      tip.style.left = '0';
-      tip.style.top = '0';
-      tip.style.maxWidth = 'min(28rem, calc(100vw - 32px))';
-      tip.style.pointerEvents = 'none';
-      tip.style.opacity = '0';
-      tip.style.transform = 'translate3d(0,0,0)';
       term.appendChild(tip);
     }
     return tip;
   }
-  function placeTip(tip, x, y){
+  function placeNear(term, tip){
+    // place once near the term; do not track cursor to avoid "swoop"
+    const r = term.getBoundingClientRect();
     const vw = window.innerWidth, vh = window.innerHeight;
-    // pre-measure so we can nudge
-    tip.style.opacity = '0';
-    tip.style.visibility = 'hidden';
-    tip.style.transform = 'translate3d(-9999px,-9999px,0)';
-    // force layout
+    tip.style.opacity = '0'; tip.style.visibility = 'hidden';
+    tip.style.left = '0'; tip.style.top = '0'; // reset
+    tip.style.position = 'fixed';
+    // pre-measure
+    tip.style.transform = 'translate(-9999px,-9999px)';
     const w = tip.offsetWidth, h = tip.offsetHeight;
 
-    let nx = x + 16, ny = y + 8; // default offset from cursor
-    if (nx + w + MARGIN > vw) nx = vw - w - MARGIN;
-    if (ny + h + MARGIN > vh) ny = vh - h - MARGIN;
-    if (nx < MARGIN) nx = MARGIN;
-    if (ny < MARGIN) ny = MARGIN;
-
-    tip.style.visibility = 'visible';
-    tip.style.transform = `translate3d(${nx}px, ${ny}px, 0)`;
-    tip.style.opacity = '1';
+    let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, r.right + 14));
+    let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, r.bottom + 8));
+    tip.style.transform = `translate(${nx}px, ${ny}px)`;
+    tip.classList.add('on'); // CSS handles fade only
   }
 
   root.addEventListener('mouseenter', (ev)=>{
-    const term = ev.target.closest('.gloss');
-    if (!term) return;
+    const term = ev.target.closest('.gloss'); if (!term) return;
+    if (term === lastTerm && (Date.now() - lastHideAt) < REARM_DELAY) return;
     const tip = ensureTip(term);
     clearTimeout(showTimer);
-    showTimer = setTimeout(()=> {
-      tip.classList.add('on');
-      // initial placement near the term
-      const r = term.getBoundingClientRect();
-      placeTip(tip, r.right, r.bottom);
+    showTimer = setTimeout(()=>{
+      placeNear(term, tip);
+      lastTerm = term;
     }, SHOW_DELAY);
   }, true);
 
-  root.addEventListener('mousemove', (ev)=>{
-    const term = ev.target.closest('.gloss');
-    if (!term) return;
-    const tip = term.querySelector('.gloss-tip');
-    if (!tip || tip.style.opacity === '0') return;
-    placeTip(tip, ev.clientX, ev.clientY);
-  }, true);
-
   root.addEventListener('mouseleave', (ev)=>{
-    const term = ev.target.closest('.gloss');
-    if (!term) return;
+    const term = ev.target.closest('.gloss'); if (!term) return;
     clearTimeout(showTimer);
     const tip = term.querySelector('.gloss-tip');
-    if (tip){
+    if (tip && !pinned){
       tip.classList.remove('on');
-      tip.style.opacity = '0';
       tip.style.visibility = 'hidden';
+      lastHideAt = Date.now();
+    }
+  }, true);
+
+  // Alt to pin while visible; click anywhere to banish
+  root.addEventListener('keydown', (e)=>{
+    if (e.altKey && lastTerm){
+      pinned = ensureTip(lastTerm);
+      pinned.style.pointerEvents = 'auto';
+    }
+  });
+  window.addEventListener('click', ()=>{
+    if (pinned){
+      pinned.classList.remove('on');
+      pinned.style.visibility = 'hidden';
+      pinned = null;
+      lastHideAt = Date.now();
     }
   }, true);
 }
 // ----------------------------------------------------------------
-
 
 // --- COMPLETE, DROP-IN INTRO ------------------------------------
 function insertIntro(){
@@ -319,6 +314,19 @@ function insertIntro(){
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
 
+  // Motes behind intro, below copy/images
+if (!document.getElementById('motesIntro')){
+  const m = document.createElement('div'); m.id = 'motesIntro'; m.setAttribute('aria-hidden','true');
+  Engine.el.intro.prepend(m);
+  spawnMotes('motesIntro', 22);
+}
+  // Title at top of slides with double underline
+if (!Engine.el.intro.querySelector('.intro-title')){
+  const t = document.createElement('div');
+  t.className = 'intro-title u-double-underline';
+  t.textContent = 'Brassreach';
+  Engine.el.intro.appendChild(t);
+}
   // Glossary tooltips (edge-aware)
   attachGlossTips(Engine.el.intro);
 
@@ -379,7 +387,7 @@ function buildUI(){
     <div id="motes" aria-hidden="true"></div>
     <div id="letterbox" class="letterbox hidden"><div class="bar top"></div><div class="bar bottom"></div></div>
     <div class="masthead">
-      <div class="brand-title">Brassreach</div>
+      <div class="brand-title u-double-underline">Brassreach</div>
       <div class="toolbar cardish frame">
         <div class="controls">
           <svg id="sealsRing" viewBox="0 0 100 100" aria-label="Seals">
@@ -683,6 +691,12 @@ function bind(){
   Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
 
   Engine.el.btnEnd.onclick=endTale;
+  document.addEventListener('keydown', (e)=>{
+  if (e.shiftKey && e.key.toLowerCase() === 'd'){
+    const t = document.getElementById('npTitle')?.textContent || '—';
+    alert(`BGM: ${t}`);
+  }
+});
 }
 
 /* ---------- render ---------- */
@@ -1101,14 +1115,19 @@ function exportSnapshot(){
 }
 
 /* ---------- motes ---------- */
-function spawnMotes(n=20){
-  const root=document.getElementById('motes'); if(!root) return;
+function spawnMotes(where='motes', n=20){
+  const root=document.getElementById(where); if(!root) return;
   for(let i=0;i<n;i++){
     const s=document.createElement('span'); s.className='mote';
-    s.style.left=(Math.random()*100)+'vw';
-    s.style.setProperty('--x', (Math.random()*30-15)+'px');
-    s.style.setProperty('--dur', (14+Math.random()*12)+'s');
-    s.style.top=(60+Math.random()*40)+'vh';
+    const spawnX = Math.random()*100;                       // vw
+    const spawnY = 60 + Math.random()*40;                   // vh (low on screen)
+    const sway   = (Math.random()*30-15).toFixed(1)+'px';   // ±15px
+    const dur    = (14 + Math.random()*12).toFixed(1)+'s';  // 14–26s
+
+    s.style.setProperty('--spawn-x', spawnX+'vw');
+    s.style.setProperty('--spawn-y', spawnY+'vh');
+    s.style.setProperty('--sway', sway);
+    s.style.setProperty('--dur', dur);
     root.appendChild(s);
   }
 }
