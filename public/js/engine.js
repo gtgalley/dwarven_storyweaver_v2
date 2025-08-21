@@ -336,3 +336,226 @@ function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden')
 function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
 
 
+
+
+/* ---------- minimal UI build & bindings (restored) ---------- */
+
+function buildUI(){
+  // Root crest + app
+  const app = document.createElement('div'); app.className='app'; app.id='app';
+  app.innerHTML = `
+    <div class="crest" aria-hidden="true"></div>
+    <header class="masthead">
+      <div class="brand-title">BRASSREACH</div>
+      <div class="toolbar">
+        <div class="controls">
+          <button class="btn" id="btnEnd">End the Story</button>
+          <button class="btn" id="btnSettings">Settings</button>
+          <button class="btn" id="btnGloss">Highlight Terms</button>
+          <button class="btn gold" id="btnSnap">Snapshot</button>
+          <span id="engineTag" style="margin-left:10px;opacity:.8">Engine: Local</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="storywrap">
+        <div class="story-scroll frame" id="story"></div>
+
+        <div class="choices" id="choices"></div>
+
+        <div class="free">
+          <input id="freeInput" type="text" placeholder="Write your own action (e.g., search the alcove, read the tablet)">
+          <button class="btn gold" id="btnAct">ACT</button>
+          <button class="btn" id="btnContinue">Continue story</button>
+        </div>
+      </section>
+
+      <aside class="side">
+        <div class="card" id="charCard">
+          <h3>Character <button class="btn" id="btnEdit" style="margin-left:8px">Edit</button></h3>
+          <div class="inner">
+            <div class="corners"></div>
+            <div id="charSummary"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Ledger</h3>
+          <div class="inner"><div id="ledgerList"></div></div>
+        </div>
+
+        <div class="card">
+          <h3>Session</h3>
+          <div class="inner"><div id="sessionInfo"></div></div>
+        </div>
+      </aside>
+    </main>
+
+    <button class="scroll-btn" id="scrollBtn" title="Open Scroll" aria-label="Open Scroll">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h14v14H7a2 2 0 0 1-2-2V4zm2 2v10h10V6H7z"/></svg>
+    </button>
+
+    <div id="motes"></div>
+
+    <div class="shade hidden" id="shade"></div>
+
+    <div class="modal hidden" id="modalEdit">
+      <header><b>Edit Character</b><span class="closeX" id="closeEdit">✕</span></header>
+      <div class="content">
+        <label>Name <input id="editName" type="text" placeholder="Name"></label>
+        <div style="margin-top:10px"><button class="btn gold" id="saveEdit">Save</button></div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="modalScroll">
+      <header><b>The Brassreach Scroll</b><span class="closeX" id="closeScroll">✕</span></header>
+      <div class="content" id="modalScrollBody"></div>
+    </div>
+
+    <div id="nowplay" class="hide"><div class="np-inner"><span id="npTitle">—</span></div></div>
+    <div id="letterbox" class="hidden" aria-hidden="true">
+      <div class="bar top"></div><div class="bar bottom"></div>
+    </div>
+  `;
+  document.body.appendChild(app);
+}
+
+function hydrate(){
+  Engine.el.story = document.getElementById('story');
+  Engine.el.choices = document.getElementById('choices');
+  Engine.el.freeInput = document.getElementById('freeInput');
+  Engine.el.scrollBtn = document.getElementById('scrollBtn');
+  Engine.el.shade = document.getElementById('shade');
+  Engine.el.modalEdit = document.getElementById('modalEdit');
+  Engine.el.modalScroll = document.getElementById('modalScroll');
+  Engine.el.modalScrollBody = document.getElementById('modalScrollBody');
+}
+
+function bind(){
+  const on = (sel, ev, fn)=>{ const el=document.querySelector(sel); if(el) el.addEventListener(ev, fn); };
+  on('#btnEdit','click',()=>openModal(Engine.el.modalEdit));
+  on('#closeEdit','click',()=>closeModal(Engine.el.modalEdit));
+  on('#closeScroll','click',()=>closeModal(Engine.el.modalScroll));
+  on('#btnAct','click',()=>{ Sound.click(); addBeat('You act…'); });
+  on('#btnContinue','click',()=>{ Sound.click(); addBeat('The tale continues…'); });
+  if(Engine.el.scrollBtn){
+    Engine.el.scrollBtn.addEventListener('click', ()=>{
+      const html = getIntroScrollHTML();
+      Engine.el.modalScrollBody.innerHTML = html;
+      attachGlossTips(Engine.el.modalScrollBody);
+      openModal(Engine.el.modalScroll);
+    });
+    Engine.el.scrollBtn.style.display = 'block';
+  }
+}
+
+function renderAll(){
+  updateCharacter();
+  updateSession();
+}
+
+function updateCharacter(){
+  const c = Engine.state.character;
+  $('#charSummary').innerHTML = `<b>${c.name}</b><br><small>HP ${c.HP} · Gold ${c.Gold}</small>`;
+}
+function updateSession(){
+  $('#sessionInfo').innerHTML = `Seed: ${Engine.state.seed}<br>Turn: ${Engine.state.turn}<br>Scene: ${Engine.state.scene}`;
+}
+
+function addBeat(text){
+  const p = document.createElement('p'); p.textContent = text;
+  Engine.el.story.appendChild(p);
+  Engine.el.story.scrollTop = Engine.el.story.scrollHeight;
+}
+
+/* ---------- motes ---------- */
+function spawnMotes(containerId){
+  const host = document.getElementById(containerId);
+  if(!host) return;
+  function drop(){
+    const m = document.createElement('div');
+    m.className = 'mote';
+    const x = Math.random()*window.innerWidth;
+    const sway = 6 + Math.random()*14;
+    const dur = 14 + Math.random()*9;
+    m.style.setProperty('--spawn-x', x+'px');
+    m.style.setProperty('--spawn-y', (window.innerHeight*0.9)+'px');
+    m.style.setProperty('--sway', sway+'px');
+    m.style.setProperty('--dur', dur+'s');
+    host.appendChild(m);
+    setTimeout(()=>m.remove(), dur*1000+800);
+  }
+  for(let i=0;i<24;i++) setTimeout(drop, i*180);
+  setInterval(drop, 550);
+}
+
+
+/* ---------- now playing toast ---------- */
+function setNowPlaying(t){
+  const box = document.getElementById('nowplay');
+  const title = document.getElementById('npTitle');
+  if(!box || !title) return;
+  title.textContent = t || '—';
+  box.classList.add('show'); box.classList.remove('hide');
+  clearTimeout(box._t); box._t = setTimeout(()=>{ box.classList.remove('show'); box.classList.add('hide'); }, 4200);
+}
+/* ---------- intro ---------- */
+function insertIntro(){
+  if(document.getElementById('intro')) return; // idempotent
+  const wrap = document.createElement('div');
+  wrap.innerHTML = getIntroSlidesHTML();
+  document.body.appendChild(wrap.firstElementChild);
+
+  Engine.el.intro = document.getElementById('intro');
+  // two-pane behaviors rely on CSS; start motes in intro
+  let introMotes = document.getElementById('motesIntro');
+  if(!introMotes){ introMotes = document.createElement('div'); introMotes.id='motesIntro'; document.body.appendChild(introMotes); }
+  spawnMotes('motesIntro');
+
+  // typewriter for each slide paragraph
+  ['.s1','.s2','.s3'].forEach(sel=>{
+    const p = document.querySelector(`#intro ${sel} .copy .scroll p`);
+    if(p) typewriteRich(p, Engine.state.settings.cps||40);
+  });
+
+  // buttons
+  const nexts = $$('#intro .intro-next');
+  nexts.forEach((btn, idx)=>{
+    btn.addEventListener('click', ()=>{
+      const cur = $('#intro .slide.active'); if(!cur) return;
+      cur.classList.remove('active');
+      const n = $('#intro .slide.' + (idx===0?'s2':'s3'));
+      if(n) n.classList.add('active');
+    });
+  });
+  const back2 = $('#introBack2'); if(back2) back2.addEventListener('click', ()=>{ $('#intro .s2').classList.remove('active'); $('#intro .s1').classList.add('active'); });
+  const back3 = $('#introBack3'); if(back3) back3.addEventListener('click', ()=>{ $('#intro .s3').classList.remove('active'); $('#intro .s2').classList.add('active'); });
+  const skip1 = $('#introSkip1'); if(skip1) skip1.addEventListener('click', beginTale);
+  const begin = $('#intro .intro-begin'); if(begin) begin.addEventListener('click', beginTale);
+
+  attachGlossTips(Engine.el.intro);
+}
+
+function beginTale(){
+  store.set('intro_seen', true);
+  if(Engine.el.intro) Engine.el.intro.classList.add('hidden');
+  // start motes in main app
+  spawnMotes('motes');
+  if(!Engine.state.storyBeats.length){ setNowPlaying('Prelude from the Halls');
+    addBeat('You arrive at the Halls. The city listens.');
+  }
+}
+
+/* ---------- scroll button (top-right) ---------- */
+function mountScrollFab(){
+  const btn = document.getElementById('scrollBtn');
+  if(!btn) return;
+  btn.style.display='block';
+  btn.addEventListener('click', ()=>{
+    const html = getIntroScrollHTML();
+    Engine.el.modalScrollBody.innerHTML = html;
+    attachGlossTips(Engine.el.modalScrollBody);
+    openModal(Engine.el.modalScroll);
+  });
+}
