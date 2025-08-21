@@ -3,7 +3,7 @@
   --bg:#0c0f12; --bg2:#14181d; --ink:#e6d9a2; --ink2:#f1e6bb;
   --gold:#d5a84a; --gold2:#9a6b24; --crimson:#7b2a2a; --emerald:#3a6f5b;
   --line:#6f5320; --line2:#caa45a; --accent:#e0c98a; --muted:#c8bb87;
-  --white:#f5f2e6;
+  --white:#f5f2e6; --bronze:#b37b3a;
 }
 /* === Global cursor: spearhead === */
 /* Applies everywhere, including the intro overlay */
@@ -100,15 +100,15 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 
 /* Masthead */
 .masthead{position:relative;padding:22px 18px 12px;border-bottom:2px solid var(--line);}
-.brand-title{
-  font-family:"Cinzel", serif; font-weight:700; text-align:center; letter-spacing:1.2px;
-  font-size:2.05rem; color:var(--ink2);
-  text-shadow:
-    0 0 22px rgba(213,168,74,.35),
-    0 0 6px rgba(213,168,74,.55),
-    0 0 1px rgba(255,200,120,.9);
-  filter: drop-shadow(0 0 24px rgba(255,140,40,.25));
-}
+
+/* Split title: BRASS (gold) | REACH (bronze) */
+.brand-title .title-left,
+.intro-title .title-left { color: var(--gold); letter-spacing: 0.12em; }
+.brand-title .title-right,
+.intro-title .title-right{ color: var(--bronze); letter-spacing: 0.12em; }
+
+.brand-title .title-gap,
+.intro-title .title-gap{ display:inline-block; width: 3.6rem; }
 
 /* === Brassreach double-underline utility === */
 .u-double-underline {
@@ -238,6 +238,17 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 .modal .content{padding:14px; max-height:70vh; overflow:auto}
 .closeX{cursor:pointer;border:1px solid var(--gold2);padding:4px 8px}
 
+/* Character modal blue+gold inputs */
+#modalEdit label > input,
+#modalEdit .grid2 input,
+#modalEdit select{
+  background:#0d141a !important;  /* same deep blue as your backdrop */
+  color:#D5A84A !important;        /* gold text */
+  border:1px solid #8c6b2c !important;
+  outline:1px solid rgba(213,168,74,.18);
+}
+#modalEdit input::placeholder{ color:rgba(213,168,74,.66) !important; }
+
 /* Settings grid and sliders */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .settings-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
@@ -279,23 +290,15 @@ input[type="range"]{width:100%}
   position: absolute; right: 22px; bottom: 22px; z-index: 3;
 }
 
-/* Glowing divider seam that fades ~20% from the top (leaves room for title) */
+/* Seam: no top fade; solid molten line from top to bottom */
 .intro .pane::before{
-  content:""; position:absolute; inset:0;
-  width:2px; left:50%; transform:translateX(-50%); pointer-events:none;
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(213,168,74,0) 0%,
-      rgba(213,168,74,.75) 20%,
-      rgba(213,168,74,.4) 60%,
-      rgba(213,168,74,0) 100%
-    );
-  filter: drop-shadow(0 0 8px rgba(213,168,74,.45));
-  animation: seamPulse 4.5s ease-in-out infinite;
+  content:""; position:absolute; top:0; bottom:0; left:50%; width:3px;
+  background: linear-gradient(to bottom, rgba(213,168,74,.85), rgba(213,168,74,.85)); /* solid */
+  box-shadow:
+    0 0 10px rgba(213,168,74,.5),
+    0 0 22px rgba(213,168,74,.35);
+  transform: translateX(-50%);
 }
-@keyframes seamPulse { 50% { filter: drop-shadow(0 0 14px rgba(213,168,74,.6)); } }
-
 .gloss:hover .tip{opacity:1}
 /* auto shift when near edges; JS adjusts left dynamically */
 
@@ -344,8 +347,8 @@ input[type="number"]{accent-color:var(--gold)}
 }
 /* Edge-aware glossary tooltip */
 .gloss { position: relative; font-weight: 800; color: var(--gold); text-shadow: 0 0 8px rgba(213,168,74,.3); cursor: help; }
-.gloss:hover { color: var(--bronze-300); }
-
+.gloss:hover { color: var(--bronze); }
+.gloss::after { content:'' !important; }
 .gloss-tip {
   position: fixed;
   z-index: 9999;
@@ -371,6 +374,10 @@ input[type="number"]{accent-color:var(--gold)}
   transform: translate3d(var(--gx,0), var(--gy,0), 0) scale(1);
 }
 
+/* Kill any legacy ? decorations layered by pseudo-elements */
+.gloss::after,
+.rollglyph::after,
+.roll-help::after { content:'' !important; }
 /* Ensure the app underneath never steals focus while intro is open */
 #intro:not(.hidden) ~ .app{ pointer-events: none; }
 /* Intro solid backgrounds for contrast */
@@ -490,7 +497,23 @@ body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: 
 .intro .slide { position: relative; height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
 .intro.two-pane .slide .img { grid-column: 1; }
 .intro.two-pane .slide .copy{ grid-column: 2; display:flex; align-items:center; }
-.intro.two-pane .slide .copy .scroll{ margin:0 auto; max-width:min(46ch, 44vw); text-align:center; }
+/* Force right-half, left-justified intro copy */
+.intro.two-pane .slide .copy .scroll{
+  text-align:left;
+  margin: 0 6vw 0 0;     /* pull right */
+  width:46vw; max-width:46vw;
+  line-height:1.65;
+}
+.intro.two-pane .slide .copy .scroll p{
+  position:relative; padding-left:28px;
+}
+.intro.two-pane .slide .copy .scroll p::before{
+  content:""; position:absolute; left:10px; top:0.3em; width:10px; height:10px;
+  border-left:2px solid rgba(213,168,74,0.9);
+  border-bottom:2px solid rgba(213,168,74,0.9);
+  transform:skew(-8deg) rotate(-45deg);
+  filter:drop-shadow(0 0 4px rgba(213,168,74,.45));
+}
 .intro .slide .nav { position: absolute; right: 24px; bottom: 22px; z-index: 5; }
 
 /* molten divider, fades near the top 20% to leave room for the logo */
