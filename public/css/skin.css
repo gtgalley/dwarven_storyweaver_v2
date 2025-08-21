@@ -27,6 +27,8 @@ input[type="password"], textarea, [contenteditable="true"] {
    public/img/cursor-spear-glow.png  (24–32px, same hotspot ~ 3 2)
    If you don’t have it yet, you can duplicate cursor-spear.png for now. */
 
+
+}
 @keyframes spearShimmer {
   0%, 100% { filter: drop-shadow(0 0 9px rgba(213,168,74,.60)) saturate(1.10) brightness(1.04); }
   50%      { filter: drop-shadow(0 0 18px rgba(213,168,74,.95)) saturate(1.25) brightness(1.10); }
