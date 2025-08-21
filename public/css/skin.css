@@ -5,57 +5,6 @@
   --line:#6f5320; --line2:#caa45a; --accent:#e0c98a; --muted:#c8bb87;
   --white:#f5f2e6;
 }
-/* === Global cursor: spearhead === */
-/* Applies everywhere, including the intro overlay */
-html, body, .app, #intro {
-  cursor: url("../img/cursor-spear.png") 3 2, auto;
-}
-
-/* Keep the “clickable” semantics for interactive elements.
-   If the custom image can't load, fallback shows the pointer hand. */
-a, button, .btn, [role="button"], [onclick] {
-  cursor: url("../img/cursor-spear.png") 3 2, pointer;
-}
-
-/* Preserve the I-beam where text editing is expected */
-input[type="text"], input[type="search"], input[type="email"],
-input[type="password"], textarea, [contenteditable="true"] {
-  cursor: text; /* system I-beam */
-  
-  /* === Hover shimmer for interactive elements === */
-/* NOTE: provide a glow version of your cursor at:
-   public/img/cursor-spear-glow.png  (24–32px, same hotspot ~ 3 2)
-   If you don’t have it yet, you can duplicate cursor-spear.png for now. */
-
-
-}
-@keyframes spearShimmer {
-  0%, 100% { filter: drop-shadow(0 0 9px rgba(213,168,74,.60)) saturate(1.10) brightness(1.04); }
-  50%      { filter: drop-shadow(0 0 18px rgba(213,168,74,.95)) saturate(1.25) brightness(1.10); }
-}
-
-/* Interactive, visibly shimmery hover */
-a:hover,
-button:hover,
-.btn:hover,
-[role="button"]:hover,
-[onclick]:hover {
-  /* swap to glowing cursor art on hover; falls back to pointer if the asset is missing */
-  cursor: url("../img/cursor-spear-glow.png") 3 2, pointer;
-
-  /* bright, brazen shimmer on the element itself */
-  animation: spearShimmer .9s ease-in-out infinite;
-}
-
-/* High-contrast tone-down so we keep WCAG sanity */
-.hc a:hover,
-.hc button:hover,
-.hc .btn:hover,
-.hc [role="button"]:hover,
-.hc [onclick]:hover {
-  animation: none;
-  filter: drop-shadow(0 0 8px rgba(213,168,74,.35)) saturate(1.05) brightness(1.02);
-}
 
 /* Visibility toggles */
 .hidden { display: none !important; }
@@ -109,43 +58,6 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
     0 0 1px rgba(255,200,120,.9);
   filter: drop-shadow(0 0 24px rgba(255,140,40,.25));
 }
-
-/* === Brassreach double-underline utility === */
-.u-double-underline {
-  position: relative;
-  padding-bottom: 10px;
-}
-.u-double-underline::after,
-.u-double-underline::before {
-  content: "";
-  position: absolute; left: 50%; transform: translateX(-50%);
-  width: clamp(240px, 48vw, 680px);
-  border-radius: 2px;
-  height: 0;
-  pointer-events: none;
-}
-.u-double-underline::after { /* primary, thicker */
-  bottom: 0;
-  border-bottom: 4px solid transparent;
-  background: linear-gradient(90deg, #d5a84a, #c7872f 60%, #9a6b24);
-  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000,#000);
-  -webkit-mask-composite: xor; mask-composite: exclude;
-  box-shadow:
-    0 0 10px rgba(213,168,74,.55),
-    0 0 24px rgba(213,168,74,.25);
-}
-.u-double-underline::before { /* echo, finer */
-  bottom: 6px;
-  border-bottom: 2px solid transparent;
-  background: linear-gradient(90deg, #e6c57a, #d5a84a 60%, #9a6b24);
-  box-shadow:
-    0 0 6px rgba(213,168,74,.45),
-    0 0 16px rgba(213,168,74,.18);
-}
-
-/* High-contrast mode: preserve WCAG while keeping the aura */
-.hc .u-double-underline::after,
-.hc .u-double-underline::before { box-shadow: 0 0 0 transparent; }
 
 /* Toolbar */
 .toolbar{display:flex;justify-content:center;margin-top:10px}
@@ -243,21 +155,6 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 .settings-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 input[type="range"]{width:100%}
 
-/* Intro overlay title */
-.intro-title{
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-  z-index: 4;
-  font-family:"Cinzel", serif; font-weight:700; letter-spacing:1.2px;
-  font-size: clamp(1.8rem, 3.2vw, 2.3rem);
-  color: var(--ink2);
-  text-transform: uppercase;
-  text-shadow:
-    0 0 22px rgba(213,168,74,.35),
-    0 0 6px rgba(213,168,74,.55),
-    0 0 1px rgba(255,200,120,.9);
-  filter: drop-shadow(0 0 24px rgba(255,140,40,.25));
-}
-
 /* Intro slides */
 .intro{position:fixed;inset:0;background:#0a0f14;z-index:9000;display:flex;flex-direction:column}
 .intro .pane{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0}
@@ -267,34 +164,6 @@ input[type="range"]{width:100%}
 .intro .pic .img{position:absolute;inset:-6%;background:radial-gradient(120% 100% at 50% 30%, #1a232b, #0a0f14 65%)}
 .intro .nav{display:flex;justify-content:flex-end;gap:10px;padding:10px 20px;border-top:2px solid var(--line);background:#0d1218}
 .intro .btn{min-width:120px}
-
-/* Two-sided intro: image LEFT, text RIGHT */
-.intro .pane { display:grid; grid-template-columns: 1fr 1fr; }
-.intro .pic { grid-column: 1; }
-.intro .txt { grid-column: 2; display:flex; align-items:center; }
-.intro .txt .inner { margin: 0 auto; text-align: center; }
-
-/* Fixed nav buttons (Skip / Continue) in the bottom-right */
-#intro .slide .nav {
-  position: absolute; right: 22px; bottom: 22px; z-index: 3;
-}
-
-/* Glowing divider seam that fades ~20% from the top (leaves room for title) */
-.intro .pane::before{
-  content:""; position:absolute; inset:0;
-  width:2px; left:50%; transform:translateX(-50%); pointer-events:none;
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(213,168,74,0) 0%,
-      rgba(213,168,74,.75) 20%,
-      rgba(213,168,74,.4) 60%,
-      rgba(213,168,74,0) 100%
-    );
-  filter: drop-shadow(0 0 8px rgba(213,168,74,.45));
-  animation: seamPulse 4.5s ease-in-out infinite;
-}
-@keyframes seamPulse { 50% { filter: drop-shadow(0 0 14px rgba(213,168,74,.6)); } }
 
 .gloss:hover .tip{opacity:1}
 /* auto shift when near edges; JS adjusts left dynamically */
@@ -362,8 +231,8 @@ input[type="number"]{accent-color:var(--gold)}
   filter: drop-shadow(0 0 4px rgba(255, 184, 84, 0.25));
   opacity: 0;
   visibility: hidden;
-  transform: none !important;
-  transition: opacity .15s ease, visibility .15s ease;
+  transform: translate3d(-9999px,-9999px,0) scale(.98);
+  transition: opacity .15s ease, visibility .15s ease, transform .15s ease;
 }
 .gloss-tip.on {
   opacity: 1;
@@ -409,40 +278,14 @@ input[type="number"]{accent-color:var(--gold)}
   background:
     radial-gradient(1200px 800px at 20% 8%, #121921 0%, #0c0f12 55%),
     url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"> <g fill="none" stroke="#715322" stroke-width="8" opacity="0.8">  <circle cx="600" cy="580" r="320"/>  <path d="M280,580 L600,240 L920,580 L600,920 Z"/>  <path d="M430,580 L600,400 L770,580 L600,760 Z"/>  <path d="M600,260 L600,900"/>  <path d="M260,580 L940,580"/> </g></svg>') center/60vmin 60vmin no-repeat;
-  z-index:0; animation: crestDrift 10s ease-in-out infinite alternate, crestGlow 10s ease-in-out infinite; background-position: center;
+  z-index:0;
 }
-@keyframes crestDrift{
-  0%{ transform: translate3d(0,0,0); }
-  100%{ transform: translate3d(0, -0.8vh, 0); }
-}
-@keyframes crestGlow{
-  0%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
-  50%{ filter: brightness(1.15) drop-shadow(0 0 14px rgba(213,168,74,.15)); }
-  100%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
-}
-/* Ember motes (app & intro layers share the same style) */
-#motes, #motesIntro { position:fixed; inset:0; pointer-events:none; z-index:1; }
-.mote{
-  position:absolute;
-  width: 6px; height: 6px; border-radius: 50%;
-  left: 0; top: 0; transform: translate(var(--spawn-x,0), var(--spawn-y,0));
-  background: radial-gradient(circle at 50% 50%, rgba(255,190,120,.9), rgba(255,190,120,.0) 65%);
-  filter: blur(0.2px);
-  opacity: .0;
-  animation:
-    moteRise var(--dur, 16s) linear forwards,
-    moteSway calc(var(--dur,16s) * .8) ease-in-out infinite alternate;
-}
-@keyframes moteRise{
-  0%   { opacity: .0;   transform: translate(var(--spawn-x,0), var(--spawn-y,0)) scale(0.6); filter: brightness(1.4); }
-  8%   { opacity: .95;  transform: translate(calc(var(--spawn-x,0) + var(--sway,0px)), calc(var(--spawn-y,0) - 8vh)) scale(1.0); }
-  70%  { opacity: .65;  filter: brightness(1.1); }
-  100% { opacity: .0;   transform: translate(calc(var(--spawn-x,0) + var(--sway,0px)), calc(var(--spawn-y,0) - 70vh)) scale(0.85); filter: brightness(.8); }
-}
-@keyframes moteSway{
-  0%{   transform: translate(var(--spawn-x,0), var(--spawn-y,0)) }
-  100%{ transform: translate(calc(var(--spawn-x,0) + var(--sway,0px)), var(--spawn-y,0)) }
-}
+
+/* Ambient motes */
+#motes{ position:fixed; inset:0; pointer-events:none; z-index:1; }
+.mote{ position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(213,168,74,.8);
+  animation: drift var(--dur, 18s) linear infinite; filter:blur(.2px); opacity:.35; }
+@keyframes drift{ from{ transform:translate3d(var(--x,0), 100vh, 0) } to{ transform:translate3d(calc(var(--x,0) + 12px), -8vh, 0) } }
 
 /* Cinematic letterbox */
 #letterbox{ position:fixed; inset:0; pointer-events:none; z-index:9990; }
@@ -474,44 +317,62 @@ body.hc .frame::after{ border-color: #6d5120; }
 body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: glossPulse 1.8s ease-in-out infinite; }
 @keyframes glossPulse{ 0%,100%{ text-underline-offset:2px } 50%{ text-underline-offset:6px } }
 
-/* Now Playing widget */
-.nowplay{ position:fixed; left:50%; transform:translateX(-50%); bottom:10px; width:min(920px, 96vw);
-  background: linear-gradient(180deg,#0f1419,#0a0f14); border:2px solid var(--line); box-shadow:0 0 0 2px var(--line2) inset;
-  padding:8px 12px; z-index: 8888; }
-.nowplay .np-inner{ display:flex; align-items:center; gap:10px; }
-.nowplay .np-dot{ width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 10px rgba(213,168,74,.6); }
-.nowplay .np-label{ color: var(--muted); font-weight:600; letter-spacing:.3px }
-.nowplay #npTitle{ color: var(--ink2); font-weight:700 }
-.nowplay .btn.mini{ padding:6px 10px; font-size:.9rem }
 
-
-/* --- Intro two-pane layout & molten seam --- */
-.intro { position: fixed; inset: 0; z-index: 9995; }
-.intro .slide { position: relative; height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
-.intro.two-pane .slide .img { grid-column: 1; }
-.intro.two-pane .slide .copy{ grid-column: 2; display:flex; align-items:center; }
-.intro.two-pane .slide .copy .scroll{ margin:0 auto; max-width:min(46ch, 44vw); text-align:center; }
-.intro .slide .nav { position: absolute; right: 24px; bottom: 22px; z-index: 5; }
-
-/* molten divider, fades near the top 20% to leave room for the logo */
-.intro.two-pane .slide::before{
-  content:""; position:absolute; top:0; bottom:0; left:50%; width:2px; transform:translateX(-50%); pointer-events:none;
-  background: linear-gradient(to bottom,
-    rgba(213,168,74,0) 0%,
-    rgba(213,168,74,.75) 20%,
-    rgba(213,168,74,.45) 60%,
-    rgba(213,168,74,0) 100%);
-  filter: drop-shadow(0 0 8px rgba(213,168,74,.45));
-  animation: seamPulse 4.5s ease-in-out infinite;
+/* --- Ember motes animation (fixed) --- */
+#motes, #motesIntro { position:fixed; inset:0; pointer-events:none; z-index:1; }
+.mote{
+  position:absolute;
+  width: 6px; height: 6px; border-radius: 50%;
+  left: 0; top: 0;
+  transform: translate(var(--spawn-x, 0), var(--spawn-y, 0));
+  background: radial-gradient(circle at 50% 50%, rgba(255,190,120,.9), rgba(255,190,120,0) 65%);
+  filter: blur(.2px);
+  opacity: 0;
+  animation:
+    moteRise var(--dur, 18s) linear forwards,
+    moteSway calc(var(--dur,18s) * .8) ease-in-out infinite alternate;
 }
-@keyframes seamPulse{ 50%{ filter: drop-shadow(0 0 14px rgba(213,168,74,.62)); } }
-
-/* overlay title at top center with underline (JS injects .intro-title) */
-.intro-title{
-  position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:7;
-  font-family:"Cinzel",serif; font-weight:700; letter-spacing:1.2px;
-  font-size:clamp(1.8rem,3.2vw,2.3rem); color:var(--ink2); text-transform:uppercase;
-  text-shadow:0 0 22px rgba(213,168,74,.35),0 0 6px rgba(213,168,74,.55),0 0 1px rgba(255,200,120,.9);
-  filter: drop-shadow(0 0 24px rgba(255,140,40,.25));
+@keyframes moteRise{
+  0%   { opacity: 0;   transform: translate(var(--spawn-x,0), var(--spawn-y,0)) scale(.65); filter: brightness(1.35); }
+  8%   { opacity: .95; transform: translate(var(--spawn-x,0), calc(var(--spawn-y,0) - 8vh)) scale(.98); }
+  70%  { opacity: .65; filter: brightness(1.1); }
+  100% { opacity: 0;   transform: translate(var(--spawn-x,0), calc(var(--spawn-y,0) - 52vh)) scale(1.05); }
+}
+@keyframes moteSway{
+  0%   { transform: translate(calc(var(--spawn-x,0) - var(--sway, 0px)), var(--spawn-y,0)); }
+  100% { transform: translate(calc(var(--spawn-x,0) + var(--sway, 0px)), var(--spawn-y,0)); }
 }
 
+
+/* --- Character Edit inputs styling --- */
+#modalEdit .content label { color: var(--ink2); }
+#modalEdit input[type="text"],
+#modalEdit input[type="number"],
+#modalEdit select {
+  background: #0d141a;
+  border: 1px solid var(--gold2);
+  color: var(--gold);
+  outline: 1px solid rgba(213,168,74,.15);
+  padding: 8px 10px;
+}
+#modalEdit input::placeholder { color: rgba(213,168,74,.66); }
+#modalEdit input, #modalEdit select { caret-color: var(--gold); }
+
+/* --- Now Playing toast --- */
+#nowplay{
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+  background: rgba(18,22,28,.92);
+  border: 1px solid var(--gold2); box-shadow: 0 0 0 2px var(--gold) inset;
+  padding: 6px 10px; z-index: 9997; opacity: 0; pointer-events: none;
+  transition: opacity .35s ease;
+}
+#nowplay .np-inner{ display:flex; align-items:center; gap:8px; }
+#nowplay.show{ opacity: 1; }
+#nowplay.hide{ opacity: 0; }
+
+/* --- Align Character box to story top --- */
+.main{ align-items: start; }
+.side .card:first-child{ margin-top: 0; }
+
+/* --- Intro pane text alignment --- */
+.intro .copy .scroll { text-align: right; margin-left: auto; margin-right: 3vw; }
