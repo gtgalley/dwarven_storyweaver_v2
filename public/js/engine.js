@@ -201,8 +201,9 @@ function attachGlossTips(root){
 
     let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, r.right + 14));
     let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, r.bottom + 8));
-    tip.style.transform = `translate(${nx}px, ${ny}px)`;
-    tip.classList.add('on'); // CSS handles fade only
+    tip.style.setProperty('--gx', `${nx}px`);
+    tip.style.setProperty('--gy', `${ny}px`);
+    tip.classList.add('on');  // CSS handles the translate + fade
   }
   function trackCursor(term, tip){
     const MARGIN = 12;
@@ -211,7 +212,9 @@ function attachGlossTips(root){
       const w = tip.offsetWidth, h = tip.offsetHeight;
       let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, e.clientX + 16));
       let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, e.clientY + 20));
-      tip.style.transform = `translate(${nx}px, ${ny}px)`;
+      tip.style.setProperty('--gx', `${nx}px`);
+      tip.style.setProperty('--gy', `${ny}px`);
+
     }
     term.__glossMove = onMove;
     term.addEventListener('mousemove', onMove);
@@ -283,13 +286,13 @@ function tuneIntroLayout(){
   });
   intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
     Object.assign(sc.style, {
-      width:'42vw',
-      maxWidth:'42vw',
-      textAlign:'left',
-      lineHeight:'1.65',
-      marginTop:'1.5vh',
-      marginLeft:'auto',
-      marginRight:'6vw'
+      width: '38vw',
+      maxWidth: '38vw',
+      textAlign: 'left',
+      lineHeight: '1.68',
+      marginTop: '1.5vh',
+      marginLeft: 'auto',
+      marginRight: '8vw'
     });
     sc.querySelectorAll('p').forEach(p=>{
       p.style.position='relative';
@@ -298,13 +301,17 @@ function tuneIntroLayout(){
         const mark=document.createElement('span');
         mark.className='para-chevron';
         Object.assign(mark.style, {
-          position:'absolute', left:'4px', top:'0.35em', width:'10px', height:'10px',
-          borderTop: '2px solid rbga(213,168,74,0.9)',
-          borderRight:'2px solid rgba(213,168,74,0.9)',
-          borderLeft:'0', borderBottom:'0',
-          transform:'skew(-8deg) rotate(-45deg)', // faces → now
-          filter:'drop-shadow(0 0 4px rgba(213,168,74,.45))'
+          position: 'absolute',
+          left: '12px',
+          top: '0.25em',
+          width: '10px',
+          height: '10px',
+          borderLeft: '2px solid rgba(213,168,74,0.9)',
+          borderBottom: '2px solid rgba(213,168,74,0.9)',
+          transform: 'skew(-8deg) rotate(-45deg)', // faces →
+          filter: 'drop-shadow(0 0 4px rgba(213,168,74,0.45))'
         });
+        p.style.paddingLeft = '28px';
         p.prepend(mark);
       }
     });
