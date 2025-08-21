@@ -102,6 +102,7 @@ const BGM = (function(){
 /* ---------- sound @ ~20 BPM base ---------- */
 const Sound=(()=>{
   const AMBIENCE_ENABLED = false;
+  const AMBIENCE_ENABLED = false;
   let ctx, master, ui, amb, drums;
   const ensure=()=>{ if(ctx) return;
     ctx=new (window.AudioContext||window.webkitAudioContext)();
@@ -138,6 +139,7 @@ const Sound=(()=>{
     }, beat);
   }
     // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
+if (AMBIENCE_ENABLED) {
     const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
     setInterval(()=>{
       if(!ctx) return; const t=ctx.currentTime;
@@ -168,6 +170,7 @@ const Sound=(()=>{
         o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
       }
     }, bar);
+}
   };
   const setLevels=()=>{ if(!ctx) return;
     master.gain.value=Engine.state.settings.audio.master;
@@ -310,6 +313,7 @@ function insertIntro(){
 
   // Cache refs
   Engine.el.intro    = document.getElementById('intro');
+  if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
   Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
