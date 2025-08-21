@@ -112,7 +112,7 @@ const Sound=(()=>{
     ui=ctx.createGain(); ui.gain.value=Engine.state.settings.audio.ui; ui.connect(master);
     amb=ctx.createGain(); amb.gain.value=0;  amb.connect(master);
     drums=ctx.createGain(); drums.gain.value=0; drums.connect(master);
-
+const beat = 3000; // ≈ 20 BPM
     // Harmonic motion: longer ostinato w/ implied chords + contrary motion
   if (AMBIENCE_ENABLED) {
     const beat = 3000; // ≈20 BPM
@@ -138,6 +138,7 @@ const Sound=(()=>{
     }, beat);
   }
     // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
+  if (AMBIENCE_ENABLED) {
     const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
     setInterval(()=>{
       if(!ctx) return; const t=ctx.currentTime;
@@ -168,6 +169,7 @@ const Sound=(()=>{
         o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
       }
     }, bar);
+  }
   };
   const setLevels=()=>{ if(!ctx) return;
     master.gain.value=Engine.state.settings.audio.master;
