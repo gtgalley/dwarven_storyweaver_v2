@@ -1,4 +1,10 @@
 // public/js/engine.js
+// v13c — intro right-pane + chevrons; animated motes; fixed Scroll modal; removed Highlight Terms;
+// edit modal blue+gold fields; now-playing fade; vignette fade; story box bottom line fixed;
+// glossary '?' suppressed; roll glyphs gold/crimson with hover bloom.
+// Built from your attached engine.js + prior merged foundation. Date: 2025-08-21
+
+// public/js/engine.js
 // v13b — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
 // Ledger panel (Inventory + revealed keys/rumors/gate/boss), 20 BPM ambience,
 // per-slide intro typewriter, success/fail/story SFX, silent continue, death modal,
@@ -33,97 +39,98 @@ function defaults(){
 const Engine={ el:{}, state: defaults() };
 window.Engine=Engine;
 
+
+/* ---------- background music manager (file-based, crossfades) ---------- */
+const BGM = (function(){
+  let ctx, bus, cur = null, nextGain=null, curGain=null, fadeMs=1400;
+  const tracks = {
+    intro:    { title:"Overture of the Foundry", srcs:["./public/audio/034842c5-ddc2-4b5c-abc3-bff6ab9c455f.mp3"] },
+    prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a","./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.mp3"] },
+    halls:    { title:"Halls of the Brassreach", srcs:["./public/audio/8b264fe3-26f0-4c6c-9356-60a270d2ef21.mp3"] },
+    depths2:  { title:"When the Unfathomer Stirs", srcs:["./public/audio/66bf880d-6cea-470f-8dba-7de081c046fa.mp3"] },
+    depths:   { title:"Beneath the Cistern Fields", srcs:["./public/audio/662478af-b29d-4034-a2fc-d2ea9fd75dc4.mp3"] },
+    archives: { title:"Whispers of the Archives", srcs:["./public/audio/73a9c81f-6be8-45a2-8338-2b8b7a53d596.mp3"] },
+  };
+  const cache = new Map();
+  function getCtx(){ try{ Sound.ensure(); }catch{}; return (Sound.getCtx? Sound.getCtx() : new (window.AudioContext||window.webkitAudioContext)()); }
+  async function load(name){
+    if(cache.has(name)) return cache.get(name);
+    const t = tracks[name]; if(!t) return null;
+    const C = getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.amb ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+    for(const url of t.srcs){
+      try{
+        const res = await fetch(url, {cache:"force-cache"}); if(!res.ok) continue;
+        const arr = await res.arrayBuffer();
+        const buf = await C.decodeAudioData(arr.slice(0));
+        const o = {buffer: buf}; cache.set(name,o); return o;
+      }catch(e){}
+    }
+    return null;
+  }
+  function setBus(v){ if(bus) bus.gain.value=v; }
+  async function crossTo(name){
+    try{
+      const data = await load(name); if(!data) return;
+      const C = ctx || getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.amb ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+      // next source
+      const src = C.createBufferSource(); src.buffer=data.buffer; src.loop=true;
+      const ng = C.createGain(); ng.gain.value=0; src.connect(ng).connect(bus); const now=C.currentTime;
+      src.start(now+0.02);
+      const fade = Math.max(0.10, fadeMs/1000);
+      ng.gain.cancelScheduledValues(now); ng.gain.setValueAtTime(0, now); ng.gain.linearRampToValueAtTime(1, now+fade);
+      if(curGain){
+        curGain.gain.cancelScheduledValues(now);
+        curGain.gain.setValueAtTime(curGain.gain.value, now);
+        curGain.gain.linearRampToValueAtTime(0, now+fade);
+      }
+      const prev = cur;
+      cur = src; curGain = ng;
+      if(prev){ setTimeout(()=>{ try{ prev.stop(); }catch{} }, fade*1000+120); }
+      const t=tracks[name]; if(t) setNowPlaying(t.title);
+    }catch(e){ console.error('BGM crossTo error', e); }
+  }
+  function stop(){ try{ if(cur){ const C=ctx||getCtx(); const now=C.currentTime; curGain.gain.cancelScheduledValues(now); curGain.gain.linearRampToValueAtTime(0, now+.25); setTimeout(()=>{ try{cur.stop()}catch{} }, 360);} }catch{} }
+  function updateForState(S){
+    const introOpen = !!(Engine.el?.intro && !Engine.el.intro.classList.contains('hidden'));
+    if(introOpen) return crossTo('intro');
+    if(S.turn < 2) return crossTo('prelude');
+    if(S.scene==='Archives') return crossTo('archives');
+    if(S.scene==='Depths'){ if(S.flags?.bossDealtWith || S.flags?.bossReady) return crossTo('depths2'); return crossTo('depths'); }
+    return crossTo('halls');
+  }
+  function attachWidget(){
+    const mute=document.getElementById('npMute'); if(mute){ mute.onclick=()=>{ const v=bus?bus.gain.value:1; const nv=(v>0)?0:(Engine.state?.settings?.audio?.amb ?? .5); setBus(nv); mute.textContent = nv>0 ? 'Mute' : 'Unmute'; }; }
+  }
+  function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
+  return {crossTo, stop, updateForState, attachWidget};
+})();
 /* ---------- sound @ ~20 BPM base ---------- */
-const Sound=(()=>{
-  let ctx, master, ui, amb, drums;
-  const ensure=()=>{ if(ctx) return;
-    ctx=new (window.AudioContext||window.webkitAudioContext)();
-    master=ctx.createGain(); master.gain.value=Engine.state.settings.audio.master; master.connect(ctx.destination);
-    ui=ctx.createGain(); ui.gain.value=Engine.state.settings.audio.ui; ui.connect(master);
-    amb=ctx.createGain(); amb.gain.value=Engine.state.settings.audio.amb; amb.connect(master);
-    drums=ctx.createGain(); drums.gain.value=Engine.state.settings.audio.drums; drums.connect(master);
 
-    // Harmonic motion: longer ostinato w/ implied chords + contrary motion
-    const beat = 3000; // ≈20 BPM
-    const notesA = [55, 73.42, 61.74, 82.41, 65.41, 55, 92.5, 61.74];   // A/D/B/E/F/A/Bb/B
-    const notesB = [49, 65.41, 58.27, 77.78, 61.74, 49, 87.31, 58.27];  // counter line
-    const bass = ctx.createOscillator(); bass.type='sawtooth';
-    const pad  = ctx.createOscillator(); pad.type='triangle';
-    const g1=ctx.createGain(), g2=ctx.createGain(); g1.gain.value=.020; g2.gain.value=.012;
-    bass.connect(g1).connect(amb); pad.connect(g2).connect(amb);
-    let i=0; bass.start(); pad.start();
-    setInterval(()=>{ if(!ctx) return;
-      const a = notesA[i%notesA.length], b = notesB[i%notesB.length], fifth = a*1.5;
-      const t=ctx.currentTime;
-      bass.frequency.linearRampToValueAtTime(a, t+.6);
-      pad.frequency.linearRampToValueAtTime((i%3===0? fifth : b), t+.7);
-      i++;
-    }, beat);
-
-    // Drums: low hits on 1 & 3; ghosted 16ths/32nds before downbeats
-    const bar=beat*4, sixteenth=beat/4, thirty=beat/8;
-    setInterval(()=>{
-      if(!ctx) return; const t=ctx.currentTime;
-
-      hit(t, 72, 34, .24, .24);                        // beat 1
-      ghost(t + (sixteenth/1000)*3, 700,.05);          // 16th pickup
-      ghost(t + (thirty/1000)*7,   820,.04);           // 32nd pickup
-
-      hit(t+2*beat/1000, 68, 32, .22, .22);            // beat 3
-      ghost(t + 2*beat/1000 - sixteenth/1000*1, 620,.05);
-      ghost(t + 4*beat/1000 - thirty/1000*1,   760,.04);
-
-      function hit(at,f1,f2,dur,amp){
-        const o=ctx.createOscillator(); o.type='sine';
-        const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(amp, at+.02);
-        g.gain.exponentialRampToValueAtTime(.0001, at+dur);
-        o.frequency.setValueAtTime(f1,at);
-        o.frequency.exponentialRampToValueAtTime(f2,at+dur*.85);
-        o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
-      }
-      function ghost(at,f,dur){
-        const o=ctx.createOscillator(); o.type='triangle';
-        const g=ctx.createGain(); g.gain.setValueAtTime(.0001,at);
-        g.gain.exponentialRampToValueAtTime(.06, at+.01);
-        g.gain.exponentialRampToValueAtTime(.0001, at+dur);
-        o.frequency.setValueAtTime(f,at);
-        o.connect(g).connect(drums); o.start(at); o.stop(at+dur+.02);
-      }
-    }, bar);
+const Sound = (()=>{
+  let ctx, master, ui;
+  const ensure = ()=>{
+    if (ctx) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = Engine.state.settings.audio.master; master.connect(ctx.destination);
+    ui = ctx.createGain(); ui.gain.value = Engine.state.settings.audio.ui; ui.connect(master);
   };
-  const setLevels=()=>{ if(!ctx) return;
-    master.gain.value=Engine.state.settings.audio.master;
-    ui.gain.value=Engine.state.settings.audio.ui;
-    amb.gain.value=Engine.state.settings.audio.amb;
-    drums.gain.value=Engine.state.settings.audio.drums;
-  };
-  const click=()=>{ ensure(); const t=ctx.currentTime;
-    const o=ctx.createOscillator(); o.type='square';
-    o.frequency.setValueAtTime(jitter(300),t);
-    o.frequency.exponentialRampToValueAtTime(jitter(120),t+.09);
-    const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(.28, t+.01);
-    g.gain.exponentialRampToValueAtTime(.0001, t+.16);
+  const setLevels = ()=>{ if(!ctx) return; master.gain.value = Engine.state.settings.audio.master; ui.gain.value = Engine.state.settings.audio.ui; };
+  const click = ()=>{ ensure(); const t=ctx.currentTime; const o=ctx.createOscillator(); o.type='square';
+    o.frequency.setValueAtTime(300,t); o.frequency.exponentialRampToValueAtTime(120,t+.09);
+    const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.28,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+.16);
     o.connect(g).connect(ui); o.start(t); o.stop(t+.18);
   };
-  const sfx=(kind)=>{ // success / fail / story
+  const sfx=(kind)=>{
     const sa=Engine.state.settings.audio||{};
     if((kind==='success' && sa.sfx_success===false) || (kind==='fail' && sa.sfx_fail===false) || (kind==='story' && sa.sfx_story===false)) return;
-    ensure(); const t=ctx.currentTime;
-    const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine';
-    const a = kind==='success' ? [jitter(520,0.06), jitter(880,0.06), .18, .24]
-              : kind==='fail' ? [jitter(180,0.06), jitter(90,0.06), .28, .26]
-              : [jitter(320,0.06), jitter(440,0.06), .22, .20];
-    o.frequency.setValueAtTime(a[0],t);
-    o.frequency.exponentialRampToValueAtTime(a[1],t+a[2]*.9);
-    g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(a[3],t+.015);
-    g.gain.exponentialRampToValueAtTime(.0001,t+a[2]);
+    ensure(); const t=ctx.currentTime; const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine';
+    const a = kind==='success' ? [520, 880, .18, .24] : kind==='fail' ? [180,  90, .28, .26] : [320, 440, .22, .20];
+    o.frequency.setValueAtTime(a[0],t); o.frequency.exponentialRampToValueAtTime(a[1],t+a[2]*.9);
+    g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(a[3],t+.015); g.gain.exponentialRampToValueAtTime(.0001,t+a[2]);
     o.connect(g).connect(ui); o.start(t); o.stop(t+a[2]+.05);
   };
-  const ambOn=()=>ensure();
-  return {click, sfx, ambOn, setLevels, ensure};
+  const ambOn = ()=>ensure(); // for legacy calls
+  return {click, sfx, ambOn, setLevels, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
@@ -134,96 +141,137 @@ const Weaver = makeWeaver(store,
 
 /* ---------- boot ---------- */
 export function boot(){
-  buildUI(); hydrate(); bind(); renderAll();
+  buildUI(); hydrate(); bind(); renderAll(); BGM.attachWidget();
   attachGlossTips(document.body);
   insertIntro(); // overlay every load
+  tuneIntroLayout();
+  mountScrollFab();
   const seen = store.get('intro_seen', false);
-  if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); mountScrollFab(); }
-  Sound.ambOn();
+  if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); }
+  /* ambience removed */ BGM.updateForState(Engine.state);
+  spawnMotes('motes', 24);
 }
 
-// --- Edge-aware glossary tooltips -------------------------------
-function attachGlossTips(root){
-  // Works with: <span class="gloss" data-def="Meaning...">Key term</span>
-  const MARGIN = 12;                // keep tips off the edges
-  const SHOW_DELAY = 100;           // ms
-  let showTimer = null;
+(function(){
+  const st=document.createElement('style'); st.id='runtime-patches'; st.textContent='\n/* runtime style patches */\n#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {\n  background:#0d141a !important; color:#D5A84A !important; border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);\n}\n#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }\n#nowplay{ position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; opacity: 0; transition: opacity .35s ease; pointer-events: none; }\n#nowplay.show{ opacity: 1; }\n#letterbox{ transition: opacity .45s ease; }\n#letterbox.hidden{ opacity: 0; }\n#story{ overflow-y:auto; overflow-x:hidden; position:relative; }\n.glow-success:hover, .glow-fail:hover { text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45); }\n.gloss::after { content: \'\' !important; } /* suppress ? icon */\n'; document.head.appendChild(st);
+})();
 
-  // Create or reuse a tip element on a term
+
+// --- Glossary tooltips (debounced, fade-only; optional Alt to pin) ---
+function attachGlossTips(root){
+  const MARGIN = 12;
+  const SHOW_DELAY = 100;
+  const REARM_DELAY = 500; // prevent rapid re-triggers on the same term
+  let showTimer = null, lastTerm = null, lastHideAt = 0, pinned = null;
+
   function ensureTip(term){
     let tip = term.querySelector('.gloss-tip');
     if (!tip){
       tip = document.createElement('span');
       tip.className = 'gloss-tip';
-      tip.textContent = term.dataset.def || '';
-      tip.style.position = 'fixed';
-      tip.style.left = '0';
-      tip.style.top = '0';
-      tip.style.maxWidth = 'min(28rem, calc(100vw - 32px))';
-      tip.style.pointerEvents = 'none';
-      tip.style.opacity = '0';
-      tip.style.transform = 'translate3d(0,0,0)';
+      tip.textContent = term.getAttribute('data-def') || term.dataset.def || '';
       term.appendChild(tip);
     }
     return tip;
   }
-  function placeTip(tip, x, y){
+  function placeNear(term, tip){
+    // place once near the term; do not track cursor to avoid "swoop"
+    const r = term.getBoundingClientRect();
     const vw = window.innerWidth, vh = window.innerHeight;
-    // pre-measure so we can nudge
-    tip.style.opacity = '0';
-    tip.style.visibility = 'hidden';
-    tip.style.transform = 'translate3d(-9999px,-9999px,0)';
-    // force layout
+    tip.style.opacity = '0'; tip.style.visibility = 'hidden';
+    tip.style.left = '0'; tip.style.top = '0'; // reset
+    tip.style.position = 'fixed';
+    // pre-measure
+    tip.style.transform = 'translate(-9999px,-9999px)';
     const w = tip.offsetWidth, h = tip.offsetHeight;
 
-    let nx = x + 16, ny = y + 8; // default offset from cursor
-    if (nx + w + MARGIN > vw) nx = vw - w - MARGIN;
-    if (ny + h + MARGIN > vh) ny = vh - h - MARGIN;
-    if (nx < MARGIN) nx = MARGIN;
-    if (ny < MARGIN) ny = MARGIN;
-
-    tip.style.visibility = 'visible';
-    tip.style.transform = `translate3d(${nx}px, ${ny}px, 0)`;
-    tip.style.opacity = '1';
+    let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, r.right + 14));
+    let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, r.bottom + 8));
+    tip.style.transform = `translate(${nx}px, ${ny}px)`;
+    tip.classList.add('on'); // CSS handles fade only
   }
 
   root.addEventListener('mouseenter', (ev)=>{
-    const term = ev.target.closest('.gloss');
-    if (!term) return;
+    const term = ev.target.closest('.gloss'); if (!term) return;
+    if (term === lastTerm && (Date.now() - lastHideAt) < REARM_DELAY) return;
     const tip = ensureTip(term);
+    tip.textContent = term.getAttribute('data-def') || term.dataset.def || '';
     clearTimeout(showTimer);
-    showTimer = setTimeout(()=> {
-      tip.classList.add('on');
-      // initial placement near the term
-      const r = term.getBoundingClientRect();
-      placeTip(tip, r.right, r.bottom);
+    showTimer = setTimeout(()=>{
+      placeNear(term, tip);
+      lastTerm = term;
     }, SHOW_DELAY);
   }, true);
 
-  root.addEventListener('mousemove', (ev)=>{
-    const term = ev.target.closest('.gloss');
-    if (!term) return;
-    const tip = term.querySelector('.gloss-tip');
-    if (!tip || tip.style.opacity === '0') return;
-    placeTip(tip, ev.clientX, ev.clientY);
-  }, true);
-
   root.addEventListener('mouseleave', (ev)=>{
-    const term = ev.target.closest('.gloss');
-    if (!term) return;
+    const term = ev.target.closest('.gloss'); if (!term) return;
     clearTimeout(showTimer);
     const tip = term.querySelector('.gloss-tip');
-    if (tip){
+    if (tip && !pinned){
       tip.classList.remove('on');
-      tip.style.opacity = '0';
       tip.style.visibility = 'hidden';
+      lastHideAt = Date.now();
+    }
+  }, true);
+
+  // Alt to pin while visible; click anywhere to banish
+  root.addEventListener('keydown', (e)=>{
+    if (e.altKey && lastTerm){
+      pinned = ensureTip(lastTerm);
+      pinned.style.pointerEvents = 'auto';
+    }
+  });
+  window.addEventListener('click', ()=>{
+    if (pinned){
+      pinned.classList.remove('on');
+      pinned.style.visibility = 'hidden';
+      pinned = null;
+      lastHideAt = Date.now();
     }
   }, true);
 }
 // ----------------------------------------------------------------
 
-
 // --- COMPLETE, DROP-IN INTRO ------------------------------------
+
+// Ensure intro copy sits on right half (left-justified), with chevron markers.
+function tuneIntroLayout(){
+  const intro = document.getElementById('intro'); if(!intro) return;
+  intro.classList.add('two-pane');
+  intro.querySelectorAll('.slide .copy').forEach(copy=>{
+    Object.assign(copy.style, {
+      position:'relative',
+      display:'flex',
+      alignItems:'flex-start',
+      justifyContent:'flex-end',
+      padding:'10vh 6vw 4vh 4vw'
+    });
+  });
+  intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
+    Object.assign(sc.style, {
+      width:'46vw',
+      maxWidth:'46vw',
+      textAlign:'left',
+      lineHeight:'1.65',
+      marginTop:'1.5vh'
+    });
+    sc.querySelectorAll('p').forEach(p=>{
+      p.style.position='relative';
+      if(!p.querySelector('.para-chevron')){
+        const mark=document.createElement('span');
+        mark.className='para-chevron';
+        Object.assign(mark.style, {
+          position:'absolute', left:'18px', top:'0.2em', width:'10px', height:'10px',
+          borderLeft:'2px solid rgba(213,168,74,0.9)',
+          borderBottom:'2px solid rgba(213,168,74,0.9)',
+          transform:'skew(-8deg) rotate(-45deg)',
+          filter:'drop-shadow(0 0 4px rgba(213,168,74,.45))'
+        });
+        p.prepend(mark);
+      }
+    });
+  });
+}
 function insertIntro(){
   // DOM-aware guard so we never stack duplicate intros
   const existing = document.getElementById('intro');
@@ -239,10 +287,26 @@ function insertIntro(){
 
   // Cache refs
   Engine.el.intro    = document.getElementById('intro');
+  if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
+  if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
+  Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
 
+  // Motes behind intro, below copy/images
+if (!document.getElementById('motesIntro')){
+  const m = document.createElement('div'); m.id = 'motesIntro'; m.setAttribute('aria-hidden','true');
+  Engine.el.intro.prepend(m);
+  spawnMotes('motesIntro', 22);
+}
+  // Title at top of slides with double underline
+if (!Engine.el.intro.querySelector('.intro-title')){
+  const t = document.createElement('div');
+  t.className = 'intro-title u-double-underline';
+  t.textContent = 'Brassreach';
+  Engine.el.intro.appendChild(t);
+}
   // Glossary tooltips (edge-aware)
   attachGlossTips(Engine.el.intro);
 
@@ -281,7 +345,7 @@ function insertIntro(){
   skip1 && skip1.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
 
   if (Engine.el.beginBtn){
-    Engine.el.beginBtn.onclick = ()=>{
+    Engine.el.beginBtn.onclick=()=>{ BGM.crossTo('prelude');
       Sound.click();
       Engine.el.intro.classList.add('hidden');
       store.set('intro_seen', true);
@@ -293,27 +357,39 @@ function insertIntro(){
 
   // Start at the first slide
   show(0);
+  tuneIntroLayout();
 }
 
 /* ---------- DOM ---------- */
 function buildUI(){
   document.body.innerHTML = `
   <div class="app">
+    <div class="crest" aria-hidden="true"></div>
+    <div id="motes" aria-hidden="true"></div>
+    <div id="letterbox" class="letterbox hidden"><div class="bar top"></div><div class="bar bottom"></div></div>
     <div class="masthead">
-      <div class="brand-title">Brassreach</div>
-      <div class="toolbar cardish">
+      <div class="brand-title u-double-underline">Brassreach</div>
+      <div class="toolbar cardish frame">
         <div class="controls">
+          <svg id="sealsRing" viewBox="0 0 100 100" aria-label="Seals">
+            <circle class="bg" cx="50" cy="50" r="40" />
+            <circle id="sealsArc" class="arc" cx="50" cy="50" r="40" />
+          </svg>
           <button id="btnEnd" class="btn">End the Story</button>
           <button id="btnSettings" class="btn">Settings</button>
+          <button id="btnGloss" class="btn">Highlight Terms</button>
+          <button id="btnSnap" class="btn">Snapshot</button>
           <span class="tag">Engine: <b id="engineTag">Local</b></span>
         </div>
       </div>
     </div>
 
+    <div class="pacing" id="pacing"><div class="chip" data-i="0">Explore</div><div class="chip" data-i="1">Light Check</div><div class="chip" data-i="2">Explore</div><div class="chip" data-i="3">Risk Choice</div></div>
+
     <div class="main">
       <section class="storywrap">
-        <div id="story" class="story-scroll"></div>
-        <div class="choices">
+        <div id="story" class="story-scroll frame"></div>
+        <div class="choices frame">
           <div id="choices"></div>
           <div class="free">
             <input id="freeText" placeholder="Write your own action (e.g., search the alcove, read the tablet)" />
@@ -324,15 +400,15 @@ function buildUI(){
       </section>
 
       <aside class="side">
-        <div class="card deco">
+        <div class="card deco frame">
           <h3 style="text-align:center;">Character <button id="btnEdit" class="btn mini">Edit</button></h3>
           <div id="charPanel" class="centered"></div>
         </div>
-        <div class="card deco">
+        <div class="card deco frame">
           <h3 style="text-align:center;">Ledger</h3>
           <div id="ledgerPanel" class="centered"></div>
         </div>
-        <div class="card deco">
+        <div class="card deco frame">
           <h3 style="text-align:center;">Session</h3>
           <div class="centered" style="line-height:1.6">
             <div>Seed: <span id="seedVal"></span></div>
@@ -341,10 +417,17 @@ function buildUI(){
           </div>
         </div>
       </aside>
+    
+    <div id="nowplay" class="nowplay frame">
+      <div class="np-inner">
+        <span class="np-dot" aria-hidden="true"></span>
+        <span class="np-label">Now Playing:</span>
+        <span id="npTitle">—</span>
+        <button id="npMute" class="btn mini" style="margin-left:auto;">Mute</button>
+      </div>
     </div>
-  </div>
 
-  <div id="shade" class="shade hidden"></div>
+  <div id="shade"  class="shade hidden"></div>
 
   <!-- Character modal -->
   <div id="modalEdit" class="modal hidden">
@@ -380,6 +463,10 @@ function buildUI(){
     <header><div>Settings</div><div id="xSet" class="closeX">✕</div></header>
     <div class="content">
       <div class="grid2">
+        <div>
+          <h4>Accessibility</h4>
+          <label><input type="checkbox" id="hcMode"> High-contrast mode</label>
+        </div>
         <div>
           <h4>Typewriter</h4>
           <label><input type="checkbox" id="twOn"> Enable</label><br>
@@ -435,15 +522,17 @@ function buildUI(){
   `;
 
   // cache
+  document.querySelectorAll('.frame').forEach(el=>{['tl','tr','bl','br'].forEach(pos=>{const s=document.createElement('span'); s.className='chev '+pos; el.appendChild(s);});});
   Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
+  if(!document.getElementById('storyBottomLine')){ const line=document.createElement('div'); line.id='storyBottomLine'; Object.assign(line.style,{position:'absolute',left:'0',right:'0',bottom:'0',height:'2px',boxShadow:'inset 0 -2px 0 0 rgba(213,168,74,.75)'}); Engine.el.story.appendChild(line);}
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
-  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings');
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.btnGloss=$('#btnGloss'); Engine.el.btnSnap=$('#btnSnap'); Engine.el.sealsArc=$('#sealsArc'); Engine.el.pacing=$('#pacing');
 
   Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
   Engine.el.btnEdit=$('#btnEdit');
-  Engine.el.shade=$('#shade');
+  Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle'); Engine.el.npMute=$('#npMute');
 
   // character modal refs
   Engine.el.modalEdit=$('#modalEdit'); Engine.el.xEdit=$('#xEdit');
@@ -454,6 +543,9 @@ function buildUI(){
 
   
   // settings
+  if(Engine.el.btnGloss){ Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); }; }
+  if(Engine.el.btnSnap){ Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); }; }
+  if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
   if(Engine.el.btnGloss){
     Engine.el.btnGloss.onclick=()=>{
       document.body.classList.add('show-gloss');
@@ -473,7 +565,7 @@ Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.aMaster=$('#aMaster'); Engine.el.aUi=$('#aUi'); Engine.el.aAmb=$('#aAmb'); Engine.el.aDrums=$('#aDrums'); Engine.el.sfxSuccess=$('#sfxSuccess'); Engine.el.sfxFail=$('#sfxFail'); Engine.el.sfxStory=$('#sfxStory');
   Engine.el.dmEndpoint=$('#dmEndpoint'); Engine.el.btnLiveToggle=$('#btnLiveToggle');
   Engine.el.btnSave=$('#btnSave'); Engine.el.btnLoad=$('#btnLoad'); Engine.el.btnExport=$('#btnExport'); Engine.el.btnUndo=$('#btnUndo');
-  Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll');
+  Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll'); Engine.el.hcMode=$('#hcMode');
 
   // scroll modal
   Engine.el.modalScroll=$('#modalScroll'); Engine.el.xScroll=$('#xScroll'); Engine.el.scrollContent=$('#scrollContent');
@@ -481,6 +573,9 @@ Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   // epilogue modal
   Engine.el.modalEpi=$('#modalEpi'); Engine.el.xEpi=$('#xEpi'); Engine.el.epiTitle=$('#epiTitle'); Engine.el.epiContent=$('#epiContent'); Engine.el.btnEpiRestart=$('#btnEpiRestart');
 }
+// runtime cleanup: remove deprecated Highlight Terms button
+try{ const g=document.getElementById('btnGloss'); if(g) g.remove(); }catch{};
+
 
 /* ---------- floating Scroll button (SVG) ---------- */
 function mountScrollFab(){
@@ -542,7 +637,10 @@ function bind(){
   Engine.el.btnEditCancel.onclick=()=>close(Engine.el.modalEdit);
 
   // settings
-  Engine.el.btnSettings.onclick=()=>{ Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps;
+  if(Engine.el.btnGloss){ Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); }; }
+  if(Engine.el.btnSnap){ Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); }; }
+  if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
+  Engine.el.btnSettings.onclick=()=>{ Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps; if(Engine.el.hcMode) Engine.el.hcMode.checked=document.body.classList.contains('hc');
     Engine.el.aMaster.value=S.settings.audio.master; Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aAmb.value=S.settings.audio.amb; Engine.el.aDrums.value=S.settings.audio.drums;
     Engine.el.dmEndpoint.value=S.live.endpoint; Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On';
     Engine.el.sfxSuccess.checked = (S.settings.audio.sfx_success!==false);
@@ -573,11 +671,17 @@ function bind(){
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') Engine.el.shade.onclick(); });
 
   // main actions
-  Engine.el.btnCont.onclick=()=>doNarrate({ sentence:'' }); // silent advance
+  Engine.el.btnCont.onclick=()=>{ if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(); return; } doNarrate({ sentence:'' }); }; // silent advance
   Engine.el.btnAct.onclick=()=>freeText();
   Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
 
   Engine.el.btnEnd.onclick=endTale;
+  document.addEventListener('keydown', (e)=>{
+  if (e.shiftKey && e.key.toLowerCase() === 'd'){
+    const t = document.getElementById('npTitle')?.textContent || '—';
+    alert(`BGM: ${t}`);
+  }
+});
 }
 
 /* ---------- render ---------- */
@@ -602,15 +706,29 @@ function renderAll(){
   if (F.bossDealtWith) lines.push(`<div>Unfathomer dealt with: yes</div>`);
   Engine.el.ledgerPanel.innerHTML = lines.join('');
 
+
+  // Seals ring arc
+  try{
+    const sealsCt = (F.seals||[]).length; const circ = 2*Math.PI*40; const frac = Math.min(1, sealsCt/3); 
+    const dash = Math.max(0.0001, circ*frac);
+    if(Engine.el.sealsArc){ Engine.el.sealsArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
+  }catch{}
+  // Pacing chips
+  try{
+    if(Engine.el.pacing){ const k = s.turn % 4; Array.from(Engine.el.pacing.children).forEach((c,i)=>c.classList.toggle('on', i===k)); }
+  }catch{}
+
   // Story
+
   Engine.el.story.innerHTML='';
   for(const beat of s.storyBeats){
     const p=document.createElement('p');
     p.classList.add('beat');
     p.innerHTML=beat.html?beat.html:esc(beat.text);
     if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
-    if(beat.kind==='success') p.classList.add('glow-success');
-    if(beat.kind==='fail') p.classList.add('glow-fail');
+    if(beat.kind==='success'){ p.classList.add('glow-success'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#D5A84A'; }
+    if(beat.kind==='fail'){ p.classList.add('glow-fail'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#A12525'; }
+    if(beat.kind==='story') p.classList.add('glow-story');
     Engine.el.story.appendChild(p);
   }
   Engine.el.story.scrollTop=Engine.el.story.scrollHeight;
@@ -629,7 +747,7 @@ function beginTale(){
   S.flags={rumors:false,seals:[],bossReady:false,bossDealtWith:false};
   appendBeat("Lanterns throw steady light across carved lintels and iron mosaics. Word passes of a slow, otherworldly tide called the Unfathomer, pooling in the buried cisterns. You wait at the mouth of the Halls, where corridors open like patient books.");
   renderChoices(makeChoiceSet(S.scene));
-  S.turn++; renderAll();
+  S.turn++; renderAll(); BGM.updateForState(Engine.state);
 }
 function endTale(){
   const S=Engine.state, C=S.character;
@@ -703,7 +821,7 @@ function applyTurn(resp,roll){
 
   const kind = roll ? (roll.total>=roll.dc ? 'success':'fail') : 'story';
   const html = resp?.story_paragraph_html || null;
-  appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, (kind==='success'?'success':(kind==='fail'?'fail':null)), html);
+  appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, kind, html);
   Sound.sfx(kind);
 
   if (S.character.HP<=0){
@@ -713,11 +831,12 @@ function applyTurn(resp,roll){
     Engine.el.epiContent.textContent = dead;
     openModal(Engine.el.modalEpi);
     renderChoices([]);
-    S.turn++; renderAll(); return;
+    S.turn++; renderAll(); BGM.updateForState(Engine.state); return;
   }
 
+  if(kind==='story'){ cinematicFocus(); }
   const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
-  renderChoices(next); S.turn++; renderAll();
+  renderChoices(next); S.turn++; renderAll(); BGM.updateForState(Engine.state);
 }
 
 /* ---------- local DM with four-beat spine ---------- */
@@ -891,7 +1010,7 @@ function getIntroSlidesHTML(){
       <div class="mist" aria-hidden="true"></div>
     </section>
 
-    <section class="slide s2" data-side="img-right" aria-label="Slide 2">
+    <section class="slide s2" data-side="img-left" aria-label="Slide 2">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
         <p>Deep below gathers the <span class="gloss" data-def="A slow, deliberate tide that learns rhythm and pushes where the city is out of tune.">Unfathomer</span>, a standing <span class="gloss" data-def="Many tones sounding as one; where channels agree it stands firm, where they argue it reaches through.">chorus</span> taught by centuries of bells. Once, the <span class="gloss" data-def="The old rule that kept channels, bells, and gates in tune so the chorus rested.">Cadence Law</span> held it calm. Now cheap metal and careless renovations have pulled the city off pitch. Brassreach answers with the <span class="gloss" data-def="Ancient instruments of authority that bind by place, right, and pattern.">Three Seals</span>—<span class="gloss" data-def="Binds by weight and place; makes passages remember resistance.">Stone</span>, <span class="gloss" data-def="Binds by right; enforces oaths on gates and devices.">Brass</span>, and <span class="gloss" data-def="Binds by pattern; holds a spoken cadence after the voice is gone.">Echo</span>. In the stacks, <span class="gloss" data-def="Archivist of the Lower Stacks; believes the chorus can be bargained with using true measures.">Lithen the Wise</span> argues for treaty. In the foundries, <span class="gloss" data-def="Warden of the Brassworks; would retune the city by force and throttle the culverts.">Mullinen the Stout</span> argues for clamps and spikes. Between them stands your line in the dark.</p>
@@ -916,27 +1035,59 @@ function getQuickTablesHTML(){
     <hr class="sep"/>
     <div class="quick-tables">
       <h4>Codex: Keys & Measures</h4>
-      <div class="grid2"><div>
-        <h5>Three Seals (Keys)</h5>
-        <ul><li><b>Stone</b> — Authority of the makers.</li><li><b>Brass</b> — Trade, craft, and oaths.</li><li><b>Echo</b> — Memory of the waters.</li></ul>
-        <p><em>Two</em> Seals wake the Gate; <em>all three</em> open the richest endings.</p>
-      </div><div>
-        <h5>Four Measures</h5>
-        <ul><li><b>Tune</b> — Align yourself to a rhythm; listen and adapt.</li><li><b>Name</b> — Call a thing truly; identify patterns and forces.</li><li><b>Measure</b> — Quantify and map; compare, test, and verify.</li><li><b>Decide</b> — Commit and act; accept consequences with resolve.</li></ul>
-      </div></div>
+      <div class="grid2">
+        <div>
+          <h5>Three Seals (Keys)</h5>
+          <ul>
+            <li><b>Stone</b> — Authority of the makers.</li>
+            <li><b>Brass</b> — Trade, craft, and oaths.</li>
+            <li><b>Echo</b> — Memory of the waters.</li>
+          </ul>
+          <p><em>Two</em> Seals wake the Gate; <em>all three</em> open the richest endings.</p>
+        </div>
+        <div>
+          <h5>Four Measures</h5>
+          <ul>
+            <li><b>Tune</b> — Align yourself to a rhythm; listen and adapt.</li>
+            <li><b>Name</b> — Call a thing truly; identify patterns and forces.</li>
+            <li><b>Measure</b> — Quantify and map; compare, test, and verify.</li>
+            <li><b>Decide</b> — Commit and act; accept consequences with resolve.</li>
+          </ul>
+        </div>
+      </div>
       <h5>Complications (Examples)</h5>
       <ul><li>Flood pulse forces a detour</li><li>Warden patrol crosses your path</li><li>Old mechanism shifts the floor plates</li></ul>
     </div>`;
 }
 
-
 function getIntroScrollHTML(){
   return `
-  <div class="scroll">
-    ${$('#intro .s1 .scroll')?.innerHTML||''}
-    ${$('#intro .s2 .scroll')?.innerHTML||''}
-    ${$('#intro .s3 .scroll')?.innerHTML||''}
-  </div>`;
+    <hr class="sep"/>
+    <div class="quick-tables">
+      <h4>Codex: Keys & Measures</h4>
+      <div class="grid2">
+        <div>
+          <h5>Three Seals (Keys)</h5>
+          <ul>
+            <li><b>Stone</b> — Authority of the makers.</li>
+            <li><b>Brass</b> — Trade, craft, and oaths.</li>
+            <li><b>Echo</b> — Memory of the waters.</li>
+          </ul>
+          <p><em>Two</em> Seals wake the Gate; <em>all three</em> open the richest endings.</p>
+        </div>
+        <div>
+          <h5>Four Measures</h5>
+          <ul>
+            <li><b>Tune</b> — Align yourself to a rhythm; listen and adapt.</li>
+            <li><b>Name</b> — Call a thing truly; identify patterns and forces.</li>
+            <li><b>Measure</b> — Quantify and map; compare, test, and verify.</li>
+            <li><b>Decide</b> — Commit and act; accept consequences with resolve.</li>
+          </ul>
+        </div>
+      </div>
+      <h5>Complications (Examples)</h5>
+      <ul><li>Flood pulse forces a detour</li><li>Warden patrol crosses your path</li><li>Old mechanism shifts the floor plates</li></ul>
+    </div>`;
 }
 
 
@@ -944,4 +1095,82 @@ function getIntroScrollHTML(){
 function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); }
 function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
 
+
+
+/* ---------- cinematic focus (letterbox) ---------- */
+function cinematicFocus(){
+  const lb = document.getElementById('letterbox'); if(!lb) return;
+  lb.classList.remove('hidden'); lb.style.opacity='1';
+  setTimeout(()=>{ lb.style.opacity='0'; setTimeout(()=> lb.classList.add('hidden'), 480); }, 1220);
+}
+/* ---------- snapshot export ---------- */
+function exportSnapshot(){
+  try{
+    const canvas = document.createElement('canvas'); const W=1200,H=675; canvas.width=W; canvas.height=H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle='#0c0f12'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#715322'; ctx.globalAlpha=.28; ctx.lineWidth=6;
+    ctx.beginPath(); ctx.arc(W/2, H/2-20, 180, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=1; ctx.fillStyle='#f1e6bb'; ctx.font='700 42px Cinzel, serif'; ctx.textAlign='center';
+    ctx.fillText('BRASSREACH', W/2, 70);
+    const seals=(Engine.state.flags.seals||[]).join(', ')||'—';
+    ctx.font='18px Josefin Sans, sans-serif'; ctx.fillText('Keys: '+seals, W/2, 105);
+    const lines=Engine.state.transcript.slice(-6); ctx.textAlign='left'; ctx.font='20px Georgia, serif'; let y=170; const x=90;
+    for(const line of lines){ const words=line.split(' '); let cur=''; for(const w of words){ const t=cur+w+' '; if(ctx.measureText(t).width>W-180){ ctx.fillText(cur,x,y); y+=30; cur=w+' '; } else cur=t; } if(cur){ ctx.fillText(cur,x,y); y+=36; } if(y>H-80) break; }
+    ctx.font='16px Josefin Sans, sans-serif'; ctx.textAlign='right'; ctx.fillText(`Turn ${Engine.state.turn} · Scene ${Engine.state.scene}`, W-40, H-30);
+    canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='brassreach_snapshot.png'; a.click(); URL.revokeObjectURL(a.href); }, 'image/png', .92);
+  }catch(e){ console.error(e); }
+}
+
+/* ---------- motes ---------- */
+function spawnMotes(where='motes', n=20){
+  const root=document.getElementById(where); if(!root) return;
+  for(let i=0;i<n;i++){
+    const s=document.createElement('span'); s.className='mote';
+    const spawnX = Math.random()*100;                       // vw
+    const spawnY = 60 + Math.random()*40;                   // vh (low on screen)
+    const sway   = (Math.random()*30-15).toFixed(1)+'px';   // ±15px
+    const dur    = (14 + Math.random()*12).toFixed(1)+'s';  // 14–26s
+
+    s.style.setProperty('--spawn-x', spawnX+'vw');
+    s.style.setProperty('--spawn-y', spawnY+'vh');
+    s.style.setProperty('--sway', sway);
+    s.style.setProperty('--dur', dur);
+    root.appendChild(s);
+  }
+}
+
+
+/* ----- override: JS-animated motes (non-linear rise, fade out) ----- */
+function spawnMotes(where='motes', count=24){
+  const host = document.getElementById(where);
+  if(!host) return;
+  host.style.pointerEvents='none';
+  function addOne(){
+    const m = document.createElement('span');
+    m.className='mote';
+    const vx = Math.random()*window.innerWidth;
+    const startY = window.innerHeight*0.92 + Math.random()*40;
+    const dur = 14000 + Math.random()*11000; // 14–25s
+    const size = 3 + Math.random()*4;
+    const amp = 16 + Math.random()*18;
+    const born = performance.now();
+    m.style.position='fixed'; m.style.left='0'; m.style.top='0'; m.style.width=size+'px'; m.style.height=size+'px'; m.style.borderRadius='50%';
+    m.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,.95), rgba(255,200,140,0) 68%)';
+    m.style.filter='brightness(1.2)';
+    host.appendChild(m);
+    function tick(t){
+      const s = Math.min(1, (t-born)/dur);
+      const ease = s<.18 ? (s/0.18)**1.4 : s; // quicker lift, then steady
+      const y = startY - ease*(window.innerHeight*0.55);
+      const x = vx + Math.sin((t-born)/1300)*amp;
+      m.style.transform = `translate(${x}px, ${y}px)`;
+      m.style.opacity = (s<.08? s*12 : 1 - (s-0.08)/0.92);
+      if(s < 1) requestAnimationFrame(tick); else m.remove();
+    }
+    requestAnimationFrame(tick);
+  }
+  for(let i=0;i<count;i++) setTimeout(addOne, i*220);
+  setInterval(addOne, 700);
+}
 
