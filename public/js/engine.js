@@ -1142,35 +1142,50 @@ function spawnMotes(where='motes', n=20){
 
 
 /* ----- override: JS-animated motes (non-linear rise, fade out) ----- */
-function spawnMotes(where='motes', count=24){
-  const host = document.getElementById(where);
-  if(!host) return;
-  host.style.pointerEvents='none';
-  function addOne(){
-    const m = document.createElement('span');
-    m.className='mote';
-    const vx = Math.random()*window.innerWidth;
-    const startY = window.innerHeight*0.92 + Math.random()*40;
-    const dur = 14000 + Math.random()*11000; // 14–25s
-    const size = 3 + Math.random()*4;
-    const amp = 16 + Math.random()*18;
-    const born = performance.now();
-    m.style.position='fixed'; m.style.left='0'; m.style.top='0'; m.style.width=size+'px'; m.style.height=size+'px'; m.style.borderRadius='50%';
-    m.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,.95), rgba(255,200,140,0) 68%)';
-    m.style.filter='brightness(1.2)';
-    host.appendChild(m);
-    function tick(t){
-      const s = Math.min(1, (t-born)/dur);
-      const ease = s<.18 ? (s/0.18)**1.4 : s; // quicker lift, then steady
-      const y = startY - ease*(window.innerHeight*0.55);
-      const x = vx + Math.sin((t-born)/1300)*amp;
-      m.style.transform = `translate(${x}px, ${y}px)`;
-      m.style.opacity = (s<.08? s*12 : 1 - (s-0.08)/0.92);
-      if(s < 1) requestAnimationFrame(tick); else m.remove();
+(()=> {
+  const jsAnimatedSpawnMotes = function(where='motes', count=24){
+    const host = document.getElementById(where);
+    if(!host) return;
+    host.style.pointerEvents='none';
+
+    function addOne(){
+      const m = document.createElement('span');
+      m.className='mote';
+
+      const vx = Math.random()*window.innerWidth;
+      const startY = window.innerHeight*0.92 + Math.random()*40;
+      const dur = 14000 + Math.random()*11000; // 14–25s
+      const size = 3 + Math.random()*4;
+      const amp = 16 + Math.random()*18;
+      const born = performance.now();
+
+      m.style.position='fixed';
+      m.style.left='0';
+      m.style.top='0';
+      m.style.width=size+'px';
+      m.style.height=size+'px';
+      m.style.borderRadius='50%';
+      m.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,0.95), rgba(255,200,140,0) 68%)';
+      m.style.filter='brightness(1.2)';
+      host.appendChild(m);
+
+      function tick(t){
+        const s = Math.min(1, (t-born)/dur);
+        const ease = s<.18 ? Math.pow(s/0.18, 1.4) : s; // quicker lift, then steady
+        const y = startY - ease*(window.innerHeight*0.55);
+        const x = vx + Math.sin((t-born)/1300)*amp;
+        m.style.transform = `translate(${x}px, ${y}px)`;
+        m.style.opacity = (s<.08 ? s*12 : 1 - (s-0.08)/0.92);
+        if(s < 1) requestAnimationFrame(tick); else m.remove();
+      }
+      requestAnimationFrame(tick);
     }
-    requestAnimationFrame(tick);
-  }
-  for(let i=0;i<count;i++) setTimeout(addOne, i*220);
-  setInterval(addOne, 700);
-}
+
+    for(let i=0;i<count;i++) setTimeout(addOne, i*220);
+    setInterval(addOne, 700);
+  };
+
+  // Promote override without redeclaring the top-level name:
+  window.spawnMotes = jsAnimatedSpawnMotes;
+})();
 
