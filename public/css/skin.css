@@ -103,7 +103,12 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 
 /* Split title: BRASS (gold) | REACH (bronze) */
 .brand-title .title-left,
-.intro-title .title-left { color: var(--gold); letter-spacing: 0.12em; }
+.intro-title .title-left {
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  display: inline-block;
+  transform: translateX(1.8rem); /* move BRASS toward the seam */
+}
 .brand-title .title-right,
 .intro-title .title-right{ color: var(--bronze); letter-spacing: 0.12em; }
 
