@@ -354,20 +354,21 @@ input[type="number"]{accent-color:var(--gold)}
 .gloss { position: relative; font-weight: 800; color: var(--gold); text-shadow: 0 0 8px rgba(213,168,74,.3); cursor: help; }
 .gloss:hover { color: var(--bronze); }
 .gloss::after { content:'' !important; }
+
 .gloss-tip {
   position: fixed;
   z-index: 9999;
   max-width: min(28rem, calc(100vw - 32px));
   pointer-events: none;
   background: rgba(14,14,18,.96);
-  color: var(--ink-100);
+  color: var(--ink);
   border: 1px solid rgba(255,184,84,.45);
   outline: 1px solid rgba(255,184,84,.18);
   padding: 10px 12px;
   line-height: 1.25;
   border-radius: 6px;
   box-shadow: 0 10px 24px rgba(0,0,0,.45), inset 0 0 18px rgba(255,184,84,.06);
-  filter: drop-shadow(0 0 4px rgba(255, 184, 84, 0.25));
+  filter: drop-shadow(0 0 4px rgba(255,184,84,.25));
   opacity: 0;
   visibility: hidden;
   transform: none !important;
