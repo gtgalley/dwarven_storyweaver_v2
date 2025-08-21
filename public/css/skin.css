@@ -21,7 +21,7 @@ a, button, .btn, [role="button"], [onclick] {
 input[type="text"], input[type="search"], input[type="email"],
 input[type="password"], textarea, [contenteditable="true"] {
   cursor: text; /* system I-beam */
-  
+}  
   /* === Hover shimmer for interactive elements === */
 /* NOTE: provide a glow version of your cursor at:
    public/img/cursor-spear-glow.png  (24–32px, same hotspot ~ 3 2)
