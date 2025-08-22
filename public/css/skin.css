@@ -335,10 +335,19 @@ input[type="number"]{accent-color:var(--gold)}
 
 /* Make the copy area non-scrolling (no scrollbar) but roomy */
 #intro .copy .scroll{
-  overflow: visible; /* no scrollbar */
-  max-width: 70ch;   /* more elbow-room for tooltip popouts */
+  overflow: visible;          /* no scrollbar */
+  max-width: 64ch;            /* slightly wider column */
   padding: 12px 18px;
+  text-align: justify;        /* true justification */
+  text-justify: inter-word;   /* browser hint */
+  margin-left: calc(50vw + 28px); /* sit cleanly to the right of the seam */
+  margin-right: 8vw;               /* equidistant feel vs right edge */
 }
+
+/* Intro: remove chevron bullet + reset left padding created by ::before */
+.intro.two-pane .slide .copy .scroll p::before { content: none !important; }
+.intro.two-pane .slide .copy .scroll p { padding-left: 0 !important; }
+.intro .para-chevron { display: none !important; } /* defensive, if a node exists */
 /* === Intro slideshow: visibility toggle (place AFTER the .slide layout rule) === */
 #intro .slide { 
   /* keep all slide panels hidden by default */
@@ -384,12 +393,18 @@ input[type="number"]{accent-color:var(--gold)}
 .gloss::after,
 .rollglyph::after,
 .roll-help::after { content:'' !important; }
+
 /* Ensure the app underneath never steals focus while intro is open */
 #intro:not(.hidden) ~ .app{ pointer-events: none; }
+
 /* Intro solid backgrounds for contrast */
 .intro .pane{ background:#0a0f14; }
 .intro .txt{ background:#0d1218; }
 #intro .gloss::after { content: '' !important; }
+
+/* Stronger kill-switch for the legacy "?" marker on gloss terms */
+.intro .copy .scroll .gloss::after,
+.story-scroll .gloss::after { content: '' !important; }
 
 /* Story brightness pulse */
 .glow-story{ color:var(--ink2); animation:storyGlow 5.5s ease-in-out 1; }
@@ -434,6 +449,7 @@ input[type="number"]{accent-color:var(--gold)}
   50%{ filter: brightness(1.15) drop-shadow(0 0 14px rgba(213,168,74,.15)); }
   100%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
 }
+
 /* Ember motes (app & intro layers share the same style) */
 #motes, #motesIntro { position:fixed; inset:0; pointer-events:none; z-index:1; }
 .mote{
@@ -453,9 +469,18 @@ input[type="number"]{accent-color:var(--gold)}
   70%  { opacity: .65;  filter: brightness(1.1); }
   100% { opacity: .0;   transform: translate(calc(var(--spawn-x,0) + var(--sway,0px)), calc(var(--spawn-y,0) - 70vh)) scale(0.85); filter: brightness(.8); }
 }
+
 @keyframes moteSway{
   0%{   transform: translate(var(--spawn-x,0), var(--spawn-y,0)) }
   100%{ transform: translate(calc(var(--spawn-x,0) + var(--sway,0px)), var(--spawn-y,0)) }
+}
+
+/* Motes: allow full exit and a gentle vanish at the very end */
+@keyframes mote-rise {
+  0%   { transform: translateY(0)      translateX(var(--mx,0)); opacity: 0; }
+  7%   { opacity: 1; }                 /* quick ease-in */
+  90%  { opacity: 1; }                 /* stay visible nearly the whole trip */
+  100% { transform: translateY(-110vh) translateX(var(--mx,0)); opacity: 0; }
 }
 
 /* Cinematic letterbox */
