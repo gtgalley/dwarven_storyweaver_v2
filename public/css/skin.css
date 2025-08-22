@@ -75,40 +75,30 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 .boot .box{padding:14px 18px;border:1px solid #2e2a20;border-radius:8px;background:#11161c;color:#e0d6b2}
 .boot.ok{display:none}
 
+/* Crest watermark (main app) */
+.crest{
+  position:fixed; inset:0; pointer-events:none;
+  z-index:1;                /* above page bg, below UI/intro */
+  opacity:.12;              /* bump for visibility; dial back later */
+  background:
+    /* SVG FIRST so it paints on top */
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"><g fill="none" stroke="#715322" stroke-width="8" opacity="0.8"><circle cx="600" cy="580" r="320"/><path d="M280,580 L600,240 L920,580 L600,920 Z"/><path d="M430,580 L600,400 L770,580 L600,760 Z"/><path d="M600,260 L600,900"/><path d="M260,580 L940,580"/></g></svg>') center/60vmin 60vmin no-repeat,
+    radial-gradient(1200px 800px at 20% 8%, #121921 0%, #0c0f12 55%);
+  animation: crestDrift 10s ease-in-out infinite alternate,
+             crestGlow 10s ease-in-out infinite;
+}
+
 /* Crest watermark + parallax container */
 .app{position:relative;min-height:100vh}
-/* Crest watermark */
-.crest{
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;                 /* behind UI, above page bg */
-  opacity: .12;               /* a hair brighter so it’s noticeable */
 
-  /* Put the SVG FIRST so it renders on top; make the gradient slightly translucent */
-  background:
-    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"><g fill="none" stroke="#715322" stroke-width="8" opacity="0.8"><circle cx="600" cy="580" r="320"/><path d="M280,580 L600,240 L920,580 L600,920 Z"/><path d="M430,580 L600,400 L770,580 L600,760 Z"/><path d="M600,260 L600,900"/><path d="M260,580 L940,580"/></g></svg>') center/60vmin 60vmin no-repeat,
-    radial-gradient(1200px 800px at 20% 8%, rgba(18,25,33,.85) 0%, rgba(12,15,18,.85) 55%);
-  animation: crestDrift 10s ease-in-out infinite alternate, crestGlow 10s ease-in-out infinite;
-  background-position: center;
-}
 
-@keyframes crestDrift{
-  0%{ transform: translate3d(0,0,0); }
-  100%{ transform: translate3d(0, -0.8vh, 0); }
-}
-@keyframes crestGlow{
-  0%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
-  50%{ filter: brightness(1.15) drop-shadow(0 0 14px rgba(213,168,74,.15)); }
-  100%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
-}
-
-/* Crest behind the intro as well */
+/* Crest behind the intro overlay */
 #intro::before{
   content:"";
   position: fixed; inset: 0; pointer-events: none; z-index: 0;
   opacity: .14;
   background:
+    /* SVG FIRST again */
     url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"><g fill="none" stroke="#715322" stroke-width="8" opacity="0.8"><circle cx="600" cy="580" r="320"/><path d="M280,580 L600,240 L920,580 L600,920 Z"/><path d="M430,580 L600,400 L770,580 L600,760 Z"/><path d="M600,260 L600,900"/><path d="M260,580 L940,580"/></g></svg>') center/60vmin 60vmin no-repeat,
     radial-gradient(1200px 800px at 20% 8%, rgba(18,25,33,.85) 0%, rgba(12,15,18,.85) 55%);
 }
@@ -116,13 +106,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 /* Subtle bronze/gold glow rising from the bottom during intro */
 #intro::after{
   content:"";
-  position: fixed; left:0; right:0; bottom:0; height: 16vh;
+  position: fixed; left:0; right:0; bottom:0; height: 20vh;
   pointer-events: none; z-index: 1; /* below text, above crest layer */
   background:
     radial-gradient(120% 80% at 50% 100%,
       rgba(213,168,74,.22), rgba(213,168,74,0) 60%);
   animation: emberPulse 10s ease-in-out infinite;
-  filter: saturate(1.1);
+  filter: saturate(1.4);
 }
 @keyframes emberPulse{
   0%,100% { opacity:.55; }
@@ -526,22 +516,6 @@ input[type="number"]{accent-color:var(--gold)}
   opacity:.85;
 }
 
-/* Crest watermark */
-.crest{ position:fixed; inset:0; pointer-events:none; opacity:.06;
-  background:
-    radial-gradient(1200px 800px at 20% 8%, #121921 0%, #0c0f12 55%),
-    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"> <g fill="none" stroke="#715322" stroke-width="8" opacity="0.8">  <circle cx="600" cy="580" r="320"/>  <path d="M280,580 L600,240 L920,580 L600,920 Z"/>  <path d="M430,580 L600,400 L770,580 L600,760 Z"/>  <path d="M600,260 L600,900"/>  <path d="M260,580 L940,580"/> </g></svg>') center/60vmin 60vmin no-repeat;
-  z-index:0; animation: crestDrift 10s ease-in-out infinite alternate, crestGlow 10s ease-in-out infinite; background-position: center;
-}
-@keyframes crestDrift{
-  0%{ transform: translate3d(0,0,0); }
-  100%{ transform: translate3d(0, -0.8vh, 0); }
-}
-@keyframes crestGlow{
-  0%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
-  50%{ filter: brightness(1.15) drop-shadow(0 0 14px rgba(213,168,74,.15)); }
-  100%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
-}
 
 /* Ember motes (app & intro layers share the same style) */
 #motes, #motesIntro { position:fixed; inset:0; pointer-events:none; z-index:1; }
