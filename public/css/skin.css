@@ -7,14 +7,18 @@
 }
 /* === Global cursor: spearhead === */
 /* Applies everywhere, including the intro overlay */
+/* Global cursor */
 html, body, .app, #intro {
-  cursor: url("../img/cursor-spear.png") 3 2, auto;
+  cursor: url(var(--ASSET) 'cursor-spear.png') 3 2, auto;
 }
-
-/* Keep the “clickable” semantics for interactive elements.
-   If the custom image can't load, fallback shows the pointer hand. */
 a, button, .btn, [role="button"], [onclick] {
-  cursor: url("../img/cursor-spear.png") 3 2, pointer;
+  cursor: url(var(--ASSET) 'cursor-spear.png') 3 2, pointer;
+}
+a:hover, button:hover, .btn:hover, [role="button"]:hover, [onclick]:hover {
+  cursor:
+    url(var(--ASSET) 'cursor-spear-glow.png') 3 2,
+    url(var(--ASSET) 'cursor-spear.png') 3 2,
+    pointer;
 }
 
 /* Preserve the I-beam where text editing is expected */
@@ -40,7 +44,6 @@ button:hover,
 [onclick]:hover {
   cursor:
     url("../img/cursor-spear-glow.png") 3 2,
-    url("/public/img/cursor-spear-glow.png") 3 2,
     url("../img/cursor-spear.png") 3 2,
     pointer;
   animation: spearShimmer .9s ease-in-out infinite;
@@ -80,7 +83,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   inset: 0;
   pointer-events: none;
   z-index: 1;                 /* behind UI, above page bg */
-  opacity: .10;               /* a hair brighter so it’s noticeable */
+  opacity: .12;               /* a hair brighter so it’s noticeable */
 
   /* Put the SVG FIRST so it renders on top; make the gradient slightly translucent */
   background:
@@ -104,7 +107,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 #intro::before{
   content:"";
   position: fixed; inset: 0; pointer-events: none; z-index: 0;
-  opacity: .12;
+  opacity: .14;
   background:
     url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"><g fill="none" stroke="#715322" stroke-width="8" opacity="0.8"><circle cx="600" cy="580" r="320"/><path d="M280,580 L600,240 L920,580 L600,920 Z"/><path d="M430,580 L600,400 L770,580 L600,760 Z"/><path d="M600,260 L600,900"/><path d="M260,580 L940,580"/></g></svg>') center/60vmin 60vmin no-repeat,
     radial-gradient(1200px 800px at 20% 8%, rgba(18,25,33,.85) 0%, rgba(12,15,18,.85) 55%);
@@ -365,11 +368,9 @@ input[type="range"]{width:100%}
 }
 /* Left half: image + torn veil that reveals the art */
 #intro .pic{ position: relative; overflow: hidden; }
-#intro .pic .img{
-  position:absolute; inset:0;
+#intro .pic .img { position:absolute; inset:0; z-index: 1; 
+  background: linear-gradient(135deg, #314355, #0b1117);  /* high-contrast placeholder */
   background-size: cover; background-position: center;
-  filter: contrast(1.06) saturate(1.08) brightness(1.02);
-  transform: scale(1.02);
 }
 
 /* Foreground veil colored like the intro background.
