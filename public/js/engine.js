@@ -1135,7 +1135,13 @@ function getIntroScrollHTML(){
 function openModal(m){ if(!m) return; Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); }
 function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); }
 
-
+  // --- Asset base for GitHub Pages (project path safe) ---
+(() => {
+  // Resolve to the directory holding index.html (works on GH Pages subpaths)
+  const base = (document.querySelector('base')?.href) ||
+               (location.origin + location.pathname.replace(/\/[^/]*$/, '/') );
+  document.documentElement.style.setProperty('--ASSET', base + 'public/img/');
+})();
 
 /* ---------- cinematic focus (letterbox) ---------- */
 function cinematicFocus(){
