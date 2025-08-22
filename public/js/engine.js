@@ -171,109 +171,88 @@ export function boot(){
 })();
 
 
-// --- Glossary tooltips (debounced, fade-only; optional Alt to pin) ---
-function attachGlossTips(root){
-  const MARGIN = 12;
-  const SHOW_DELAY = 100;
-  const REARM_DELAY = 500; // prevent rapid re-triggers on the same term
-  let showTimer = null, lastTerm = null, lastHideAt = 0, pinned = null;
-
-  function ensureTip(term){
-    let tip = term.querySelector('.gloss-tip');
-    if (!tip){
-      tip = document.createElement('span');
-      tip.className = 'gloss-tip';
-      tip.textContent =
-        term.getAttribute('data-def') ||
-        term.dataset.def ||
-        term.getAttribute('title') ||
-        term.title ||
-        '';
-      term.appendChild(tip);
-    }
-    return tip;
-  }
-  function placeNear(term, tip){
-    // place once near the term; do not track cursor to avoid "swoop"
-    const r = term.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    tip.style.opacity = '0'; tip.style.visibility = 'hidden';
-    tip.style.left = '0'; tip.style.top = '0'; // reset
-    tip.style.position = 'fixed';
-    // pre-measure
-    tip.style.transform = 'translate(-9999px,-9999px)';
-    const w = tip.offsetWidth, h = tip.offsetHeight;
-
-    let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, r.right + 14));
-    let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, r.bottom + 8));
-    tip.style.setProperty('--gx', `${nx}px`);
-    tip.style.setProperty('--gy', `${ny}px`);
-    tip.classList.add('on');  // CSS handles the translate + fade
-  }
-  function trackCursor(term, tip){
-    const MARGIN = 12;
-    function onMove(e){
-      const vw = window.innerWidth, vh = window.innerHeight;
-      const w = tip.offsetWidth, h = tip.offsetHeight;
-      let nx = Math.min(vw - w - MARGIN, Math.max(MARGIN, e.clientX + 16));
-      let ny = Math.min(vh - h - MARGIN, Math.max(MARGIN, e.clientY + 20));
-      tip.style.setProperty('--gx', `${nx}px`);
-      tip.style.setProperty('--gy', `${ny}px`);
-
-    }
-    term.__glossMove = onMove;
-    term.addEventListener('mousemove', onMove);
+// Glossary: single-tip, mouse-tracked, fade-only (no "?")
+function attachGlossTips(root=document){
+  // Create a single shared tip if needed
+  let tip = document.querySelector('.gloss-tip');
+  if(!tip){
+    tip = document.createElement('div');
+    tip.className = 'gloss-tip';
+    tip.setAttribute('role','tooltip');
+    document.body.appendChild(tip);
   }
 
-  function untrackCursor(term){
-    if(term && term.__glossMove){
-      term.removeEventListener('mousemove', term.__glossMove);
-      term.__glossMove = null;
-    }
-  }
-  root.addEventListener('mouseenter', (ev)=>{
-    const term = ev.target.closest('.gloss'); if (!term) return;
-    if (term === lastTerm && (Date.now() - lastHideAt) < REARM_DELAY) return;
-    const tip = ensureTip(term);
-    tip.textContent =
-      term.getAttribute('data-def') ||
-      term.dataset.def ||
-      term.getAttribute('title') ||
-      term.title ||
-      '';
-    clearTimeout(showTimer);
-    showTimer = setTimeout(()=>{
-      placeNear(term, tip);
-      lastTerm = term;
-      trackCursor(term, tip);
-    }, SHOW_DELAY);
-  }, true);
+  // Small debounce to prevent flutter while reading
+  let hideAt = 0, pinned = null, overTerm = null;
 
-  root.addEventListener('mouseleave', (ev)=>{
-    const term = ev.target.closest('.gloss'); if (!term) return;
-    clearTimeout(showTimer);
-    const tip = term.querySelector('.gloss-tip');
-    if (tip && !pinned){
+  // Helper: resolve definition
+  const resolveDef = (el)=>{
+    // priority: data-def -> title -> GLOSS[word] fallback (if exists)
+    const explicit = el.getAttribute('data-def') || el.dataset?.def || el.getAttribute('title') || el.title;
+    if (explicit) return explicit;
+    const key = (el.textContent || '').trim().toLowerCase();
+    if (window.GLOSS && GLOSS[key]) return GLOSS[key];
+    return ''; // nothing found; we’ll just not show a card
+  };
+
+  // Helper: position near cursor, keep on-screen
+  const place = (x, y)=>{
+    const pad = 16;
+    const vw = innerWidth, vh = innerHeight;
+    const rect = tip.getBoundingClientRect();
+    // prefer right/below the cursor; clamp to viewport
+    let left = Math.min(vw - rect.width - pad, Math.max(pad, x + 14));
+    let top  = Math.min(vh - rect.height - pad, Math.max(pad, y + 18));
+    tip.style.left = left + 'px';
+    tip.style.top  = top  + 'px';
+  };
+
+  // Mouse move: track when visible
+  root.addEventListener('mousemove', (e)=>{
+    if (pinned || !overTerm || tip.style.visibility !== 'visible') return;
+    place(e.clientX, e.clientY);
+  });
+
+  // Enter/leave handling via delegation
+  root.addEventListener('pointerover', (e)=>{
+    const t = e.target.closest('.gloss');
+    if (!t) return;
+    overTerm = t;
+
+    const def = resolveDef(t);
+    if (!def) { // nothing to show
       tip.classList.remove('on');
       tip.style.visibility = 'hidden';
-      lastHideAt = Date.now();
-    untrackCursor(term);
+      return;
     }
-  }, true);
+    tip.textContent = def;               // text only, no "?"
+    tip.style.visibility = 'visible';
+    tip.classList.add('on');             // CSS handles fade only
+    place(e.clientX, e.clientY);
+  });
 
-  // Alt to pin while visible; click anywhere to banish
+  root.addEventListener('pointerout', (e)=>{
+    const leaving = e.target.closest('.gloss');
+    if (!leaving || (pinned && overTerm === leaving)) return;
+    overTerm = null;
+    tip.classList.remove('on');
+    tip.style.visibility = 'hidden';
+    hideAt = Date.now();
+  });
+
+  // ALT to pin; click anywhere to unpin
   root.addEventListener('keydown', (e)=>{
-    if (e.altKey && lastTerm){
-      pinned = ensureTip(lastTerm);
-      pinned.style.pointerEvents = 'auto';
+    if (e.altKey && overTerm){
+      pinned = tip; // just keep the same element pinned
+      tip.style.pointerEvents = 'auto';
     }
   });
   window.addEventListener('click', ()=>{
     if (pinned){
-      pinned.classList.remove('on');
-      pinned.style.visibility = 'hidden';
+      tip.classList.remove('on');
+      tip.style.visibility = 'hidden';
       pinned = null;
-      lastHideAt = Date.now();
+      hideAt = Date.now();
     }
   }, true);
 }
@@ -281,7 +260,7 @@ function attachGlossTips(root){
 
 // --- COMPLETE, DROP-IN INTRO ------------------------------------
 
-// Ensure intro copy sits on right half (left-justified), with chevron markers.
+// Ensure intro copy sits on right half (left-justified)
 function tuneIntroLayout(){
   const intro = document.getElementById('intro'); if(!intro) return;
   intro.classList.add('two-pane');
@@ -291,20 +270,24 @@ function tuneIntroLayout(){
       display:'flex',
       alignItems:'flex-start',
       justifyContent:'flex-end',
-      padding:'10vh 6vw 4vh 4vw'
+      // increase left padding to push text farther away from the seam
+      padding:'10vh 6vw 4vh 8vw'   // was 10vh 6vw 4vh 4vw
     });
   });
   intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
     Object.assign(sc.style, {
-      width: '36vw',
-      maxWidth: '36vw',
+      width: '34vw',                // was 36vw
+      maxWidth: '34vw',             // was 36vw
       textAlign: 'left',
-      fontSize: '1.2em',
+      fontSize: '1.32em',           // +10% over 1.2em
       lineHeight: '1.85',
       marginTop: '1.5vh',
       marginLeft: 'auto',
-      marginRight: '9vw'
+      marginRight: '6vw'            // was 9vw; lets the block sit comfortably right
     });
+  });
+}
+
     sc.querySelectorAll('p').forEach(p=>{
       p.style.position='relative';
       p.style.paddingLeft = '22px';
@@ -347,7 +330,17 @@ function insertIntro(){
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
-
+  
+  // Add the torn veil once per slide (reveals .img beneath)
+  Engine.el.slides.forEach(sl=>{
+    const pic = sl.querySelector('.pic');
+    if (pic && !pic.querySelector('.veil')){
+      const v = document.createElement('div');
+      v.className = 'veil';
+      pic.appendChild(v);
+    }
+  });
+  
   // Motes behind intro, below copy/images
 if (!document.getElementById('motesIntro')){
   const m = document.createElement('div'); m.id = 'motesIntro'; m.setAttribute('aria-hidden','true');
