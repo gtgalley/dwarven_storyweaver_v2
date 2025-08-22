@@ -183,7 +183,12 @@ function attachGlossTips(root){
     if (!tip){
       tip = document.createElement('span');
       tip.className = 'gloss-tip';
-      tip.textContent = term.getAttribute('data-def') || term.dataset.def || '';
+      tip.textContent =
+        term.getAttribute('data-def') ||
+        term.dataset.def ||
+        term.getAttribute('title') ||
+        term.title ||
+        '';
       term.appendChild(tip);
     }
     return tip;
@@ -230,7 +235,12 @@ function attachGlossTips(root){
     const term = ev.target.closest('.gloss'); if (!term) return;
     if (term === lastTerm && (Date.now() - lastHideAt) < REARM_DELAY) return;
     const tip = ensureTip(term);
-    tip.textContent = term.getAttribute('data-def') || term.dataset.def || '';
+    tip.textContent =
+      term.getAttribute('data-def') ||
+      term.dataset.def ||
+      term.getAttribute('title') ||
+      term.title ||
+      '';
     clearTimeout(showTimer);
     showTimer = setTimeout(()=>{
       placeNear(term, tip);
