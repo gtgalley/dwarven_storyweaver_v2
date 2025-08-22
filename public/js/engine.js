@@ -164,6 +164,14 @@ export function boot(){
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); }
   /* ambience removed */ BGM.updateForState(Engine.state);
   spawnMotes('motes', 24);
+  // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
+  const patchFade = document.createElement('style');
+  patchFade.textContent = `
+    @keyframes mote-fadeout { to { opacity: 0; } }
+    .mote { animation: mote-rise var(--dur,16s) linear forwards,
+                     mote-sway var(--sway,6s) ease-in-out infinite,
+                     mote-fadeout var(--dur,16s) linear forwards; }`;
+  document.head.appendChild(patchFade);
 }
 
 (function(){
@@ -337,6 +345,14 @@ if (!document.getElementById('motesIntro')){
   const m = document.createElement('div'); m.id = 'motesIntro'; m.setAttribute('aria-hidden','true');
   Engine.el.intro.prepend(m);
   spawnMotes('motesIntro', 22);
+  // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
+  const patchFade = document.createElement('style');
+  patchFade.textContent = `
+    @keyframes mote-fadeout { to { opacity: 0; } }
+    .mote { animation: mote-rise var(--dur,16s) linear forwards,
+                     mote-sway var(--sway,6s) ease-in-out infinite,
+                     mote-fadeout var(--dur,16s) linear forwards; }`;
+  document.head.appendChild(patchFade);
 }
   // Title at top of slides with double underline
 if (!Engine.el.intro.querySelector('.intro-title')){
