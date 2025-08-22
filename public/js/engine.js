@@ -307,7 +307,6 @@ function tuneIntroLayout(){
         p.prepend(mark);
       }
     });
-  });
 }
 function insertIntro(){
   // DOM-aware guard so we never stack duplicate intros
