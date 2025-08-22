@@ -1235,7 +1235,7 @@ function spawnMotesCSS(where='motes', n=20){
       function tick(t){
         const s = Math.min(1, (t-born)/dur);
         const ease = s<.18 ? Math.pow(s/0.18, 1.4) : s; // quicker lift, then steady
-        const y = startY - ease*(window.innerHeight*0.55);
+        const y = startY - ease*(window.innerHeight*1.10);
         const x = vx + Math.sin((t-born)/1300)*amp;
         m.style.transform = `translate(${x}px, ${y}px)`;
         m.style.opacity = (s<.08 ? s*12 : 1 - (s-0.08)/0.92);
