@@ -527,8 +527,7 @@ input[type="number"]{accent-color:var(--gold)}
   90%  { opacity: 1; }                 /* stay visible nearly the whole trip */
   100% { transform: translateY(-110vh) translateX(var(--mx,0)); opacity: 0; }
 }
-/* Debug: let JS fully control the motes */
-.mote{ animation: none !important; }
+
 
 /* Cinematic letterbox */
 #letterbox{ position:fixed; inset:0; pointer-events:none; z-index:9990; }
