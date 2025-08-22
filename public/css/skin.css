@@ -5,35 +5,20 @@
   --line:#6f5320; --line2:#caa45a; --accent:#e0c98a; --muted:#c8bb87;
   --white:#f5f2e6; --bronze:#b37b3a;
 }
-/* === Global cursor: spearhead === */
-/* Applies everywhere, including the intro overlay */
-/* Global cursor */
+/* Global cursor (repo-relative; no absolute root paths) */
 html, body, .app, #intro {
-  cursor: url(var(--ASSET) 'cursor-spear.png') 3 2, auto;
-}
-a, button, .btn, [role="button"], [onclick] {
-  cursor: url(var(--ASSET) 'cursor-spear.png') 3 2, pointer;
-}
-a:hover, button:hover, .btn:hover, [role="button"]:hover, [onclick]:hover {
   cursor:
-    url(var(--ASSET) 'cursor-spear-glow.png') 3 2,
-    url(var(--ASSET) 'cursor-spear.png') 3 2,
-    pointer;
+    url("../img/cursor-spear.png") 3 2,
+    auto;
 }
 
-/* Preserve the I-beam where text editing is expected */
-input[type="text"], input[type="search"], input[type="email"],
-input[type="password"], textarea, [contenteditable="true"] {
-  cursor: text; /* system I-beam */
-  
-  /* === Hover shimmer for interactive elements === */
-/* NOTE: provide a glow version of your cursor at:
-   public/img/cursor-spear-glow.png  (24–32px, same hotspot ~ 3 2)
-   If you don’t have it yet, you can duplicate cursor-spear.png for now. */
-}
-@keyframes spearShimmer {
-  0%, 100% { filter: drop-shadow(0 0 9px rgba(213,168,74,.60)) saturate(1.10) brightness(1.04); }
-  50%      { filter: drop-shadow(0 0 18px rgba(213,168,74,.95)) saturate(1.25) brightness(1.10); }
+/* Hover “glow” variant you can toggle via a class */
+.cursor-glow,
+html.cursor-glow {
+  cursor:
+    url("../img/cursor-spear-glow.png") 3 2,
+    url("../img/cursor-spear.png") 3 2,
+    auto;
 }
 
 /* Interactive, visibly shimmery hover */
@@ -47,6 +32,12 @@ button:hover,
     url("../img/cursor-spear.png") 3 2,
     pointer;
   animation: spearShimmer .9s ease-in-out infinite;
+}
+
+/* Preserve the I-beam where text editing is expected */
+input[type="text"], input[type="search"], input[type="email"],
+input[type="password"], textarea, [contenteditable="true"] {
+  cursor: text;
 }
 
 /* High-contrast tone-down so we keep WCAG sanity */
@@ -86,6 +77,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
     radial-gradient(1200px 800px at 20% 8%, #121921 0%, #0c0f12 55%);
   animation: crestDrift 10s ease-in-out infinite alternate,
              crestGlow 10s ease-in-out infinite;
+}
+
+/* DEBUG ONLY: lift crest above all UI to verify it's drawing */
+.crest--ontop {
+  z-index: 2147483000;   /* above any overlay */
+  opacity: .22;
+  pointer-events: none;
 }
 
 /* Crest watermark + parallax container */
@@ -358,9 +356,14 @@ input[type="range"]{width:100%}
 }
 /* Left half: image + torn veil that reveals the art */
 #intro .pic{ position: relative; overflow: hidden; }
-#intro .pic .img { position:absolute; inset:0; z-index: 1; 
-  background: linear-gradient(135deg, #314355, #0b1117);  /* high-contrast placeholder */
+#intro .pic .img{
+  position:absolute; inset:0; z-index:1;
+  background:
+    /* TEMP: unmistakable placeholder to prove hole is cutting correctly */
+    linear-gradient(135deg, #344a5f, #0b1117);
   background-size: cover; background-position: center;
+  filter: contrast(1.06) saturate(1.08) brightness(1.02);
+  transform: scale(1.02);
 }
 
 /* Foreground veil colored like the intro background.
@@ -527,7 +530,7 @@ input[type="number"]{accent-color:var(--gold)}
   filter: blur(0.2px);
   opacity: .0;
   animation:
-    moteRise var(--dur, 16s) linear forwards,
+    mote-Rise var(--dur, 16s) linear forwards,
     moteSway calc(var(--dur,16s) * .8) ease-in-out infinite alternate;
 }
 @keyframes mote-rise {
