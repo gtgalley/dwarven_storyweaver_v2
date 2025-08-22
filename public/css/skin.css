@@ -26,8 +26,6 @@ input[type="password"], textarea, [contenteditable="true"] {
 /* NOTE: provide a glow version of your cursor at:
    public/img/cursor-spear-glow.png  (24–32px, same hotspot ~ 3 2)
    If you don’t have it yet, you can duplicate cursor-spear.png for now. */
-
-
 }
 @keyframes spearShimmer {
   0%, 100% { filter: drop-shadow(0 0 9px rgba(213,168,74,.60)) saturate(1.10) brightness(1.04); }
@@ -40,10 +38,11 @@ button:hover,
 .btn:hover,
 [role="button"]:hover,
 [onclick]:hover {
-  /* swap to glowing cursor art on hover; falls back to pointer if the asset is missing */
-  cursor: url("../img/cursor-spear-glow.png") 3 2, pointer;
-
-  /* bright, brazen shimmer on the element itself */
+  cursor:
+    url("../img/cursor-spear-glow.png") 3 2,
+    url("/public/img/cursor-spear-glow.png") 3 2,
+    url("../img/cursor-spear.png") 3 2,
+    pointer;
   animation: spearShimmer .9s ease-in-out infinite;
 }
 
@@ -101,6 +100,32 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   100%{ filter: brightness(1) drop-shadow(0 0 0 rgba(213,168,74,0)); }
 }
 
+/* Crest behind the intro as well */
+#intro::before{
+  content:"";
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  opacity: .12;
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200"><g fill="none" stroke="#715322" stroke-width="8" opacity="0.8"><circle cx="600" cy="580" r="320"/><path d="M280,580 L600,240 L920,580 L600,920 Z"/><path d="M430,580 L600,400 L770,580 L600,760 Z"/><path d="M600,260 L600,900"/><path d="M260,580 L940,580"/></g></svg>') center/60vmin 60vmin no-repeat,
+    radial-gradient(1200px 800px at 20% 8%, rgba(18,25,33,.85) 0%, rgba(12,15,18,.85) 55%);
+}
+
+/* Subtle bronze/gold glow rising from the bottom during intro */
+#intro::after{
+  content:"";
+  position: fixed; left:0; right:0; bottom:0; height: 16vh;
+  pointer-events: none; z-index: 1; /* below text, above crest layer */
+  background:
+    radial-gradient(120% 80% at 50% 100%,
+      rgba(213,168,74,.22), rgba(213,168,74,0) 60%);
+  animation: emberPulse 10s ease-in-out infinite;
+  filter: saturate(1.1);
+}
+@keyframes emberPulse{
+  0%,100% { opacity:.55; }
+  50%     { opacity:.95; }
+}
+
 /* Masthead */
 .masthead{position:relative;padding:22px 18px 12px;border-bottom:2px solid var(--line);}
 
@@ -110,11 +135,15 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   color: var(--gold);
   letter-spacing: 0.12em;
   display: inline-block;
-  transform: translateX(1.2rem); /* move BRASS toward the seam */
+  transform: translateX(1.5rem); /* move BRASS toward the seam */
 }
 .brand-title .title-right,
-.intro-title .title-right{ color: var(--bronze); letter-spacing: 0.12em; }
-
+.intro-title .title-right{
+  color: var(--bronze);
+  letter-spacing: 0.12em;
+  display:inline-block;
+  transform: translateX(-.3rem); /* mirror inward */
+}
 .brand-title .title-gap,
 .intro-title .title-gap{ display:inline-block; width: 3.6rem; }
 
@@ -225,11 +254,31 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 
 /* Typewriter reveal & smoke cursor */
 .reveal .ch.on{opacity:1}
-.reveal .cursor{display:inline-block; width:10px; height:1.2em; vertical-align:-.2em; position:relative}
-.smoke{display:inline-block;width:10px;height:10px;border-radius:50%;
-  background:radial-gradient(circle at 50% 50%, rgba(240,240,240,.5), rgba(240,240,240,0) 70%);
-  animation:smoke .7s linear infinite;}
-@keyframes smoke{ 0%{transform:translateY(0) scale(1)} 100%{transform:translateY(-6px) scale(1.2); opacity:.1}}
+.reveal .cursor{
+  display:inline-block; width:10px; height:1.2em;
+  vertical-align:-.2em; position:relative; overflow:visible;
+}
+
+/* Centered puff that rises and fades */
+.smoke{
+  position:absolute;
+  left:50%; bottom:0;
+  transform: translate(-50%,0) scale(1);
+  display:block;
+  width:12px; height:12px; border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(255,235,180,.75),
+      rgba(255,235,180,0) 70%);
+  filter: drop-shadow(0 0 6px rgba(213,168,74,.35));
+  animation: smoke .7s linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes smoke{
+  0%   { transform: translate(-50%,0)      scale(1.00); opacity:.70; }
+  100% { transform: translate(-50%,-12px)  scale(1.25); opacity:.05; }
+}
 
 /* Scroll icon (hidden until main app mounts) */
 .scroll-btn{
@@ -293,9 +342,16 @@ input[type="range"]{width:100%}
 .intro .txt { grid-column: 2; display:flex; align-items:center; }
 .intro .txt .inner { margin: 0 auto; text-align: center; }
 
-/* Fixed nav buttons (Skip / Continue) in the bottom-right */
-#intro .slide .nav {
-  position: absolute; right: 22px; bottom: 22px; z-index: 3;
+/* Intro nav buttons: text-only, no box */
+#intro .slide .nav .btn{
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 1px solid transparent; /* no edge */
+  color: var(--ink2);
+}
+#intro .slide .nav .btn:hover{
+  filter: none !important;
+  text-shadow: 0 0 8px rgba(213,168,74,.35);
 }
 
 /* Seam: no top fade; solid molten line from top to bottom */
@@ -441,6 +497,7 @@ input[type="number"]{accent-color:var(--gold)}
 .intro .copy .scroll .gloss::after,
 .story-scroll .gloss::after { content: '' !important; }
 
+
 /* Story brightness pulse */
 .glow-story{ color:var(--ink2); animation:storyGlow 5.5s ease-in-out 1; }
 @keyframes storyGlow{ 0%{ filter:brightness(1) } 50%{ filter:brightness(1.25) } 100%{ filter:brightness(1) } }
@@ -502,7 +559,7 @@ input[type="number"]{accent-color:var(--gold)}
   0%   { opacity: 0; transform: translateY(0)    scale(var(--s,1)); }
   10%  { opacity: .85; }
   90%  { opacity: .85; }
-  100% { opacity: 0; transform: translateY(-110vh) scale(var(--s,1)); } /* fade-out + let the fast ones exit top */
+  100% { transform: translateY(-110vh) translateX(var(--mx, 0)); opacity: 0; }
 }
 
 @keyframes moteSway{
@@ -605,8 +662,23 @@ body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: 
   filter: drop-shadow(0 0 24px rgba(255,140,40,.25));
 }
 
-
-
 /* Ensure intro copy is right-justified */
 .intro .copy .scroll{ text-align:right; margin-left:auto; margin-right:3vw; }
 
+/* Intro layering: image+veil behind text/nav; title on top */
+#intro { position: fixed; inset: 0; z-index: 9999; }
+#intro .pane { position: relative; z-index: 1; }
+#intro .pic { position: relative; z-index: 1; }
+#intro .pic .img { position: absolute; inset: 0; z-index: 1; }
+#intro .pic .veil { position: absolute; inset: 0; z-index: 2; }
+#intro .txt { position: relative; z-index: 3; }
+#intro .slide .nav { position: absolute; right: 18px; bottom: 18px; z-index: 4; }
+.intro-title { z-index: 5; } /* your existing title */
+
+/* Intro motes: above backgrounds, below text */
+#motesIntro {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2; /* between .veil (2) and .txt (3) */
+}
