@@ -5,50 +5,25 @@
   --line:#6f5320; --line2:#caa45a; --accent:#e0c98a; --muted:#c8bb87;
   --white:#f5f2e6; --bronze:#b37b3a;
 }
-/* Global cursor (repo-relative; no absolute root paths) */
+/* Global cursor */
 html, body, .app, #intro {
-  cursor:
-    url("../img/cursor-spear.png") 3 2,
-    auto;
+  cursor: url("../img/cursor-spear.png") 3 2, auto;
 }
 
-/* Hover “glow” variant you can toggle via a class */
-.cursor-glow,
-html.cursor-glow {
-  cursor:
-    url("../img/cursor-spear-glow.png") 3 2,
-    url("../img/cursor-spear.png") 3 2,
-    auto;
-}
-
-/* Interactive, visibly shimmery hover */
+/* Interactive hover keeps the spear (no glow) */
 a:hover,
 button:hover,
 .btn:hover,
 [role="button"]:hover,
-[onclick]:hover {
-  cursor:
-    url("../img/cursor-spear-glow.png") 3 2,
-    url("../img/cursor-spear.png") 3 2,
-    pointer;
-  animation: spearShimmer .9s ease-in-out infinite;
+[onclick]:hover,
+.gloss,
+.gloss:hover {
+  cursor: url("../img/cursor-spear.png") 3 2, pointer;
 }
 
-/* Preserve the I-beam where text editing is expected */
+/* Edit fields keep the I-beam */
 input[type="text"], input[type="search"], input[type="email"],
-input[type="password"], textarea, [contenteditable="true"] {
-  cursor: text;
-}
-
-/* High-contrast tone-down so we keep WCAG sanity */
-.hc a:hover,
-.hc button:hover,
-.hc .btn:hover,
-.hc [role="button"]:hover,
-.hc [onclick]:hover {
-  animation: none;
-  filter: drop-shadow(0 0 8px rgba(213,168,74,.35)) saturate(1.05) brightness(1.02);
-}
+input[type="password"], textarea, [contenteditable="true"] { cursor: text; }
 
 /* Visibility toggles */
 .hidden { display: none !important; }
@@ -360,7 +335,7 @@ input[type="range"]{width:100%}
   position:absolute; inset:0; z-index:1;
   background:
     /* TEMP: unmistakable placeholder to prove hole is cutting correctly */
-    linear-gradient(135deg, #344a5f, #0b1117);
+    linear-gradient(135deg, #3c5570, #0b1117);
   background-size: cover; background-position: center;
   filter: contrast(1.06) saturate(1.08) brightness(1.02);
   transform: scale(1.02);
@@ -530,7 +505,7 @@ input[type="number"]{accent-color:var(--gold)}
   filter: blur(0.2px);
   opacity: .0;
   animation:
-    mote-Rise var(--dur, 16s) linear forwards,
+    mote-rise var(--dur, 16s) linear forwards,
     moteSway calc(var(--dur,16s) * .8) ease-in-out infinite alternate;
 }
 @keyframes mote-rise {
@@ -552,6 +527,8 @@ input[type="number"]{accent-color:var(--gold)}
   90%  { opacity: 1; }                 /* stay visible nearly the whole trip */
   100% { transform: translateY(-110vh) translateX(var(--mx,0)); opacity: 0; }
 }
+/* Debug: let JS fully control the motes */
+.mote{ animation: none !important; }
 
 /* Cinematic letterbox */
 #letterbox{ position:fixed; inset:0; pointer-events:none; z-index:9990; }
