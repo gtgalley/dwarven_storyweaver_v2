@@ -260,33 +260,45 @@ function attachGlossTips(root=document){
 
 // --- COMPLETE, DROP-IN INTRO ------------------------------------
 
-// Ensure intro copy sits on right half (left-justified)
 function tuneIntroLayout(){
-  const intro = document.getElementById('intro'); if(!intro) return;
+  const intro = document.getElementById('intro');
+  if (!intro) return;
+
+  // Two-pane mode for the intro wrapper
   intro.classList.add('two-pane');
 
+  // Right-side container (holds the text block)
   intro.querySelectorAll('.slide .copy').forEach(copy=>{
     Object.assign(copy.style, {
-      position:'relative',
-      display:'flex',
-      alignItems:'flex-start',
-      justifyContent:'flex-end',
-      // increase left padding to push text farther away from the seam
-      padding:'10vh 6vw 4vh 8vw'   // was 10vh 6vw 4vh 4vw
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'flex-end',
+      // push text farther from the center seam
+      padding: '10vh 6vw 4vh 8vw'   // (top right bottom left)
     });
   });
 
+  // The scrolling text column itself
   intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
     Object.assign(sc.style, {
-      width: '34vw',                // was 36vw
-      maxWidth: '34vw',             // was 36vw
-      textAlign: 'left',
-      fontSize: '1.32em',           // +10% over 1.2em
+      width: '34vw',
+      maxWidth: '34vw',
+      textAlign: 'left',      // CSS can override to 'justify' if desired
+      fontSize: '1.32em',
       lineHeight: '1.85',
       marginTop: '1.5vh',
       marginLeft: 'auto',
-      marginRight: '6vw'            // was 9vw
+      marginRight: '6vw'
     });
+
+    // Paragraph tweaks (no chevrons)
+    sc.querySelectorAll('p').forEach(p=>{
+      p.style.position = 'relative';
+      p.style.paddingLeft = '0';
+    });
+  });
+}
 
 function insertIntro(){
   // DOM-aware guard so we never stack duplicate intros
