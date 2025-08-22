@@ -985,6 +985,7 @@ function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><m
 function typewrite(node, text, cps=40, ondone){
   node.textContent=''; node.classList.add('reveal');
   const cursor=document.createElement('span'); cursor.className='cursor'; node.appendChild(cursor);
+  cursor.innerHTML = '<span class="smoke"></span>';
   let i=0;
   const tick=()=>{
     const step=Math.max(1,Math.round(cps/10));
@@ -1005,7 +1006,7 @@ function typewriteRich(p, cps=40){
   const clone = p.cloneNode(true);
   p.textContent=''; p.classList.add('reveal');
   const cursor=document.createElement('span'); cursor.className='cursor'; p.appendChild(cursor);
-
+  cursor.innerHTML = '<span class="smoke"></span>';
   const queue=[];
   clone.childNodes.forEach(n=>{
     if(n.nodeType===3){
