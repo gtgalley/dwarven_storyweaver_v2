@@ -264,6 +264,7 @@ function attachGlossTips(root=document){
 function tuneIntroLayout(){
   const intro = document.getElementById('intro'); if(!intro) return;
   intro.classList.add('two-pane');
+
   intro.querySelectorAll('.slide .copy').forEach(copy=>{
     Object.assign(copy.style, {
       position:'relative',
@@ -274,6 +275,7 @@ function tuneIntroLayout(){
       padding:'10vh 6vw 4vh 8vw'   // was 10vh 6vw 4vh 4vw
     });
   });
+
   intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
     Object.assign(sc.style, {
       width: '34vw',                // was 36vw
@@ -283,31 +285,9 @@ function tuneIntroLayout(){
       lineHeight: '1.85',
       marginTop: '1.5vh',
       marginLeft: 'auto',
-      marginRight: '6vw'            // was 9vw; lets the block sit comfortably right
+      marginRight: '6vw'            // was 9vw
     });
-  });
-}
 
-    sc.querySelectorAll('p').forEach(p=>{
-      p.style.position='relative';
-      p.style.paddingLeft = '22px';
-      if(!p.querySelector('.para-chevron')){
-        const mark=document.createElement('span');
-        mark.className='para-chevron';
-        mark.textContent = '❯';
-        Object.assign(mark.style, {
-          position: 'absolute',
-          left: '8px',
-          top: '0.15em',
-          fontSize: '1.15em',
-          color: 'var(--gold)',
-          textShadow: '0 0 6px rgba(213,168,74,.35)'
-        });
-        p.style.paddingLeft = '28px';
-        p.prepend(mark);
-      }
-    });
-}
 function insertIntro(){
   // DOM-aware guard so we never stack duplicate intros
   const existing = document.getElementById('intro');
