@@ -1,5 +1,5 @@
 // public/js/engine.js
-// v13c — intro right-pane + chevrons; animated motes; fixed Scroll modal; removed Highlight Terms;
+// v13c — intro right-pane + chevrons; animated motes (fX); fixed Scroll modal; removed Highlight Terms;
 // edit modal blue+gold fields; now-playing fade; vignette fade; story box bottom line fixed;
 // glossary '?' suppressed; roll glyphs gold/crimson with hover bloom.
 // Built from your attached engine.js + prior merged foundation. Date: 2025-08-21
@@ -218,8 +218,8 @@ export function boot(){
   }
 
   /* ambience removed */ BGM.updateForState(Engine.state);
-  spawnMotes('motes', 24);
-
+  FX.start('fx');
+  
   // Dev convenience: Alt+I marks the intro as seen (persisted)
   window.addEventListener('keydown', (e)=>{
     if (e.altKey && (e.key||'').toLowerCase()==='i'){
@@ -439,23 +439,6 @@ function insertIntro(){
     }
   });
   
-// Motes behind intro, below copy/images
-if (!document.getElementById('motesIntro')){
-  const m = document.createElement('div'); m.id = 'motesIntro'; m.setAttribute('aria-hidden','true');
-  Engine.el.intro.prepend(m);
-  spawnMotes('motesIntro', 22);
-
-  // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
-  const patchFade = document.createElement('style');
-  patchFade.textContent = `
-    @keyframes mote-fadeout { to { opacity: 0; } }
-    .mote {
-      animation:
-        mote-rise-anchored var(--dur,16s) linear forwards,
-        mote-fadeout       var(--dur,16s) linear forwards;
-    }`;
-  document.head.appendChild(patchFade);
-}
 
   // Title at top of slides with double underline
 if (!Engine.el.intro.querySelector('.intro-title')){
@@ -522,7 +505,7 @@ function buildUI(){
   document.body.innerHTML = `
   <div class="app">
     <div class="crest" aria-hidden="true"></div>
-    <div id="motes" aria-hidden="true"></div>
+    <div id="fx" aria-hidden="true"></div>
     <div id="letterbox" class="letterbox hidden"><div class="bar top"></div><div class="bar bottom"></div></div>
     <div class="masthead">
       <div class="brand-title u-double-underline">
@@ -1287,94 +1270,77 @@ function exportSnapshot(){
   }catch(e){ console.error(e); }
 }
 
-/* ---------- motes ---------- */
-function spawnMotesCSS(where='motes', n=20){
-  const root = document.getElementById(where); if(!root) return;
-  for (let i=0; i<n; i++){
-    const s = document.createElement('span'); s.className = 'mote';
-    const spawnX = Math.random() * 100;          // vw across stage
-    const spawnY = 130 + Math.random() * 20;     // vh: far BELOW viewport (130–150)
-    const dur    = (14 + Math.random()*12).toFixed(1) + 's';
-
-    s.style.setProperty('--spawn-x', spawnX + 'vw');
-    s.style.setProperty('--spawn-y', spawnY + 'vh');
-    s.style.setProperty('--dur', dur);
-    root.appendChild(s);
+/* ---------- embers (JS-only; no CSS animations, no “mote” strings) ---------- */
+(function(){
+  function ensureLayer(id){
+    let host = document.getElementById(id);
+    if(!host){
+      host = document.createElement('div');
+      host.id = id;
+      host.setAttribute('aria-hidden','true');
+      document.body.appendChild(host);
+    }
+    // keep behind UI, non-interactive
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    host.style.pointerEvents = 'none';
+    host.style.zIndex = '1';
+    return host;
   }
-}
 
-/* ----- override: JS-animated motes (non-linear rise, fade out) ----- */
-(()=>{
-  const jsAnimatedSpawnMotes = function(where='motes', count=24){
-    const host = document.getElementById(where);
-    if(!host) return;
-    host.style.pointerEvents='none';
+  function r(min, max){ return min + Math.random()*(max - min); }
 
-    // Find the true containing rect for position:fixed (handles transformed ancestors).
-    function fixedContainingRect(node){
-      let el = node;
-      while (el && el !== document.documentElement){
-        const cs = getComputedStyle(el);
-        if (cs.transform !== 'none' || cs.perspective !== 'none' || cs.filter !== 'none' || cs.contain === 'paint'){
-          return el.getBoundingClientRect();
-        }
-        el = el.parentElement;
-      }
-      const vw = (window.visualViewport?.width) ?? window.innerWidth;
-      const vh = (window.visualViewport?.height) ?? window.innerHeight;
-      return { left: 0, top: 0, width: vw, height: vh };
+  function spawnOne(host){
+    // Use visual viewport if available so we anchor to the *real* screen
+    const rect = (window.visualViewport)
+      ? { left: 0, top: 0, width: visualViewport.width, height: visualViewport.height }
+      : host.getBoundingClientRect();
+
+    const dot = document.createElement('span');
+    dot.className = 'ember';      // styling class (NOT animated by CSS)
+    const size   = r(2.5, 6.5);
+    const amp    = r(10, 22);
+    const period = r(1000, 1600);
+    const dur    = r(14000, 24000);
+    const born   = performance.now();
+
+    // Inline style so CSS can’t fight us
+    dot.style.position = 'fixed';
+    dot.style.left = '0';
+    dot.style.top = '0';
+    dot.style.width = size + 'px';
+    dot.style.height = size + 'px';
+    dot.style.borderRadius = '50%';
+    dot.style.background = 'radial-gradient(circle at 50% 50%, rgba(255,200,140,.95), rgba(255,200,140,0) 66%)';
+    dot.style.filter = 'brightness(1.3)';
+    dot.style.opacity = '0';
+    dot.style.transition = 'opacity .3s ease-out';
+    dot.style.willChange = 'transform, opacity';
+    host.appendChild(dot);
+
+    const startX = r(rect.left, rect.left + rect.width);
+    const startY = rect.top + rect.height + r(60, 180);   // **spawn well BELOW the screen**
+    const travel = rect.height + 220;                     // rise off the top
+
+    function tick(t){
+      const s = Math.min(1, (t - born) / dur);
+      const eased = s < .12 ? Math.pow(s / 0.12, 1.4) : s;  // gentle lift, then linear
+      const x = startX + Math.sin((t - born) / period) * amp;
+      const y = startY - eased * travel;
+      dot.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      dot.style.opacity = (s < .08 ? s * 10 : 1 - (s - .08) / .92);
+      if (s < 1) { requestAnimationFrame(tick); }
+      else { dot.style.opacity = '0'; setTimeout(()=> dot.remove(), 240); }
     }
+    requestAnimationFrame(tick);
+  }
 
-    function addOne(){
-      const rect = fixedContainingRect(host);
+  function start(id='fx', seed=28){
+    const host = ensureLayer(id);
+    for (let i=0; i<seed; i++) setTimeout(()=>spawnOne(host), i*180);
+    const h = setInterval(()=>spawnOne(host), 650);
+    return { stop(){ clearInterval(h); } };
+  }
 
-      const m = document.createElement('span');
-      m.className = 'mote';
-      m.style.animation = 'none'; // prevent CSS keyframes from overriding JS transform
-
-      // Spawn at the bottom edge of the *actual* containing rect
-      const vx = rect.left + Math.random() * rect.width;
-      const startY = rect.top + rect.height - (20 + Math.random()*40); // ~below the screen for now
-      const dur = 14000 + Math.random()*11000; // 14–25s
-      const size = 3 + Math.random()*4;
-      const amp = 16 + Math.random()*18;
-      const born = performance.now();
-
-      m.style.position = 'fixed';
-      m.style.left = '0';
-      m.style.top = '0';
-      m.style.width = size + 'px';
-      m.style.height = size + 'px';
-      m.style.borderRadius = '50%';
-      m.style.background = 'radial-gradient(circle at 50% 50%, rgba(255,200,140,0.95), rgba(255,200,140,0) 68%)';
-      m.style.filter = 'brightness(1.4)';
-      m.style.transition = 'opacity .28s ease-out';
-      m.style.willChange = 'transform, opacity';
-      host.appendChild(m);
-
-      function tick(t){
-        const s = Math.min(1, (t - born) / dur);
-        const ease = s < .18 ? Math.pow(s / 0.18, 1.4) : s; // quicker lift, then steady
-        const y = startY - ease * (rect.height * 1.10);
-        const x = vx + Math.sin((t - born) / 1300) * amp;
-        m.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-        m.style.opacity = (s < .08 ? s * 12 : 1 - (s - 0.08) / 0.92);
-        if (s < 1){
-          requestAnimationFrame(tick);
-        } else {
-          m.style.opacity = '0';
-          setTimeout(()=> m.remove(), 240);
-        }
-      }
-      requestAnimationFrame(tick);
-    }
-
-    for (let i = 0; i < count; i++) setTimeout(addOne, i * 220);
-    setInterval(addOne, 700);
-  };
-
-  // Promote override without redeclaring the top-level name:
-  window.spawnMotes = jsAnimatedSpawnMotes;
-  // module-scope alias so boot() can call spawnMotes(...)
-  const spawnMotes = window.spawnMotes;
+  window.FX = { start };
 })();
