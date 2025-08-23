@@ -429,43 +429,57 @@ function insertIntro(){
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
   
-  // Ensure cutout structure (.pic > .img) and veil on every slide
-Engine.el.slides.forEach(sl=>{
-  // make sure .pic exists (prepend before copy if not present)
-  let pic = sl.querySelector('.pic');
-  if (!pic){
-    pic = document.createElement('div');
-    pic.className = 'pic';
-    const copy = sl.querySelector('.copy');
-    sl.insertBefore(pic, copy || sl.firstChild);
-  }
-  // make sure .img exists inside .pic
-  let img = pic.querySelector('.img');
-  if (!img){
-    img = document.createElement('div');
-    img.className = 'img';        // styled via CSS mask to reveal through the tear
-    pic.appendChild(img);
-  }
-  // add the torn veil if missing
-  if (!pic.querySelector('.veil')){
-    const v = document.createElement('div');
-    v.className = 'veil';
-    pic.appendChild(v);
-  }
-});
+  // Ensure cutout structure on every slide: .pic > (.img, .veil)
+// - If a stray .img exists directly under .slide, move it inside .pic
+// - Always create a .veil overlay
+// - Give .img a visible placeholder if no background is set (so you can see it)
+(function ensureIntroCutout(){
+  const slides = Engine.el.slides || Array.from(document.querySelectorAll('#intro .slide'));
+  slides.forEach(sl=>{
+    // 1) ensure container
+    let pic = sl.querySelector('.pic');
+    if(!pic){
+      pic = document.createElement('div');
+      pic.className = 'pic';
+      const copy = sl.querySelector('.copy');
+      sl.insertBefore(pic, copy || sl.firstChild);
+    }
 
-// Simple API for wiring slide images later
-window.setIntroImage = function slideImage(index, url){
-  try{
-    const slide = Engine.el.slides?.[index];
-    if(!slide) return;
-    const img = slide.querySelector('.pic .img');
-    if(!img) return; // structure guard (shouldn't happen after the ensure block above)
-    img.style.backgroundImage = `url('${url}')`;
-    img.style.backgroundSize = 'cover';
-    img.style.backgroundPosition = 'center center';
-  }catch{}
-};
+    // 2) unify the .img
+    let imgInPic = pic.querySelector('.img');
+    const strayImg = sl.querySelector(':scope > .img'); // direct child of slide
+    if(!imgInPic && strayImg){
+      pic.appendChild(strayImg);
+      imgInPic = strayImg;
+    } else if(!imgInPic){
+      imgInPic = document.createElement('div');
+      imgInPic.className = 'img';
+      pic.appendChild(imgInPic);
+    } else if(strayImg && strayImg !== imgInPic){
+      // prefer the stray (likely the authored one), remove duplicate
+      pic.removeChild(imgInPic);
+      pic.appendChild(strayImg);
+      imgInPic = strayImg;
+    }
+
+    // 3) veil
+    if(!pic.querySelector('.veil')){
+      const v = document.createElement('div');
+      v.className = 'veil';
+      pic.appendChild(v);
+    }
+
+    // 4) visible placeholder if no image yet
+    const cs = getComputedStyle(imgInPic);
+    const hasBG = cs.backgroundImage && cs.backgroundImage !== 'none';
+    if(!hasBG){
+      imgInPic.style.backgroundImage =
+        "linear-gradient(135deg, rgba(213,168,74,.28), rgba(22,16,10,.28))";
+      imgInPic.style.backgroundSize = 'cover';
+      imgInPic.style.backgroundPosition = 'center';
+    }
+  });
+})();
   
 
   // Title at top of slides with double underline
@@ -1397,3 +1411,31 @@ function exportSnapshot(){
 
   window.FX = { start };
 })();
+
+// --- DEBUG: cutout presence & outlines ---
+window.reportCutout = function(){
+  const slides = Array.from(document.querySelectorAll('#intro .slide'));
+  return slides.map((sl, i)=>({
+    slide: i,
+    hasPic: !!sl.querySelector('.pic'),
+    hasImg: !!sl.querySelector('.pic .img'),
+    hasVeil: !!sl.querySelector('.pic .veil'),
+    imgRect: sl.querySelector('.pic .img')?.getBoundingClientRect()
+  }));
+};
+
+window.debugCutout = function(on=true){
+  const id='cutout-debug-style';
+  let st=document.getElementById(id);
+  if(on && !st){
+    st=document.createElement('style'); st.id=id;
+    st.textContent = `
+      #intro .slide .pic{ outline:2px dashed #0ff !important; min-height:30vh; }
+      #intro .slide .pic .img{ outline:2px solid #f0f !important; min-height:28vh; }
+      #intro .slide .pic .veil{ outline:2px solid #f33 !important; }
+    `;
+    document.head.appendChild(st);
+  } else if(!on && st){
+    st.remove();
+  }
+};
