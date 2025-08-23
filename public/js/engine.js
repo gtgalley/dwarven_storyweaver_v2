@@ -192,11 +192,12 @@ window.GLOSS = Object.assign({
 export function boot(){
   buildUI(); hydrate(); bind(); renderAll(); BGM.attachWidget();
   attachGlossTips(document.body);
-   // Enable tooltips for dynamically injected story content
+
+  // Enable tooltips for dynamically injected story content
   const story = document.getElementById('story');
   if (story){
     const obs = new MutationObserver(muts=>{
-      for(const m of muts){
+      for (const m of muts){
         if (m.addedNodes && m.addedNodes.length){
           attachGlossTips(story);
           break;
@@ -205,29 +206,65 @@ export function boot(){
     });
     obs.observe(story, { childList:true, subtree:true });
   }
+
   insertIntro(); // overlay every load
   tuneIntroLayout();
   mountScrollFab();
+
   const seen = store.get('intro_seen', false);
-  if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); }
+  if (seen){
+    if (Engine.el.intro) Engine.el.intro.classList.add('hidden');
+    if (!Engine.state.storyBeats.length) beginTale();
+  }
+
   /* ambience removed */ BGM.updateForState(Engine.state);
   spawnMotes('motes', 24);
-  
+
   // Dev convenience: Alt+I marks the intro as seen (persisted)
   window.addEventListener('keydown', (e)=>{
     if (e.altKey && (e.key||'').toLowerCase()==='i'){
       try{ store.set('intro_seen', true); }catch{}
-      if (typeof toast==='function') toast('Intro will be skipped next load');
+      if (typeof toast === 'function') toast('Intro will be skipped next load');
     }
   });
-  
- 
-(function(){
-  const st=document.createElement('style'); st.id='runtime-patches'; st.textContent='\n/* runtime style patches */\n#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {\n  background:#0d141a !important; color:#D5A84A !important; border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);\n}\n#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }\n#nowplay{ position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; opacity: 0; transition: opacity .35s ease; pointer-events: none; }\n#nowplay.show{ opacity: 1; }\n#letterbox{ transition: opacity .45s ease; }\n#letterbox.hidden{ opacity: 0; }\n#story{ overflow-y:auto; overflow-x:hidden; position:relative; }\n.glow-success:hover, .glow-fail:hover { text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45); }\n.gloss::after { content: \'\' !important; } /* suppress ? icon */\n'; document.head.appendChild(st);
+} // <-- end boot()
+
+
+
+/* ------------------------- runtime style patches ------------------------- */
+/* Kept outside boot() so they apply once at module load and avoid brace mix-ups */
+(function applyRuntimePatches(){
+  if (document.getElementById('runtime-patches')) return;
+  const st = document.createElement('style');
+  st.id = 'runtime-patches';
+  st.textContent = `
+/* runtime style patches */
+#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {
+  background:#0d141a !important; color:#D5A84A !important;
+  border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);
+}
+#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }
+#nowplay{
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
+  opacity: 0; transition: opacity .35s ease; pointer-events: none;
+}
+#nowplay.show{ opacity: 1; }
+#letterbox{ transition: opacity .45s ease; }
+#letterbox.hidden{ opacity: 0; }
+#story{ overflow-y:auto; overflow-x:hidden; position:relative; }
+.glow-success:hover, .glow-fail:hover {
+  text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45);
+}
+.gloss::after { content: '' !important; } /* suppress ? icon */
+`;
+  document.head.appendChild(st);
 })();
 
+
+
+/* ------------------------------ fonts guard ------------------------------ */
+/* Ensures Cinzel / Josefin Sans are present even if the <head> link is missing */
 (function ensureFonts(){
-  // If the Google Fonts link is absent (or was edited), inject it.
   if (document.querySelector('link[href*="fonts.googleapis.com"]')) return;
   const p1 = document.createElement('link'); p1.rel='preconnect'; p1.href='https://fonts.googleapis.com';
   const p2 = document.createElement('link'); p2.rel='preconnect'; p2.href='https://fonts.gstatic.com'; p2.crossOrigin='';
@@ -235,12 +272,15 @@ export function boot(){
   lf.href='https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Josefin+Sans:wght@400;600;700&display=swap';
   document.head.append(p1, p2, lf);
 })();
-  
-// Glossary: single-tip, mouse-tracked, fade-only (no "?")
+
+
+
+/* ---------------------------- glossary tooltips --------------------------- */
+/* Single shared tooltip; data-def > title > GLOSS[word] fallback; fade only */
 function attachGlossTips(root=document){
   // Create a single shared tip if needed
   let tip = document.querySelector('.gloss-tip');
-  if(!tip){
+  if (!tip){
     tip = document.createElement('div');
     tip.className = 'gloss-tip';
     tip.setAttribute('role','tooltip');
@@ -285,7 +325,7 @@ function attachGlossTips(root=document){
     overTerm = t;
 
     const def = resolveDef(t);
-    if (!def) { // nothing to show
+    if (!def){ // nothing to show
       tip.classList.remove('on');
       tip.style.visibility = 'hidden';
       return;
@@ -308,10 +348,11 @@ function attachGlossTips(root=document){
   // ALT to pin; click anywhere to unpin
   root.addEventListener('keydown', (e)=>{
     if (e.altKey && overTerm){
-      pinned = tip; // just keep the same element pinned
+      pinned = tip; // keep the same element pinned
       tip.style.pointerEvents = 'auto';
     }
   });
+
   window.addEventListener('click', ()=>{
     if (pinned){
       tip.classList.remove('on');
@@ -321,6 +362,7 @@ function attachGlossTips(root=document){
     }
   }, true);
 }
+
 // ----------------------------------------------------------------
 
 // --- COMPLETE, DROP-IN INTRO ------------------------------------
