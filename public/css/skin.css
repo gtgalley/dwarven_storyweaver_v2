@@ -513,24 +513,24 @@ input[type="number"]{accent-color:var(--gold)}
   filter: blur(0.2px);
   opacity: 0;
 
-  /* Anchor to explicit spawn point; default to bottom of screen */
-  transform: translate3d(var(--spawn-x, 0), var(--spawn-y, 100vh), 0);
+  /* Anchor at explicit spawn; fall back to well BELOW the viewport */
+  transform: translate3d(var(--spawn-x, 0), var(--spawn-y, 140vh), 0);
 
-  /* Single transform animation only (no competing transforms) */
-  animation: mote-rise var(--dur, 16s) linear forwards;
+  /* Use a fresh keyframe name so legacy definitions cannot override */
+  animation: mote-rise-anchored var(--dur, 16s) linear forwards;
 
   will-change: transform, opacity;
 }
 
-/* Safeguard: if JS sets animation:none inline, never override it */
+/* If JS disables animation inline, never let CSS re-enable it */
 .mote[style*="animation: none"] { animation: none !important; }
 
-/* Spawn-aware rise: start at --spawn-x/--spawn-y and travel upward ~110vh with a gentle vanish */
-@keyframes mote-rise{
-  0%   { opacity: 0; transform: translate3d(var(--spawn-x, 0), var(--spawn-y, 100vh), 0); }
+/* Anchored rise beginning below the screen and traveling off the top */
+@keyframes mote-rise-anchored{
+  0%   { opacity: 0; transform: translate3d(var(--spawn-x, 0), var(--spawn-y, 140vh), 0); }
   7%   { opacity: 1; }
   90%  { opacity: 1; }
-  100% { opacity: 0; transform: translate3d(var(--spawn-x, 0), calc(var(--spawn-y, 100vh) - 110vh), 0); }
+  100% { opacity: 0; transform: translate3d(var(--spawn-x, 0), calc(var(--spawn-y, 140vh) - 180vh), 0); }
 }
 
 @keyframes moteSway{
