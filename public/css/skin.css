@@ -100,7 +100,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 
 #intro .slide .pic{
   position: absolute;
-  /* portrait footprint (same visual area, taller aspect) */
+  /* portrait footprint (same feel, taller aspect) */
   left: 9vw; top: 10vh; width: 28vw; height: 62vh;
   pointer-events: none; z-index: 2;
   overflow: hidden;             /* never see image edges */
@@ -114,23 +114,21 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   animation: introParallax 24s ease-in-out infinite;
 }
 
-/* Give the hole an inner bevel + warm fringe by layering subtle overlays
-   on the visible image area. These sit ABOVE the bitmap but BELOW the veil. */
+/* Depth: overlays ON the visible image (but still under the veil) */
 #intro .slide .pic .img::before,
 #intro .slide .pic .img::after{
   content:""; position:absolute; inset:0; pointer-events:none; z-index: 1;
 }
 
-/* inner vignette = depth */
+/* inner vignette (carved depth) */
 #intro .slide .pic .img::before{
-  /* soft darkening from the tear edge inward */
   box-shadow:
     inset 0 0 60px rgba(0,0,0,.55),
     inset 0 0 140px rgba(0,0,0,.35);
   mix-blend-mode: multiply;
 }
 
-/* warm inner rim = luminous paper edge */
+/* warm inner rim (paper edge glow) */
 #intro .slide .pic .img::after{
   box-shadow:
     inset 0 0 26px rgba(213,168,74,.35),
@@ -139,24 +137,23 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   filter: saturate(1.1);
 }
 
-/* Foreground veil (same color as intro bg) with a PNG mask "hole".
-   Portrait fit: fill HEIGHT, maintain jagged fidelity. */
+/* Veil above image, with PNG mask hole (portrait fit) */
 #intro .slide .pic .veil{
   position: absolute; inset: 0; z-index: 2;
   background: #0a0f14;
 
-  /* WebKit-prefixed mask (alpha-based) */
+  /* WebKit mask (alpha-based) */
   -webkit-mask-image: url("../img/tear-mask.png");
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-  -webkit-mask-size: auto 100%;    /* <— portrait: fit height */
+  -webkit-mask-size: auto 100%;        /* portrait: fill height */
 
-  /* Standards mask; use luminance so grayscale PNGs also work */
+  /* Standards mask (supports grayscale via luminance) */
   mask-image: url("../img/tear-mask.png");
   mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
-  mask-size: auto 100%;            /* <— portrait: fit height */
+  mask-size: auto 100%;
 
   /* stronger edge bloom so the tear reads as carved */
   filter:
@@ -165,7 +162,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
     drop-shadow(0 8px 38px rgba(0,0,0,.55));
 }
 
-/* Paper fiber/noise only where the veil exists (keeps the paper feel) */
+/* Paper noise only where veil exists (inherits the mask) */
 #intro .slide .pic .veil::after{
   content:""; position:absolute; inset:0; pointer-events:none;
   background: url("../img/paper-noise.png") repeat;
@@ -181,6 +178,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: auto 100%;
+}
+
+/* Tiny breathing motion already referenced by JS */
+@keyframes introParallax{
+  0%   { transform: translate3d( 0px,  0px,0) scale(1.06); }
+  50%  { transform: translate3d( 4px, -3px,0) scale(1.06); }
+  100% { transform: translate3d( 0px,  0px,0) scale(1.06); }
 }
 
 
