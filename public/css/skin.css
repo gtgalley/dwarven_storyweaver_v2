@@ -123,11 +123,11 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 #intro .slide .pic .veil{
   position: absolute; inset: 0; z-index: 2;
   background: #0a0f14; /* same as intro bg */
-  -webkit-mask-image: url("./public/img/tear-mask.png");
+  -webkit-mask-image: url("../img/tear-mask.png");
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-  mask-image: url("./public/img/tear-mask.png");
+  mask-image: url("../img/tear-mask.png");
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
@@ -139,13 +139,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 #intro .slide .pic .veil::after{
   /* subtle fibers/noise that sit only where the veil exists */
   content:""; position:absolute; inset:0; pointer-events:none;
-  background: url("./public/img/paper-noise.png") repeat;
+  background: url("../img/paper-noise.png") repeat;
   opacity:.18; mix-blend-mode: overlay;
-  -webkit-mask-image: url("./public/img/tear-mask.png");
+  -webkit-mask-image: url("../img/tear-mask.png");
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-  mask-image: url("./public/img/tear-mask.png");
+  mask-image: url("../img/tear-mask.png");
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
