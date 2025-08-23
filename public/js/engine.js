@@ -169,11 +169,42 @@ const Weaver = makeWeaver(store,
   (msg)=>Engine.state.storyBeats.push({text:`[log] ${msg}`}),
   (tag)=>{ const t=$('#engineTag'); if(t) t.textContent=Engine.state.live.on?'Live':'Local'; }
 );
+// --- Global glossary (fallback for .gloss without data-def) ----------
+window.GLOSS = Object.assign({
+  "brassreach": "Terraced city of tuned caverns; stories become law.",
+  "unfathomer": "A tide of intent beneath the city resisted by Tune and bound by Decide.",
+  "halls": "Upper civic spaces; first area of play.",
+  "archives": "Stacks and reading wells; ledger authority.",
+  "depths": "Sluice catwalks and vault doors; warden tunnels.",
+  "gate of measures": "Ritual aperture—part machinery, part covenant—where the Unfathomer is faced.",
+  "keys": "Three canonical Keys: Brass, Echo, Stone; two make the Gate ready, three broaden outcomes.",
+  "brass key": "Weight & hinge; opens mechanical aspects of the Gate.",
+  "echo key": "Pattern & return; opens the tuning lattice.",
+  "stone key": "Foundation & oath; opens the oath seats.",
+  "measures": "Weight/Stone, Tone/Brass, Pattern/Echo, Line/Thread—the city’s primitives.",
+  "weight": "Oath, burden, consequence (Stone).",
+  "tone": "Resonance and harmony (Brass).",
+  "pattern": "Memory and law (Echo).",
+  "line": "Decision that binds a path (Thread)."
+}, window.GLOSS||{});
 
 /* ---------- boot ---------- */
 export function boot(){
   buildUI(); hydrate(); bind(); renderAll(); BGM.attachWidget();
   attachGlossTips(document.body);
+   // Enable tooltips for dynamically injected story content
+  const story = document.getElementById('story');
+  if (story){
+    const obs = new MutationObserver(muts=>{
+      for(const m of muts){
+        if (m.addedNodes && m.addedNodes.length){
+          attachGlossTips(story);
+          break;
+        }
+      }
+    });
+    obs.observe(story, { childList:true, subtree:true });
+  }
   insertIntro(); // overlay every load
   tuneIntroLayout();
   mountScrollFab();
@@ -181,6 +212,15 @@ export function boot(){
   if (seen) { if (Engine.el.intro) Engine.el.intro.classList.add('hidden'); if (!Engine.state.storyBeats.length) beginTale(); }
   /* ambience removed */ BGM.updateForState(Engine.state);
   spawnMotes('motes', 24);
+  
+  // Dev convenience: Alt+I marks the intro as seen (persisted)
+  window.addEventListener('keydown', (e)=>{
+    if (e.altKey && (e.key||'').toLowerCase()==='i'){
+      try{ store.set('intro_seen', true); }catch{}
+      if (typeof toast==='function') toast('Intro will be skipped next load');
+    }
+  });
+  
   // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
   const patchFade = document.createElement('style');
   patchFade.textContent = `
@@ -1221,42 +1261,62 @@ function spawnMotesCSS(where='motes', n=20){
 
 
 /* ----- override: JS-animated motes (non-linear rise, fade out) ----- */
-(()=> {
+(()=>{
   const jsAnimatedSpawnMotes = function(where='motes', count=24){
     const host = document.getElementById(where);
     if(!host) return;
     host.style.pointerEvents='none';
 
+    // Find the true containing rect for position:fixed (handles transformed ancestors).
+    function fixedContainingRect(node){
+      let el = node;
+      while (el && el !== document.documentElement){
+        const cs = getComputedStyle(el);
+        if (cs.transform !== 'none' || cs.perspective !== 'none' || cs.filter !== 'none' || cs.contain === 'paint'){
+          return el.getBoundingClientRect();
+        }
+        el = el.parentElement;
+      }
+      const vw = (window.visualViewport?.width) ?? window.innerWidth;
+      const vh = (window.visualViewport?.height) ?? window.innerHeight;
+      return { left: 0, top: 0, width: vw, height: vh };
+    }
+
     function addOne(){
+      const rect = fixedContainingRect(host);
+
       const m = document.createElement('span');
-      m.className='mote';
-      m.style.animation = 'none';   // prevent CSS keyframes from overriding JS transform
-      const vx = Math.random()*window.innerWidth;
-      const startY = window.innerHeight*0.92 + Math.random()*40;
+      m.className = 'mote';
+      m.style.animation = 'none'; // prevent CSS keyframes from overriding JS transform
+
+      // Spawn at the bottom edge of the *actual* containing rect
+      const vx = rect.left + Math.random() * rect.width;
+      const startY = rect.top + rect.height - (12 + Math.random()*28); // ~bottom
       const dur = 14000 + Math.random()*11000; // 14–25s
       const size = 3 + Math.random()*4;
       const amp = 16 + Math.random()*18;
       const born = performance.now();
 
-      m.style.position='fixed';
-      m.style.left='0';
-      m.style.top='0';
-      m.style.width=size+'px';
-      m.style.height=size+'px';
-      m.style.borderRadius='50%';
-      m.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,0.95), rgba(255,200,140,0) 68%)';
-      m.style.filter='brightness(1.4)';
-      m.style.transition='opacity .28s ease-out';
+      m.style.position = 'fixed';
+      m.style.left = '0';
+      m.style.top = '0';
+      m.style.width = size + 'px';
+      m.style.height = size + 'px';
+      m.style.borderRadius = '50%';
+      m.style.background = 'radial-gradient(circle at 50% 50%, rgba(255,200,140,0.95), rgba(255,200,140,0) 68%)';
+      m.style.filter = 'brightness(1.4)';
+      m.style.transition = 'opacity .28s ease-out';
+      m.style.willChange = 'transform, opacity';
       host.appendChild(m);
 
       function tick(t){
-        const s = Math.min(1, (t-born)/dur);
-        const ease = s<.18 ? Math.pow(s/0.18, 1.4) : s; // quicker lift, then steady
-        const y = startY - ease*(window.innerHeight*1.10);
-        const x = vx + Math.sin((t-born)/1300)*amp;
-        m.style.transform = `translate(${x}px, ${y}px)`;
-        m.style.opacity = (s<.08 ? s*12 : 1 - (s-0.08)/0.92);
-        if(s < 1){
+        const s = Math.min(1, (t - born) / dur);
+        const ease = s < .18 ? Math.pow(s / 0.18, 1.4) : s; // quicker lift, then steady
+        const y = startY - ease * (rect.height * 1.10);
+        const x = vx + Math.sin((t - born) / 1300) * amp;
+        m.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+        m.style.opacity = (s < .08 ? s * 12 : 1 - (s - 0.08) / 0.92);
+        if (s < 1){
           requestAnimationFrame(tick);
         } else {
           m.style.opacity = '0';
@@ -1266,7 +1326,7 @@ function spawnMotesCSS(where='motes', n=20){
       requestAnimationFrame(tick);
     }
 
-    for(let i=0;i<count;i++) setTimeout(addOne, i*220);
+    for (let i = 0; i < count; i++) setTimeout(addOne, i * 220);
     setInterval(addOne, 700);
   };
 
@@ -1275,4 +1335,3 @@ function spawnMotesCSS(where='motes', n=20){
   // module-scope alias so boot() can call spawnMotes(...)
   const spawnMotes = window.spawnMotes;
 })();
-
