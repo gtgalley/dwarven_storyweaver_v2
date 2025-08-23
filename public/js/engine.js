@@ -485,16 +485,37 @@ if (!Engine.el.intro.querySelector('.intro-title')){
   skip1 && skip1.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
 
   if (Engine.el.beginBtn){
-    Engine.el.beginBtn.onclick=()=>{ BGM.crossTo('prelude');
+    Engine.el.beginBtn.onclick = ()=>{
+      BGM.crossTo('prelude');
       Sound.gong();
+  
+      // stop/remove intro embers so only main-screen embers remain
+      try { Engine.el.fxIntroCtl && Engine.el.fxIntroCtl.stop && Engine.el.fxIntroCtl.stop(); } catch {}
+      const fxIntro = document.getElementById('fxIntro'); if (fxIntro) fxIntro.remove();
+  
       Engine.el.intro.classList.add('hidden');
       store.set('intro_seen', true);
       if (!Engine.state.storyBeats.length) beginTale();
+  
       // open editor and mount scroll icon
       setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
     };
   }
-
+  
+// ---- Intro embers layer (behind panels, above crest) ----
+if (!document.getElementById('fxIntro')){
+  const fx = document.createElement('div');
+  fx.id = 'fxIntro';
+  fx.setAttribute('aria-hidden','true');
+  Object.assign(fx.style, {
+    position:'fixed', inset:'0', pointerEvents:'none', zIndex:'1'
+  });
+  // put embers behind everything in the intro stack
+  Engine.el.intro.prepend(fx);
+}
+// start intro embers and keep a handle to stop later
+Engine.el.fxIntroCtl = FX.start('fxIntro');
+  
   // Start at the first slide
   show(0);
   tuneIntroLayout();
@@ -1270,7 +1291,7 @@ function exportSnapshot(){
   }catch(e){ console.error(e); }
 }
 
-/* ---------- embers (JS-only; no CSS animations, no “mote” strings) ---------- */
+/* ---------- embers (JS-only; no CSS animations) ---------- */
 (function(){
   function ensureLayer(id){
     let host = document.getElementById(id);
@@ -1280,7 +1301,6 @@ function exportSnapshot(){
       host.setAttribute('aria-hidden','true');
       document.body.appendChild(host);
     }
-    // keep behind UI, non-interactive
     host.style.position = 'fixed';
     host.style.inset = '0';
     host.style.pointerEvents = 'none';
@@ -1291,40 +1311,42 @@ function exportSnapshot(){
   function r(min, max){ return min + Math.random()*(max - min); }
 
   function spawnOne(host){
-    // Use visual viewport if available so we anchor to the *real* screen
-    const rect = (window.visualViewport)
-      ? { left: 0, top: 0, width: visualViewport.width, height: visualViewport.height }
-      : host.getBoundingClientRect();
+    // Use the *visual* viewport so mobile chrome/safe areas don’t shift spawn math
+    const vv = window.visualViewport;
+    const vx = vv?.offsetLeft ?? 0;
+    const vy = vv?.offsetTop  ?? 0;
+    const vw = vv?.width      ?? window.innerWidth;
+    const vh = vv?.height     ?? window.innerHeight;
 
     const dot = document.createElement('span');
-    dot.className = 'ember';      // styling class (NOT animated by CSS)
+    dot.className = 'ember';
     const size   = r(2.5, 6.5);
     const amp    = r(10, 22);
     const period = r(1000, 1600);
     const dur    = r(14000, 24000);
     const born   = performance.now();
 
-    // Inline style so CSS can’t fight us
-    dot.style.position = 'fixed';
-    dot.style.left = '0';
-    dot.style.top = '0';
-    dot.style.width = size + 'px';
-    dot.style.height = size + 'px';
-    dot.style.borderRadius = '50%';
-    dot.style.background = 'radial-gradient(circle at 50% 50%, rgba(255,200,140,.95), rgba(255,200,140,0) 66%)';
-    dot.style.filter = 'brightness(1.3)';
-    dot.style.opacity = '0';
-    dot.style.transition = 'opacity .3s ease-out';
-    dot.style.willChange = 'transform, opacity';
+    dot.style.position='fixed';
+    dot.style.left='0';
+    dot.style.top='0';
+    dot.style.width=size+'px';
+    dot.style.height=size+'px';
+    dot.style.borderRadius='50%';
+    dot.style.background='radial-gradient(circle at 50% 50%, rgba(255,200,140,.95), rgba(255,200,140,0) 66%)';
+    dot.style.filter='brightness(1.3)';
+    dot.style.opacity='0';
+    dot.style.transition='opacity .3s ease-out';
+    dot.style.willChange='transform, opacity';
     host.appendChild(dot);
 
-    const startX = r(rect.left, rect.left + rect.width);
-    const startY = rect.top + rect.height + r(60, 180);   // **spawn well BELOW the screen**
-    const travel = rect.height + 220;                     // rise off the top
+    // GUARANTEED off-screen spawn below the bottom edge
+    const startX = r(vx, vx + vw);
+    const startY = vy + vh + r(160, 360);   // deeper buffer
+    const travel = vh + 360;                // clear the top well past the bezel
 
     function tick(t){
       const s = Math.min(1, (t - born) / dur);
-      const eased = s < .12 ? Math.pow(s / 0.12, 1.4) : s;  // gentle lift, then linear
+      const eased = s < .12 ? Math.pow(s / 0.12, 1.4) : s;
       const x = startX + Math.sin((t - born) / period) * amp;
       const y = startY - eased * travel;
       dot.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
