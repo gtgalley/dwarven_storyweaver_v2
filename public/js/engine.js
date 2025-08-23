@@ -429,73 +429,57 @@ function insertIntro(){
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
   
-  /* --- Intro cutout: image behind black veil, revealed by PNG mask --- */
-#intro .slide { position: relative; }
+  // Ensure cutout structure on every slide: .pic > (.img, .veil)
+// - If a stray .img exists directly under .slide, move it inside .pic
+// - Always create a .veil overlay
+// - Give .img a visible placeholder if no background is set (so you can see it)
+(function ensureIntroCutout(){
+  const slides = Engine.el.slides || Array.from(document.querySelectorAll('#intro .slide'));
+  slides.forEach(sl=>{
+    // 1) ensure container
+    let pic = sl.querySelector('.pic');
+    if(!pic){
+      pic = document.createElement('div');
+      pic.className = 'pic';
+      const copy = sl.querySelector('.copy');
+      sl.insertBefore(pic, copy || sl.firstChild);
+    }
 
-#intro .slide .pic{
-  position: absolute;
-  left: 6vw; top: 12vh; width: 34vw; height: 52vh;
-  pointer-events: none; z-index: 2;
-  overflow: hidden;             /* never see image edges */
-}
+    // 2) unify the .img
+    let imgInPic = pic.querySelector('.img');
+    const strayImg = sl.querySelector(':scope > .img'); // direct child of slide
+    if(!imgInPic && strayImg){
+      pic.appendChild(strayImg);
+      imgInPic = strayImg;
+    } else if(!imgInPic){
+      imgInPic = document.createElement('div');
+      imgInPic.className = 'img';
+      pic.appendChild(imgInPic);
+    } else if(strayImg && strayImg !== imgInPic){
+      // prefer the stray (likely the authored one), remove duplicate
+      pic.removeChild(imgInPic);
+      pic.appendChild(strayImg);
+      imgInPic = strayImg;
+    }
 
-/* Image sits UNDER the veil; one global sizing rule for now */
-#intro .slide .pic .img{
-  position: absolute; inset: 0; z-index: 0;
-  background-size: cover; background-position: center center;
-  transform: translate3d(0,0,0) scale(1.06);
-  animation: introParallax 24s ease-in-out infinite;
-}
+    // 3) veil
+    if(!pic.querySelector('.veil')){
+      const v = document.createElement('div');
+      v.className = 'veil';
+      pic.appendChild(v);
+    }
 
-/* Foreground veil (same color as intro bg) with a PNG mask "hole".
-   NOTE: URLs are relative to /public/css/skin.css → ../img/... */
-#intro .slide .pic .veil{
-  position: absolute; inset: 0; z-index: 1;
-  background: #0a0f14;
-
-  /* WebKit-prefixed mask (alpha-based) */
-  -webkit-mask-image: url("../img/tear-mask.png");
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: 100% 100%;
-
-  /* Standards mask; use luminance so grayscale PNGs also work */
-  mask-image: url("../img/tear-mask.png");
-  mask-mode: luminance;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: 100% 100%;
-
-  /* warm inner rim that hugs the torn edge */
-  filter:
-    drop-shadow(0 0 10px rgba(213,168,74,.25))
-    drop-shadow(0 0 22px rgba(213,168,74,.12));
-}
-
-/* Paper fiber/noise only where the veil exists (inherits the same mask) */
-#intro .slide .pic .veil::after{
-  content:""; position:absolute; inset:0; pointer-events:none;
-  background: url("../img/paper-noise.png") repeat;
-  opacity:.18; mix-blend-mode: overlay;
-
-  -webkit-mask-image: inherit;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: 100% 100%;
-
-  mask-image: inherit;
-  mask-mode: luminance;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: 100% 100%;
-}
-
-/* Tiny breathing motion (already referenced by JS on slide change) */
-@keyframes introParallax{
-  0%   { transform: translate3d( 0px,  0px,0) scale(1.06); }
-  50%  { transform: translate3d( 4px, -3px,0) scale(1.06); }
-  100% { transform: translate3d( 0px,  0px,0) scale(1.06); }
-}
+    // 4) visible placeholder if no image yet
+    const cs = getComputedStyle(imgInPic);
+    const hasBG = cs.backgroundImage && cs.backgroundImage !== 'none';
+    if(!hasBG){
+      imgInPic.style.backgroundImage =
+        "linear-gradient(135deg, rgba(213,168,74,.28), rgba(22,16,10,.28))";
+      imgInPic.style.backgroundSize = 'cover';
+      imgInPic.style.backgroundPosition = 'center';
+    }
+  });
+})();
   
 
   // Title at top of slides with double underline
