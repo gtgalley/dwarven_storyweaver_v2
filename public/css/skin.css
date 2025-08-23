@@ -95,30 +95,29 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 /* FX containers (defensive; JS also inlines) */
 #fx, #fxIntro { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 
-/* --- Intro cutout (PORTRAIT, LOCKED), PNG mask rotated 90° --- */
+/* --- Intro cutout (PORTRAIT, LOCKED), PNG alpha mask (no rotation) --- */
 #intro .slide { position: relative; }
 
 #intro .slide .pic{
   position: absolute;
   left: 9vw; top: 10vh;
-  width: 28vw;                  /* single sizing axis */
-  aspect-ratio: 3 / 5;          /* keeps shape consistent */
-  height: auto;                 /* follows aspect-ratio */
+  width: 28vw;                 /* single sizing axis */
+  aspect-ratio: 3 / 5;         /* locks shape; scales uniformly */
+  height: auto;
   pointer-events: none; z-index: 2;
   overflow: hidden;
 }
 
-/* Image UNDER the veil; scales exactly like the mask */
+/* Image sits under the veil; scales exactly with the box */
 #intro .slide .pic .img{
   position: absolute; inset: 0; z-index: 0;
-  background-position: center center;
+  background-size: cover; background-position: center center;
   background-repeat: no-repeat;
-  background-size: cover;       /* same behavior as mask-size: cover */
   transform: translate3d(0,0,0) scale(1.06);
   animation: introParallax 24s ease-in-out infinite;
 }
 
-/* Depth & warm rim on the visible image (not the veil) */
+/* Depth overlays on the visible image */
 #intro .slide .pic .img::before,
 #intro .slide .pic .img::after{
   content:""; position:absolute; inset:0; pointer-events:none; z-index: 1;
@@ -137,26 +136,22 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   filter: saturate(1.1);
 }
 
-/* Veil with PNG mask — ROTATED 90° and using cover so it tracks the image */
+/* Veil with PNG **alpha** mask (portrait asset) */
 #intro .slide .pic .veil{
   position: absolute; inset: 0; z-index: 2;
   background: #0a0f14;
 
-  /* Standards + WebKit paths; both use COVER to mirror the image */
-  mask-image: url("../img/tear-mask.png");
-  mask-mode: luminance;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: cover;
-
-  -webkit-mask-image: url("../img/tear-mask.png");
+  /* Blink/WebKit path (uses alpha) */
+  -webkit-mask-image: url("../img/tear-mask-portrait.png");
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: cover;
 
-  /* Rotate the mask to portrait */
-  transform: rotate(90deg);
-  transform-origin: 50% 50%;
+  /* Standards path (kept for completeness) */
+  mask-image: url("../img/tear-mask-portrait.png");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: cover;
 
   /* carved rim */
   filter:
@@ -165,16 +160,17 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
     drop-shadow(0 8px 38px rgba(0,0,0,.55));
 }
 
-/* Paper fibers/noise follow the SAME mask & scaling */
+/* Paper fibers/noise inherit the exact same mask & scaling */
 #intro .slide .pic .veil::after{
   content:""; position:absolute; inset:0; pointer-events:none;
   background: url("../img/paper-noise.png") repeat;
   opacity:.18; mix-blend-mode: overlay;
 
-  mask-image: inherit; mask-mode: luminance;
-  mask-repeat: no-repeat; mask-position: center; mask-size: cover;
   -webkit-mask-image: inherit; -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center; -webkit-mask-size: cover;
+
+  mask-image: inherit; mask-repeat: no-repeat;
+  mask-position: center; mask-size: cover;
 }
 
 /* Gentle breathing motion */
