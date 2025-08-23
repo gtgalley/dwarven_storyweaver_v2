@@ -39,6 +39,22 @@ function defaults(){
 const Engine={ el:{}, state: defaults() };
 window.Engine=Engine;
 
+// --- Now Playing chip controller (ephemeral) -------------------------
+// Called by BGM.crossTo(...) after each successful track swap.
+// Shows the chip briefly, then fades it away. Safe to spam.
+let _npTimer = null;
+window.setNowPlaying = (title)=>{
+  try{
+    const w = document.getElementById('nowplay');
+    if(!w) return;
+    const t = document.getElementById('npTitle');
+    if(t) t.textContent = title || '';
+    // reveal with CSS transition (runtime style already injects the fade)
+    w.classList.add('show');
+    clearTimeout(_npTimer);
+    _npTimer = setTimeout(()=>{ try{ w.classList.remove('show'); }catch{} }, 2400);
+  }catch(e){ /* non-fatal */ }
+};
 
 /* ---------- background music manager (file-based, crossfades) ---------- */
 const BGM = (function(){
@@ -104,6 +120,7 @@ const BGM = (function(){
   function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
   return {crossTo, stop, updateForState, attachWidget};
 })();
+
 /* ---------- sound @ ~20 BPM base ---------- */
 
 const Sound = (()=>{
