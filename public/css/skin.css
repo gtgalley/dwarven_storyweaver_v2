@@ -92,6 +92,20 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   50%     { opacity:.95; }
 }
 
+/* FX containers (defensive; JS also inlines) */
+#fx, #fxIntro { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+
+/* Main screen bronze/gold bottom glow (mirrors #intro::after) */
+#glow{
+  position: fixed; left:0; right:0; bottom:0; height: 20vh;
+  pointer-events: none; z-index: 1; /* below text, above crest; embers (#fx) are later in DOM */
+  background:
+    radial-gradient(120% 80% at 50% 100%,
+      rgba(213,168,74,.22), rgba(213,168,74,0) 60%);
+  animation: emberPulse 10s ease-in-out infinite;
+  filter: saturate(1.4);
+}
+
 /* Masthead */
 .masthead{position:relative;padding:22px 18px 12px;border-bottom:2px solid var(--line);}
 
