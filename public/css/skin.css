@@ -218,6 +218,14 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 .glow-success:hover{ animation:none; filter:saturate(.5) drop-shadow(0 0 5px rgba(213,168,74,.6)) }
 .glow-fail:hover{ animation:none; filter:saturate(.5) drop-shadow(0 0 5px rgba(123,42,42,.6)) }
 
+/* Ephemeral Now Playing chip (visibility is JS-toggled) */
+#nowplay{
+  opacity:0;
+  transition:opacity .35s ease;
+  pointer-events:none;
+}
+#nowplay.show{ opacity:1; }
+
 /* Typewriter reveal & smoke cursor */
 .reveal .ch.on{opacity:1}
 .reveal .cursor{
