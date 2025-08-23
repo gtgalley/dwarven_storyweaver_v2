@@ -95,73 +95,72 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 /* FX containers (defensive; JS also inlines) */
 #fx, #fxIntro { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 
-/* Intro cutout baseline (safe defaults; tweak sizes later) */
-#intro .slide{ position: relative; }
-#intro .slide .pic{
-  position: absolute;
-  left: 6vw; top: 12vh; width: 34vw; height: 52vh;
-  pointer-events: none; z-index: 2;
-}
-/* --- Intro cutout: image behind black veil, revealed by jagged PNG mask --- */
+/* --- Intro cutout: image behind black veil, revealed by PNG mask --- */
 #intro .slide { position: relative; }
+
 #intro .slide .pic{
   position: absolute;
   left: 6vw; top: 12vh; width: 34vw; height: 52vh;
   pointer-events: none; z-index: 2;
+  overflow: hidden;             /* never see image edges */
 }
 
-/* Image sits UNDER the veil; global sizing for now */
+/* Image sits UNDER the veil; one global sizing rule for now */
 #intro .slide .pic .img{
-  position: absolute; inset: 0; z-index: 1;
+  position: absolute; inset: 0; z-index: 0;
   background-size: cover; background-position: center center;
   transform: translate3d(0,0,0) scale(1.06);
   animation: introParallax 24s ease-in-out infinite;
 }
 
-/* Foreground veil = the “paper” layer.
-   Mask is white outside (keep veil), black inside (cut hole to reveal image). */
+/* Foreground veil (same color as intro bg) with a PNG mask "hole".
+   NOTE: URLs are relative to /public/css/skin.css → ../img/... */
 #intro .slide .pic .veil{
-  position: absolute; inset: 0; z-index: 2;
-  background: #0a0f14; /* same as intro bg */
+  position: absolute; inset: 0; z-index: 1;
+  background: #0a0f14;
+
+  /* WebKit-prefixed mask (alpha-based) */
   -webkit-mask-image: url("../img/tear-mask.png");
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-  -webkit-mask-size: contain;
+  -webkit-mask-size: 100% 100%;
+
+  /* Standards mask; use luminance so grayscale PNGs also work */
   mask-image: url("../img/tear-mask.png");
+  mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
-  mask-size: contain;
-  /* warm inner rim via drop-shadows that hug the hole’s alpha edge */
+  mask-size: 100% 100%;
+
+  /* warm inner rim that hugs the torn edge */
   filter:
     drop-shadow(0 0 10px rgba(213,168,74,.25))
     drop-shadow(0 0 22px rgba(213,168,74,.12));
 }
+
+/* Paper fiber/noise only where the veil exists (inherits the same mask) */
 #intro .slide .pic .veil::after{
-  /* subtle fibers/noise that sit only where the veil exists */
   content:""; position:absolute; inset:0; pointer-events:none;
   background: url("../img/paper-noise.png") repeat;
   opacity:.18; mix-blend-mode: overlay;
-  -webkit-mask-image: url("../img/tear-mask.png");
+
+  -webkit-mask-image: inherit;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-  -webkit-mask-size: contain;
-  mask-image: url("../img/tear-mask.png");
+  -webkit-mask-size: 100% 100%;
+
+  mask-image: inherit;
+  mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
-  mask-size: contain;
+  mask-size: 100% 100%;
 }
 
-/* Tiny breathing motion to sell depth (paired with JS restart on slide change) */
+/* Tiny breathing motion (already referenced by JS on slide change) */
 @keyframes introParallax{
   0%   { transform: translate3d( 0px,  0px,0) scale(1.06); }
   50%  { transform: translate3d( 4px, -3px,0) scale(1.06); }
   100% { transform: translate3d( 0px,  0px,0) scale(1.06); }
-}
-
-/* Optional: zoom for first-view entrance if you want it */
-@keyframes introZoom{
-  0%   { transform: translate3d(0,0,0) scale(1.01); filter:saturate(1.02) brightness(1.01); }
-  100% { transform: translate3d(0,0,0) scale(1.06); filter:saturate(1.08) brightness(1.02); }
 }
 
 
