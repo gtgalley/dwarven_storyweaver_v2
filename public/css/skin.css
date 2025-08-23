@@ -95,6 +95,26 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 /* FX containers (defensive; JS also inlines) */
 #fx, #fxIntro { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 
+/* Intro cutout baseline (safe defaults; tweak sizes later) */
+#intro .slide{ position: relative; }
+#intro .slide .pic{
+  position: absolute;
+  left: 6vw; top: 12vh; width: 34vw; height: 52vh;
+  pointer-events: none; z-index: 2;
+}
+#intro .slide .pic .img{
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  /* Temporary visual: rounded rectangle “cutout” until art mask arrives */
+  clip-path: polygon(5% 0, 95% 0, 100% 12%, 100% 88%, 95% 100%, 5% 100%, 0 88%, 0 12%);
+  box-shadow: 0 0 30px rgba(213,168,74,.25) inset, 0 6px 40px rgba(0,0,0,.35);
+}
+#intro .slide .pic .veil{
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 85% at 50% 45%, rgba(0,0,0,.0), rgba(0,0,0,.65) 70%);
+  mix-blend-mode: multiply;
+}
+
 /* Main screen bronze/gold bottom glow (mirrors #intro::after) */
 #glow{
   position: fixed; left:0; right:0; bottom:0; height: 20vh;
