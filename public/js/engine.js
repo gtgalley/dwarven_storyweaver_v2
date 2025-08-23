@@ -501,10 +501,16 @@ if (!Engine.el.intro.querySelector('.intro-title')){
       s.classList.toggle('active', active);
       if (!active) return;
 
-      // restart zoom animation on the active image
+      // restart image motion on the active slide
       const img = s.querySelector('.img');
-      if (img){ img.style.animation = 'none'; img.offsetHeight; img.style.animation = 'introZoom 22s ease-in-out forwards'; }
-
+      if (img){
+        // hard reset any previous animations
+        img.style.animation = 'none';
+        img.offsetHeight; // reflow
+        // run zoom-once + continuous micro parallax
+        img.style.animation =
+          'introZoom 28s ease-in-out forwards, introParallax 24s ease-in-out infinite';
+      }
       // trigger typewriter once per slide
       const p = s.querySelector('.scroll p');
       if (p && !p.dataset.typed){
