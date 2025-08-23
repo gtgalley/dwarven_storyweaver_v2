@@ -225,9 +225,11 @@ export function boot(){
   const patchFade = document.createElement('style');
   patchFade.textContent = `
     @keyframes mote-fadeout { to { opacity: 0; } }
-    .mote { animation: mote-rise var(--dur,16s) linear forwards,
-                     mote-sway var(--sway,6s) ease-in-out infinite,
-                     mote-fadeout var(--dur,16s) linear forwards; }`;
+    .mote {
+      animation:
+        mote-rise var(--dur,16s) linear forwards,
+        mote-fadeout var(--dur,16s) linear forwards;
+    }`;
   document.head.appendChild(patchFade);
 }
 
@@ -1243,12 +1245,12 @@ function exportSnapshot(){
 
 /* ---------- motes ---------- */
 function spawnMotesCSS(where='motes', n=20){
-  const root=document.getElementById(where); if(!root) return;
+  const root = document.getElementById(where); if(!root) return;
   for(let i=0;i<n;i++){
-    const s=document.createElement('span'); s.className='mote';
-    const spawnX = Math.random()*100;                       // vw
-    const spawnY = 60 + Math.random()*40;                   // vh (low on screen)
-    const sway   = (Math.random()*30-15).toFixed(1)+'px';   // ±15px
+    const s = document.createElement('span'); s.className='mote';
+    const spawnX = Math.random()*100;           // vw
+    const spawnY = 92 + Math.random()*8;        // vh (very bottom band)
+    const sway   = (Math.random()*30-15).toFixed(1)+'px';   // kept for future use
     const dur    = (14 + Math.random()*12).toFixed(1)+'s';  // 14–26s
 
     s.style.setProperty('--spawn-x', spawnX+'vw');
