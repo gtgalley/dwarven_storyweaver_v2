@@ -429,15 +429,43 @@ function insertIntro(){
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
   
-  // Add the torn veil once per slide (reveals .img beneath)
-  Engine.el.slides.forEach(sl=>{
-    const pic = sl.querySelector('.pic');
-    if (pic && !pic.querySelector('.veil')){
-      const v = document.createElement('div');
-      v.className = 'veil';
-      pic.appendChild(v);
-    }
-  });
+  // Ensure cutout structure (.pic > .img) and veil on every slide
+Engine.el.slides.forEach(sl=>{
+  // make sure .pic exists (prepend before copy if not present)
+  let pic = sl.querySelector('.pic');
+  if (!pic){
+    pic = document.createElement('div');
+    pic.className = 'pic';
+    const copy = sl.querySelector('.copy');
+    sl.insertBefore(pic, copy || sl.firstChild);
+  }
+  // make sure .img exists inside .pic
+  let img = pic.querySelector('.img');
+  if (!img){
+    img = document.createElement('div');
+    img.className = 'img';        // styled via CSS mask to reveal through the tear
+    pic.appendChild(img);
+  }
+  // add the torn veil if missing
+  if (!pic.querySelector('.veil')){
+    const v = document.createElement('div');
+    v.className = 'veil';
+    pic.appendChild(v);
+  }
+});
+
+// Simple API for wiring slide images later
+window.setIntroImage = function slideImage(index, url){
+  try{
+    const slide = Engine.el.slides?.[index];
+    if(!slide) return;
+    const img = slide.querySelector('.pic .img');
+    if(!img) return; // structure guard (shouldn't happen after the ensure block above)
+    img.style.backgroundImage = `url('${url}')`;
+    img.style.backgroundSize = 'cover';
+    img.style.backgroundPosition = 'center center';
+  }catch{}
+};
   
 
   // Title at top of slides with double underline
@@ -526,8 +554,11 @@ function buildUI(){
   document.body.innerHTML = `
   <div class="app">
     <div class="crest" aria-hidden="true"></div>
+    <div id="glow" aria-hidden="true"></div>
     <div id="fx" aria-hidden="true"></div>
-    <div id="letterbox" class="letterbox hidden"><div class="bar top"></div><div class="bar bottom"></div></div>
+    <div id="letterbox" class="letterbox hidden">
+      <div class="bar top"></div><div class="bar bottom"></div>
+    </div>
     <div class="masthead">
       <div class="brand-title u-double-underline">
         <span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>
@@ -1323,7 +1354,7 @@ function exportSnapshot(){
     const size   = r(2.5, 6.5);
     const amp    = r(10, 22);
     const period = r(1000, 1600);
-    const dur    = r(14000, 24000);
+    const dur    = r(28000, 38000); // ⟵ cap max speed to 1/2 of former maximum
     const born   = performance.now();
 
     dot.style.position='fixed';
@@ -1341,7 +1372,7 @@ function exportSnapshot(){
 
     // GUARANTEED off-screen spawn below the bottom edge
     const startX = r(vx, vx + vw);
-    const startY = vy + vh + r(160, 360);   // deeper buffer
+    const startY = vy + vh + r(160, 360);   // deeper buffer to eliminate any pop-in
     const travel = vh + 360;                // clear the top well past the bezel
 
     function tick(t){
