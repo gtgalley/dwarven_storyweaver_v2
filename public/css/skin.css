@@ -95,17 +95,18 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 /* FX containers (defensive; JS also inlines) */
 #fx, #fxIntro { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 
-/* --- Intro cutout: image behind black veil, revealed by PNG mask --- */
+/* --- Intro cutout (PORTRAIT), image behind veil, with inner rim/depth --- */
 #intro .slide { position: relative; }
 
 #intro .slide .pic{
   position: absolute;
-  left: 6vw; top: 12vh; width: 34vw; height: 52vh;
+  /* portrait footprint (same visual area, taller aspect) */
+  left: 9vw; top: 10vh; width: 28vw; height: 62vh;
   pointer-events: none; z-index: 2;
   overflow: hidden;             /* never see image edges */
 }
 
-/* Image sits UNDER the veil; one global sizing rule for now */
+/* Image sits UNDER the veil; global sizing rule */
 #intro .slide .pic .img{
   position: absolute; inset: 0; z-index: 0;
   background-size: cover; background-position: center center;
@@ -113,32 +114,58 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   animation: introParallax 24s ease-in-out infinite;
 }
 
+/* Give the hole an inner bevel + warm fringe by layering subtle overlays
+   on the visible image area. These sit ABOVE the bitmap but BELOW the veil. */
+#intro .slide .pic .img::before,
+#intro .slide .pic .img::after{
+  content:""; position:absolute; inset:0; pointer-events:none; z-index: 1;
+}
+
+/* inner vignette = depth */
+#intro .slide .pic .img::before{
+  /* soft darkening from the tear edge inward */
+  box-shadow:
+    inset 0 0 60px rgba(0,0,0,.55),
+    inset 0 0 140px rgba(0,0,0,.35);
+  mix-blend-mode: multiply;
+}
+
+/* warm inner rim = luminous paper edge */
+#intro .slide .pic .img::after{
+  box-shadow:
+    inset 0 0 26px rgba(213,168,74,.35),
+    inset 0 0 60px rgba(213,168,74,.20);
+  mix-blend-mode: screen;
+  filter: saturate(1.1);
+}
+
 /* Foreground veil (same color as intro bg) with a PNG mask "hole".
-   NOTE: URLs are relative to /public/css/skin.css → ../img/... */
+   Portrait fit: fill HEIGHT, maintain jagged fidelity. */
 #intro .slide .pic .veil{
-  position: absolute; inset: 0; z-index: 1;
+  position: absolute; inset: 0; z-index: 2;
   background: #0a0f14;
 
   /* WebKit-prefixed mask (alpha-based) */
   -webkit-mask-image: url("../img/tear-mask.png");
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-  -webkit-mask-size: 100% 100%;
+  -webkit-mask-size: auto 100%;    /* <— portrait: fit height */
 
   /* Standards mask; use luminance so grayscale PNGs also work */
   mask-image: url("../img/tear-mask.png");
   mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
-  mask-size: 100% 100%;
+  mask-size: auto 100%;            /* <— portrait: fit height */
 
-  /* warm inner rim that hugs the torn edge */
+  /* stronger edge bloom so the tear reads as carved */
   filter:
-    drop-shadow(0 0 10px rgba(213,168,74,.25))
-    drop-shadow(0 0 22px rgba(213,168,74,.12));
+    drop-shadow(0 0 10px rgba(213,168,74,.35))
+    drop-shadow(0 0 28px rgba(213,168,74,.20))
+    drop-shadow(0 8px 38px rgba(0,0,0,.55));
 }
 
-/* Paper fiber/noise only where the veil exists (inherits the same mask) */
+/* Paper fiber/noise only where the veil exists (keeps the paper feel) */
 #intro .slide .pic .veil::after{
   content:""; position:absolute; inset:0; pointer-events:none;
   background: url("../img/paper-noise.png") repeat;
@@ -147,20 +174,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   -webkit-mask-image: inherit;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-  -webkit-mask-size: 100% 100%;
+  -webkit-mask-size: auto 100%;
 
   mask-image: inherit;
   mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
-  mask-size: 100% 100%;
-}
-
-/* Tiny breathing motion (already referenced by JS on slide change) */
-@keyframes introParallax{
-  0%   { transform: translate3d( 0px,  0px,0) scale(1.06); }
-  50%  { transform: translate3d( 4px, -3px,0) scale(1.06); }
-  100% { transform: translate3d( 0px,  0px,0) scale(1.06); }
+  mask-size: auto 100%;
 }
 
 
