@@ -613,10 +613,3 @@ body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: 
 #intro .slide .nav { position: absolute; right: 18px; bottom: 18px; z-index: 4; }
 .intro-title { z-index: 5; } /* your existing title */
 
-/* Intro motes: above backgrounds, below text */
-#motesIntro {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2; /* between .veil (2) and .txt (3) */
-}
