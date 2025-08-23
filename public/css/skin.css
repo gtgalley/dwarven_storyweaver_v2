@@ -95,18 +95,17 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 /* FX containers (defensive; JS also inlines) */
 #fx, #fxIntro { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
 
-/* --- Intro cutout (PORTRAIT), image behind veil, with inner rim/depth --- */
+/* --- Intro cutout (PORTRAIT), PNG mask rotated 90°, image behind veil --- */
 #intro .slide { position: relative; }
 
 #intro .slide .pic{
   position: absolute;
-  /* portrait footprint (same feel, taller aspect) */
   left: 9vw; top: 10vh; width: 28vw; height: 62vh;
   pointer-events: none; z-index: 2;
-  overflow: hidden;             /* never see image edges */
+  overflow: hidden;
 }
 
-/* Image sits UNDER the veil; global sizing rule */
+/* Image under veil */
 #intro .slide .pic .img{
   position: absolute; inset: 0; z-index: 0;
   background-size: cover; background-position: center center;
@@ -114,21 +113,17 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   animation: introParallax 24s ease-in-out infinite;
 }
 
-/* Depth: overlays ON the visible image (but still under the veil) */
+/* Depth & warm rim on the visible image */
 #intro .slide .pic .img::before,
 #intro .slide .pic .img::after{
   content:""; position:absolute; inset:0; pointer-events:none; z-index: 1;
 }
-
-/* inner vignette (carved depth) */
 #intro .slide .pic .img::before{
   box-shadow:
     inset 0 0 60px rgba(0,0,0,.55),
     inset 0 0 140px rgba(0,0,0,.35);
   mix-blend-mode: multiply;
 }
-
-/* warm inner rim (paper edge glow) */
 #intro .slide .pic .img::after{
   box-shadow:
     inset 0 0 26px rgba(213,168,74,.35),
@@ -137,41 +132,34 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   filter: saturate(1.1);
 }
 
-/* Veil above image, with PNG mask hole (portrait fit) */
+/* Veil with PNG mask — rotated 90° to reuse the landscape asset */
 #intro .slide .pic .veil{
   position: absolute; inset: 0; z-index: 2;
   background: #0a0f14;
 
-  /* WebKit mask (alpha-based) */
-  -webkit-mask-image: url("../img/tear-mask.png");
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: auto 100%;        /* portrait: fill height */
-
-  /* Standards mask (supports grayscale via luminance) */
+  /* Use LUMINANCE mask so white keeps veil, black cuts the hole */
   mask-image: url("../img/tear-mask.png");
   mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
-  mask-size: auto 100%;
+  mask-size: auto 100%;          /* portrait: fill height */
 
-  /* stronger edge bloom so the tear reads as carved */
+  /* rotate the mask (and veil layer) to portrait */
+  transform: rotate(90deg);
+  transform-origin: 50% 50%;
+
+  /* edge bloom so the tear reads as carved */
   filter:
     drop-shadow(0 0 10px rgba(213,168,74,.35))
     drop-shadow(0 0 28px rgba(213,168,74,.20))
     drop-shadow(0 8px 38px rgba(0,0,0,.55));
 }
 
-/* Paper noise only where veil exists (inherits the mask) */
+/* Paper fibers/noise only where the veil exists (inherits same mask) */
 #intro .slide .pic .veil::after{
   content:""; position:absolute; inset:0; pointer-events:none;
   background: url("../img/paper-noise.png") repeat;
   opacity:.18; mix-blend-mode: overlay;
-
-  -webkit-mask-image: inherit;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: auto 100%;
 
   mask-image: inherit;
   mask-mode: luminance;
@@ -180,7 +168,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   mask-size: auto 100%;
 }
 
-/* Tiny breathing motion already referenced by JS */
+/* Gentle breathing motion */
 @keyframes introParallax{
   0%   { transform: translate3d( 0px,  0px,0) scale(1.06); }
   50%  { transform: translate3d( 4px, -3px,0) scale(1.06); }
@@ -444,51 +432,24 @@ input[type="range"]{width:100%}
     0 0 22px rgba(213,168,74,.35);
   transform: translateX(-50%);
 }
-/* Left half: image + torn veil that reveals the art */
-#intro .pic{ position: relative; overflow: hidden; }
-#intro .pic .img{
-  position:absolute; inset:0; z-index:1;
-  background:
-    /* TEMP: unmistakable placeholder to prove hole is cutting correctly */
-    linear-gradient(135deg, #3c5570, #0b1117);
-  background-size: cover; background-position: center;
-  filter: contrast(1.06) saturate(1.08) brightness(1.02);
-  transform: scale(1.02);
-}
-
-/* Foreground veil colored like the intro background.
-   A CSS mask cuts a jagged “ripped paper” opening that reveals the image. */
-#intro .pic .veil{
-  position:absolute; inset:0; background:#0a0f14; z-index:2;
-  -webkit-mask: url('data:image/svg+xml;utf8,\
-<svg xmlns="http://www.w3.org/2000/svg" viewBox=\"0 0 1200 800\" preserveAspectRatio=\"none\">\
-  <defs>\
-    <!-- White shows veil; black becomes the hole revealing the image -->\
-    <mask id=\"cut\">\
-      <rect width=\"1200\" height=\"800\" fill=\"white\"/>\
-      <!-- Jagged rectangle: top-right ~ aligned under masthead, bottom-left inset 15px -->\
-      <path d=\"M60,740 L60,60 \
-               L520,60 L560,100 L600,80 L640,120 L680,95 L720,130 L760,110 L800,140 L840,125 L880,155 L920,140 L960,170 L1000,160 L1040,190 L1080,185 L1120,210 L1120,740 Z\" \
-            fill=\"black\"/>\
-    </mask>\
-  </defs>\
-  <rect width=\"1200\" height=\"800\" fill=\"white\" mask=\"url(#cut)\"/>\
-</svg>') center/100% 100% no-repeat;
-  mask: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 800\" preserveAspectRatio=\"none\"><defs><mask id=\"cut\"><rect width=\"1200\" height=\"800\" fill=\"white\"/><path d=\"M60,740 L60,60 L520,60 L560,100 L600,80 L640,120 L680,95 L720,130 L760,110 L800,140 L840,125 L880,155 L920,140 L960,170 L1000,160 L1040,190 L1080,185 L1120,210 L1120,740 Z\" fill=\"black\"/></mask></defs><rect width=\"1200\" height=\"800\" fill=\"white\" mask=\"url(#cut)\"/></svg>') center/100% 100% no-repeat;
-  opacity:.98;
-  pointer-events:none;
-}
-
-.gloss:hover .tip{opacity:1}
-/* auto shift when near edges; JS adjusts left dynamically */
+/* (Removed legacy rules)
+   DELETE entirely:
+   #intro .pic { ... }
+   #intro .pic .img { ... }
+   #intro .pic .veil { ... }   // inline SVG mask + webkit-mask, no longer used
+   .gloss:hover .tip { opacity:1 }  // stale, replaced by .gloss-tip via JS
+*/
 
 /* Scrollbars */
-.story-scroll::-webkit-scrollbar{width:10px}
-.story-scroll::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#4b3917,#2b2212);border:2px solid #2b2212;border-radius:6px}
-.story-scroll::-webkit-scrollbar-track{background:#0f1419}
+.story-scroll::-webkit-scrollbar{ width:10px; }
+.story-scroll::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#4b3917,#2b2212);
+  border:2px solid #2b2212; border-radius:6px;
+}
+.story-scroll::-webkit-scrollbar-track{ background:#0f1419; }
 
 /* Number inputs accent */
-input[type="number"]{accent-color:var(--gold)}
+input[type="number"]{ accent-color:var(--gold); }
 
 /* Intro overlay must sit above the app and receive clicks */
 #intro.intro{
