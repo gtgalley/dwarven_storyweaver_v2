@@ -502,7 +502,6 @@ input[type="number"]{accent-color:var(--gold)}
   opacity:.85;
 }
 
-
 /* Ember motes (app & intro layers share the same style) */
 #motes, #motesIntro { position:fixed; inset:0; pointer-events:none; z-index:1; }
 
@@ -513,11 +512,18 @@ input[type="number"]{accent-color:var(--gold)}
   background: radial-gradient(circle at 50% 50%, rgba(255,190,120,.9), rgba(255,190,120,.0) 65%);
   filter: blur(0.2px);
   opacity: 0;
-  /* initial position set by CSS vars from JS */
+
+  /* Anchor to explicit spawn point; default to bottom of screen */
   transform: translate(var(--spawn-x,0), var(--spawn-y,100vh));
-  /* single animation controls the full rise from the spawn point */
+
+  /* Single transform animation only (no competing transforms) */
   animation: mote-rise var(--dur,16s) linear forwards;
+
+  will-change: transform, opacity;
 }
+
+/* Safeguard: if JS sets animation:none inline, never override it */
+.mote[style*="animation: none"] { animation: none !important; }
 
 /* Rise from the provided spawn point all the way off screen */
 @keyframes mote-rise{
