@@ -221,23 +221,21 @@ export function boot(){
     }
   });
   
-  // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
-  const patchFade = document.createElement('style');
-  patchFade.textContent = `
-    @keyframes mote-fadeout { to { opacity: 0; } }
-    .mote {
-      animation:
-        mote-rise var(--dur,16s) linear forwards,
-        mote-fadeout var(--dur,16s) linear forwards;
-    }`;
-  document.head.appendChild(patchFade);
-}
-
+ 
 (function(){
   const st=document.createElement('style'); st.id='runtime-patches'; st.textContent='\n/* runtime style patches */\n#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {\n  background:#0d141a !important; color:#D5A84A !important; border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);\n}\n#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }\n#nowplay{ position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; opacity: 0; transition: opacity .35s ease; pointer-events: none; }\n#nowplay.show{ opacity: 1; }\n#letterbox{ transition: opacity .45s ease; }\n#letterbox.hidden{ opacity: 0; }\n#story{ overflow-y:auto; overflow-x:hidden; position:relative; }\n.glow-success:hover, .glow-fail:hover { text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45); }\n.gloss::after { content: \'\' !important; } /* suppress ? icon */\n'; document.head.appendChild(st);
 })();
 
-
+(function ensureFonts(){
+  // If the Google Fonts link is absent (or was edited), inject it.
+  if (document.querySelector('link[href*="fonts.googleapis.com"]')) return;
+  const p1 = document.createElement('link'); p1.rel='preconnect'; p1.href='https://fonts.googleapis.com';
+  const p2 = document.createElement('link'); p2.rel='preconnect'; p2.href='https://fonts.gstatic.com'; p2.crossOrigin='';
+  const lf = document.createElement('link'); lf.rel='stylesheet';
+  lf.href='https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Josefin+Sans:wght@400;600;700&display=swap';
+  document.head.append(p1, p2, lf);
+})();
+  
 // Glossary: single-tip, mouse-tracked, fade-only (no "?")
 function attachGlossTips(root=document){
   // Create a single shared tip if needed
@@ -410,13 +408,13 @@ if (!document.getElementById('motesIntro')){
   patchFade.textContent = `
     @keyframes mote-fadeout { to { opacity: 0; } }
     .mote {
-      /* rise + fade only (no sway here to avoid transform fights) */
       animation:
-        mote-rise var(--dur,16s) linear forwards,
-        mote-fadeout var(--dur,16s) linear forwards;
+        mote-rise-anchored var(--dur,16s) linear forwards,
+        mote-fadeout       var(--dur,16s) linear forwards;
     }`;
   document.head.appendChild(patchFade);
 }
+
   // Title at top of slides with double underline
 if (!Engine.el.intro.querySelector('.intro-title')){
   const t = document.createElement('div');
@@ -1250,14 +1248,14 @@ function exportSnapshot(){
 /* ---------- motes ---------- */
 function spawnMotesCSS(where='motes', n=20){
   const root = document.getElementById(where); if(!root) return;
-  for(let i=0;i<n;i++){
-    const s = document.createElement('span'); s.className='mote';
-    const spawnX = Math.random()*100;     // vw across the whole stage
-    const spawnY = 92 + Math.random()*8;  // vh: clamp to bottom band (92–100)
-    const dur    = (14 + Math.random()*12).toFixed(1)+'s';
+  for (let i=0; i<n; i++){
+    const s = document.createElement('span'); s.className = 'mote';
+    const spawnX = Math.random() * 100;          // vw across stage
+    const spawnY = 130 + Math.random() * 20;     // vh: far BELOW viewport (130–150)
+    const dur    = (14 + Math.random()*12).toFixed(1) + 's';
 
-    s.style.setProperty('--spawn-x', spawnX+'vw');
-    s.style.setProperty('--spawn-y', spawnY+'vh');
+    s.style.setProperty('--spawn-x', spawnX + 'vw');
+    s.style.setProperty('--spawn-y', spawnY + 'vh');
     s.style.setProperty('--dur', dur);
     root.appendChild(s);
   }
@@ -1294,7 +1292,7 @@ function spawnMotesCSS(where='motes', n=20){
 
       // Spawn at the bottom edge of the *actual* containing rect
       const vx = rect.left + Math.random() * rect.width;
-      const startY = rect.top + rect.height - (12 + Math.random()*28); // ~bottom
+      const startY = rect.top + rect.height - (20 + Math.random()*40); // ~below the screen for now
       const dur = 14000 + Math.random()*11000; // 14–25s
       const size = 3 + Math.random()*4;
       const amp = 16 + Math.random()*18;
