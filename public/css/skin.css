@@ -505,22 +505,26 @@ input[type="number"]{accent-color:var(--gold)}
 
 /* Ember motes (app & intro layers share the same style) */
 #motes, #motesIntro { position:fixed; inset:0; pointer-events:none; z-index:1; }
+
 .mote{
   position:absolute;
-  width: 6px; height: 6px; border-radius: 50%;
-  left: 0; top: 0; transform: translate(var(--spawn-x,0), var(--spawn-y,0));
+  width:6px; height:6px; border-radius:50%;
+  left:0; top:0;
   background: radial-gradient(circle at 50% 50%, rgba(255,190,120,.9), rgba(255,190,120,.0) 65%);
   filter: blur(0.2px);
-  opacity: .0;
-  animation:
-    mote-rise var(--dur, 16s) linear forwards,
-    moteSway calc(var(--dur,16s) * .8) ease-in-out infinite alternate;
+  opacity: 0;
+  /* initial position set by CSS vars from JS */
+  transform: translate(var(--spawn-x,0), var(--spawn-y,100vh));
+  /* single animation controls the full rise from the spawn point */
+  animation: mote-rise var(--dur,16s) linear forwards;
 }
-@keyframes mote-rise {
-  0%   { opacity: 0; transform: translateY(0)    scale(var(--s,1)); }
-  10%  { opacity: .85; }
-  90%  { opacity: .85; }
-  100% { transform: translateY(-110vh) translateX(var(--mx, 0)); opacity: 0; }
+
+/* Rise from the provided spawn point all the way off screen */
+@keyframes mote-rise{
+  0%   { opacity: 0; transform: translate(var(--spawn-x,0), var(--spawn-y,100vh)); }
+  7%   { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--spawn-x,0), calc(var(--spawn-y,100vh) - 110vh)); }
 }
 
 @keyframes moteSway{
