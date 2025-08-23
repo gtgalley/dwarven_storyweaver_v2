@@ -399,18 +399,22 @@ function insertIntro(){
     }
   });
   
-  // Motes behind intro, below copy/images
+// Motes behind intro, below copy/images
 if (!document.getElementById('motesIntro')){
   const m = document.createElement('div'); m.id = 'motesIntro'; m.setAttribute('aria-hidden','true');
   Engine.el.intro.prepend(m);
   spawnMotes('motesIntro', 22);
+
   // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
   const patchFade = document.createElement('style');
   patchFade.textContent = `
     @keyframes mote-fadeout { to { opacity: 0; } }
-    .mote { animation: mote-rise var(--dur,16s) linear forwards,
-                     mote-sway var(--sway,6s) ease-in-out infinite,
-                     mote-fadeout var(--dur,16s) linear forwards; }`;
+    .mote {
+      /* rise + fade only (no sway here to avoid transform fights) */
+      animation:
+        mote-rise var(--dur,16s) linear forwards,
+        mote-fadeout var(--dur,16s) linear forwards;
+    }`;
   document.head.appendChild(patchFade);
 }
   // Title at top of slides with double underline
@@ -1248,19 +1252,16 @@ function spawnMotesCSS(where='motes', n=20){
   const root = document.getElementById(where); if(!root) return;
   for(let i=0;i<n;i++){
     const s = document.createElement('span'); s.className='mote';
-    const spawnX = Math.random()*100;           // vw
-    const spawnY = 92 + Math.random()*8;        // vh (very bottom band)
-    const sway   = (Math.random()*30-15).toFixed(1)+'px';   // kept for future use
-    const dur    = (14 + Math.random()*12).toFixed(1)+'s';  // 14–26s
+    const spawnX = Math.random()*100;     // vw across the whole stage
+    const spawnY = 92 + Math.random()*8;  // vh: clamp to bottom band (92–100)
+    const dur    = (14 + Math.random()*12).toFixed(1)+'s';
 
     s.style.setProperty('--spawn-x', spawnX+'vw');
     s.style.setProperty('--spawn-y', spawnY+'vh');
-    s.style.setProperty('--sway', sway);
     s.style.setProperty('--dur', dur);
     root.appendChild(s);
   }
 }
-
 
 /* ----- override: JS-animated motes (non-linear rise, fade out) ----- */
 (()=>{
