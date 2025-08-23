@@ -222,16 +222,16 @@ export function boot(){
   });
   
   // ensure tail-fade near the top (CSS-friendly; no clipping “pop”)
-const patchFade = document.createElement('style');
-patchFade.textContent = `
-  @keyframes mote-fadeout { to { opacity: 0; } }
-  .mote {
-    animation:
-      mote-rise var(--dur,16s) linear forwards,
-      mote-fadeout var(--dur,16s) linear forwards;
-  }`;
-document.head.appendChild(patchFade);
-
+  const patchFade = document.createElement('style');
+  patchFade.textContent = `
+    @keyframes mote-fadeout { to { opacity: 0; } }
+    .mote {
+      animation:
+        mote-rise var(--dur,16s) linear forwards,
+        mote-fadeout var(--dur,16s) linear forwards;
+    }`;
+  document.head.appendChild(patchFade);
+}
 
 (function(){
   const st=document.createElement('style'); st.id='runtime-patches'; st.textContent='\n/* runtime style patches */\n#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {\n  background:#0d141a !important; color:#D5A84A !important; border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);\n}\n#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }\n#nowplay{ position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; opacity: 0; transition: opacity .35s ease; pointer-events: none; }\n#nowplay.show{ opacity: 1; }\n#letterbox{ transition: opacity .45s ease; }\n#letterbox.hidden{ opacity: 0; }\n#story{ overflow-y:auto; overflow-x:hidden; position:relative; }\n.glow-success:hover, .glow-fail:hover { text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45); }\n.gloss::after { content: \'\' !important; } /* suppress ? icon */\n'; document.head.appendChild(st);
