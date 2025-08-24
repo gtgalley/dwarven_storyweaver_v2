@@ -407,6 +407,33 @@ function tuneIntroLayout(){
   });
 }
 
+// Local helper: set the slide's image (safe even if .pic/.img aren't present)
+function setSlideImage(index, url){
+  const sl = Engine.el.slides?.[index];
+  if (!sl) return;
+
+  let pic = sl.querySelector('.pic');
+  if (!pic){
+    pic = document.createElement('div');
+    pic.className = 'pic';
+    const copy = sl.querySelector('.copy');
+    sl.insertBefore(pic, copy || sl.firstChild);
+  }
+
+  let img = pic.querySelector('.img');
+  if (!img){
+    img = document.createElement('div');
+    img.className = 'img';
+    pic.appendChild(img);
+  }
+
+  // apply background
+  img.style.backgroundImage = `url("${url}")`;
+  img.style.backgroundSize = 'cover';
+  img.style.backgroundPosition = 'center';
+  img.style.backgroundRepeat = 'no-repeat';
+}
+
 function insertIntro(){
   // DOM-aware guard so we never stack duplicate intros
   const existing = document.getElementById('intro');
@@ -565,22 +592,19 @@ if (!document.getElementById('fxIntro')){
 Engine.el.fxIntroCtl = FX.start('fxIntro');
 // --- Assign baked-edge intro art (no veil mask) ---
 (function(){
-  // Map slides → image URLs (adjust indices if you want a different order)
-  // Here: Slide 1 = City, Slide 2 = Unfathomer, Slide 3 = Gate
+  // IMPORTANT: use relative paths so GH Pages serves from the project root
   const ART = {
-    0: '/public/img/intro/intro_city_baked.png',
-    1: '/public/img/intro/intro_unfathomer_baked.png',
-    2: '/public/img/intro/intro_gate_baked.png'
+    0: 'public/img/intro/intro_city_baked.png',
+    1: 'public/img/intro/intro_unfathomer_baked.png',
+    2: 'public/img/intro/intro_gate_baked.png'
   };
 
   Object.entries(ART).forEach(([i, url])=>{
     const idx = +i;
     const sl  = Engine.el.slides?.[idx];
     if (!sl) return;
-    // mark this slide as using baked-edge images (hides veil via CSS)
-    sl.classList.add('baked');
-    // set the image as the background of .pic .img
-    setIntroImage?.(idx, url);
+    sl.classList.add('baked');          // hide veil via CSS
+    setSlideImage(idx, url);            // (replaces missing setIntroImage)
   });
 })();
   
