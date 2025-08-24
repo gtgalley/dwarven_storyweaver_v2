@@ -190,6 +190,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   animation: emberPulse 10s ease-in-out infinite;
   filter: saturate(1.4);
 }
+/* Slides that use baked-edge art (image already has a jagged transparent border) */
+#intro .slide.baked .pic .veil{ display:none; }               /* no CSS mask needed */
+#intro .slide.baked .pic .img{
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;                                     /* fills the portrait box */
+}
 
 /* Masthead */
 .masthead{position:relative;padding:22px 18px 12px;border-bottom:2px solid var(--line);}
