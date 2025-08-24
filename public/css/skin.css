@@ -684,3 +684,45 @@ body.show-gloss .gloss{ text-decoration: underline wavy var(--gold); animation: 
 #intro .slide .nav { position: absolute; right: 18px; bottom: 18px; z-index: 4; }
 .intro-title { z-index: 5; } /* your existing title */
 
+/* --- Baked-edge slides: no glow + size cap --- */
+
+/* Hide the veil (already done earlier), and also kill any inner/outer glows */
+#intro .slide.baked .pic .veil{ display:none; }
+#intro .slide.baked .pic .img{ 
+  /* lock to the box; no parallax/scale for baked art */
+  transform: none !important;
+  animation: none !important;
+}
+
+/* Remove the inner rim/vignette overlays for baked images */
+#intro .slide.baked .pic .img::before,
+#intro .slide.baked .pic .img::after{
+  content: none !important;
+}
+
+/* Cap the image size so it doesn't grow off-screen on very wide viewports.
+   Keeps your current look (~28vw on common laptop widths) but never exceeds the max. */
+#intro .slide.baked .pic{
+  /* keep your current placement */
+  left: 9vw; 
+  top: 10vh;
+
+  /* one sizing axis + aspect ratio keeps the portrait shape consistent */
+  width: clamp(280px, 28vw, 460px);
+  aspect-ratio: 3 / 5;
+  height: auto;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+/* (Requested) temporarily disable the background glow behind the image */
+#glow{ display: none !important; }
+
+/* Optional: small-screen nudge so it doesn’t crowd the text */
+@media (max-width: 900px){
+  #intro .slide.baked .pic{
+    left: 6vw;
+    width: clamp(240px, 36vw, 420px);
+  }
+}
