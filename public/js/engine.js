@@ -563,6 +563,26 @@ if (!document.getElementById('fxIntro')){
 }
 // start intro embers and keep a handle to stop later
 Engine.el.fxIntroCtl = FX.start('fxIntro');
+// --- Assign baked-edge intro art (no veil mask) ---
+(function(){
+  // Map slides → image URLs (adjust indices if you want a different order)
+  // Here: Slide 1 = City, Slide 2 = Unfathomer, Slide 3 = Gate
+  const ART = {
+    0: '/public/img/intro/intro_city_baked.png',
+    1: '/public/img/intro/intro_unfathomer_baked.png',
+    2: '/public/img/intro/intro_gate_baked.png'
+  };
+
+  Object.entries(ART).forEach(([i, url])=>{
+    const idx = +i;
+    const sl  = Engine.el.slides?.[idx];
+    if (!sl) return;
+    // mark this slide as using baked-edge images (hides veil via CSS)
+    sl.classList.add('baked');
+    // set the image as the background of .pic .img
+    setIntroImage?.(idx, url);
+  });
+})();
   
   // Start at the first slide
   show(0);
