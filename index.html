@@ -13,7 +13,7 @@
   <link rel="icon" href="data:,">
 
   <!-- single stylesheet (RELATIVE path) -->
-  <link rel="stylesheet" href="./public/css/skin.css?v=20">
+  <link rel="stylesheet" href="./public/css/skin.css?v=21">
 
   <!-- Intro art is needed immediately; music is fetched on demand after boot. -->
   <link rel="preload" as="image" href="public/img/intro/intro_city_baked.png">
@@ -30,7 +30,7 @@
   <div class="boot" id="boot"><div class="box">Loading…</div></div>
 
   <script type="module">
-    import { boot } from './public/js/engine.js?v=20';
+    import { boot } from './public/js/engine.js?v=21';
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('boot').classList.add('ok');
       boot();
