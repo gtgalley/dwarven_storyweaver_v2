@@ -3,6 +3,7 @@
 // equipment comparison, clearer prose, and expanded accessibility feedback.
 
 import { makeWeaver } from './weaver.js';
+import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
 
 /* ---------- utils ---------- */
 const $  = (s,r=document)=>r.querySelector(s);
@@ -39,7 +40,7 @@ const store={
 };
 
 /* ---------- inventory & equipment ---------- */
-const SAVE_VERSION=3;
+const SAVE_VERSION=4;
 const BACKPACK_CAPACITY=40;
 const EQUIPMENT_SLOTS = [
   ['head','Head'], ['chest','Chest'], ['hands','Hands'], ['legs','Legs'],
@@ -61,7 +62,11 @@ const ITEM_CATALOG = new Map([
   ['cistern boots',defineItem('armor-cistern-boots','Cistern Boots','feet','\u2229','Armor','flawless',{power:0,armor:2,resilience:2},{DEX:11},58,'Keeps steady footing on flooded stone.','Deep-cut soles grip wet channels without scraping loud enough to carry.')],
   ['warden pick',defineItem('weapon-warden-pick','Warden Pick','mainHand','\u2692','Weapon','rare',{power:3,armor:0,resilience:0},{STR:11},48,'A compact war pick suited to armor and cracked masonry.','Wardens carry this balanced tool when repairs may become a fight.')],
   ['echo buckler',defineItem('shield-echo-buckler','Echo Buckler','offHand','\u25c9','Shield','flawless',{power:0,armor:3,resilience:1},{DEX:11},64,'Deflects blows and rings sharply when danger is near.','Concentric channels spread impact into a clear warning note.')],
-  ['measure ring',defineItem('relic-measure-ring','Measure Ring','accessory','\u2299','Relic','legendary',{power:1,armor:1,resilience:3},{INT:12},120,'Strengthens the wearer while they carry an unresolved oath.','Its four marks answer to Weight, Tone, Pattern, and Line.',true)]
+  ['measure ring',defineItem('relic-measure-ring','Measure Ring','accessory','\u2299','Relic','legendary',{power:1,armor:1,resilience:3},{INT:12},120,'Strengthens the wearer while they carry an unresolved oath.','Its four marks answer to Weight, Tone, Pattern, and Line.',true)],
+  ['archive lens',defineItem('tool-archive-lens','Archive Lens','accessory','\u25c9','Tool','rare',{power:0,armor:0,resilience:1},{INT:11},34,'Reveals altered ink, hairline cracks, and worn inscriptions.','Lithen keeps this silver-rimmed lens beside the restricted ledgers.')],
+  ['resonance fork',defineItem('tool-resonance-fork','Resonance Fork','mainHand','\u03a8','Tool','flawless',{power:1,armor:0,resilience:2},{INT:11},56,'Tests pressure channels and isolates a clean mechanical tone.','Its twin prongs were tuned for the Gate crews before the lower works closed.')],
+  ['saltglass salve',defineItem('provision-saltglass-salve','Saltglass Salve','accessory','\u2725','Provision','fine',{power:0,armor:0,resilience:1},{},16,'A field medicine that seals cuts and cools minor burns.','Pale mineral gel glows briefly when pressed into a wound.')],
+  ['stoneback plate',defineItem('armor-stoneback-plate','Stoneback Plate','chest','\u25a3','Armor','legendary',{power:1,armor:4,resilience:2},{STR:12},78,'Heavy natural armor shaped to turn crushing impacts.','The plate still carries the slow mineral warmth of the Depths.')]
 ]);
 const blankEquipment=()=>Object.fromEntries(EQUIPMENT_SLOTS.map(([key])=>[key,null]));
 const itemName=value=>typeof value==='string'?value.trim():(value&&typeof value.name==='string'?value.name.trim():'');
@@ -112,6 +117,14 @@ function normalizeEquipment(equipment,inventory){
 }
 
 /* ---------- state ---------- */
+function defaultCampaign(){
+  return {
+    version:CAMPAIGN_VERSION, sceneId:'halls-briefing', chapter:'halls', objective:CAMPAIGN_SCENES['halls-briefing'].objective,
+    completedScenes:[], completedEncounters:[], enteredScenes:[], discoveries:[], consequences:[], optionalCompleted:[],
+    alliances:{wardens:0,lithen:0,mullinen:0}, flags:{}, rerollsUsed:{}, exploration:{}, ending:null, bossPhase:0
+  };
+}
+function defaultJournal(){ return {milestones:[], discoveries:[], consequences:[], optional:[]}; }
 function defaults(){
   return {
     saveVersion:SAVE_VERSION, seed:rnd(1,9_999_999), turn:0, scene:'Halls',
@@ -120,12 +133,13 @@ function defaults(){
     equipment:blankEquipment(),
     backpack:normalizeBackpack(null,['Torch','Canteen']),
     flags:{ rumors:false, keys:[], bossReady:false, bossDealtWith:false },
+    campaign:defaultCampaign(), journal:defaultJournal(),
     _choiceHistory:[], _lastChoices:[], _undoStack:[], _arcStep:0, _pendingType:false,
     settings:{ typewriter:true, cps:40, audio:{ master:0.5, ui:0.45, music:0.5, sfx_success:true, sfx_fail:true, sfx_story:true } },
     live:{ on:store.get('dm_on',false), endpoint:store.get('dm_ep','/dm-turn') }
   };
 }
-const Engine={ el:{}, state: defaults(), inventoryDraft:[], selectedInventoryItem:null, inventoryView:{quality:'all',category:'all',sort:'pack'}, tooltipPinned:false, busy:false, loadedSave:false };
+const Engine={ el:{}, state: defaults(), inventoryDraft:[], selectedInventoryItem:null, inventoryView:{quality:'all',category:'all',sort:'pack'}, tooltipPinned:false, tooltipItem:null, busy:false, loadedSave:false, pendingFailure:null, activeMerchant:null };
 window.Engine=Engine;
 
 // --- Now Playing chip controller (ephemeral) -------------------------
@@ -230,8 +244,9 @@ const BGM = (function(){
     const introOpen = !!(Engine.el?.intro && !Engine.el.intro.classList.contains('hidden'));
     if(introOpen) return crossTo('intro');
     if(S.turn < 2) return crossTo('prelude');
-    if(S.scene==='Archives') return crossTo('archives');
-    if(S.scene==='Depths'){ if(S.flags?.bossDealtWith || S.flags?.bossReady) return crossTo('depths2'); return crossTo('depths'); }
+    const chapter=S.campaign?.chapter;
+    if(chapter==='archives'||S.scene==='Archives') return crossTo('archives');
+    if(['depths','gate','unfathomer','epilogue'].includes(chapter)||S.scene==='Depths'){ if(S.flags?.bossDealtWith || S.flags?.bossReady || chapter==='gate' || chapter==='unfathomer') return crossTo('depths2'); return crossTo('depths'); }
     return crossTo('halls');
   }
   function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
@@ -598,7 +613,7 @@ if (!Engine.el.intro.querySelector('.intro-title')){
       const p = s.querySelector('.scroll p');
       if (p && !p.dataset.typed){
         p.dataset.typed = '1';
-        typewriteRich(p, Engine.state.settings.cps); // your existing typed routine
+        if(Engine.state.settings.typewriter) typewriteRich(p, Engine.state.settings.cps);
       }
     });
   };
@@ -670,6 +685,19 @@ Engine.el.fxIntroCtl = FX.start('fxIntro');
 }
 
 /* ---------- DOM ---------- */
+function enhanceCharacterSteppers(){
+  $$('#modalEdit input[type="number"]').forEach(input=>{
+    if(input.parentElement?.classList.contains('number-stepper')) return;
+    const wrap=document.createElement('span'); wrap.className='number-stepper'; input.parentNode.insertBefore(wrap,input); wrap.appendChild(input);
+    const controls=document.createElement('span'); controls.className='stepper-controls';
+    const label=input.id.replace(/^ed/,'')||'value';
+    [['up','Increase'],['down','Decrease']].forEach(([direction,verb])=>{
+      const button=document.createElement('button'); button.type='button'; button.className=`stepper-arrow ${direction}`; button.textContent=direction==='up'?'▲':'▼'; button.setAttribute('aria-label',`${verb} ${label}`);
+      button.addEventListener('click',()=>{ direction==='up'?input.stepUp():input.stepDown(); input.dispatchEvent(new Event('input',{bubbles:true})); input.focus(); }); controls.appendChild(button);
+    });
+    wrap.appendChild(controls);
+  });
+}
 function buildUI(){
   document.body.innerHTML = `
   <div class="app">
@@ -731,6 +759,11 @@ function buildUI(){
         <div class="card deco frame character-card">
           <h3 class="character-heading"><span class="character-title"><strong id="charHeaderName">Eldan</strong><small id="charHeaderRace">Dwarf</small></span><button id="btnEdit" class="btn mini">Edit</button></h3>
           <div id="charPanel" class="character-rig"></div>
+        </div>
+        <div class="card deco frame objective-card">
+          <h3><span>Current Objective</span><kbd>J</kbd></h3>
+          <div id="objectivePanel" class="objective-panel"></div>
+          <button id="btnJournal" class="inventory-open">Open quest journal <span>J</span></button>
         </div>
         <div class="card deco frame hotbar-card">
           <h3><span>Field Kit</span><kbd>E</kbd></h3>
@@ -802,7 +835,7 @@ function buildUI(){
     <header><div><span class="modal-kicker">Brassreach Field Harness</span><strong id="inventoryTitle">Adventurer's Field Case</strong></div><button id="xInventory" class="closeX" aria-label="Close inventory">&#10005;</button></header>
     <div class="content inventory-layout">
       <section class="equipment-board frame" aria-label="Equipment harness and character outline">
-        <div class="inventory-section-heading"><span>Equipment Harness</span><small>Drag, double-click, or select an item and choose a mount</small></div>
+        <div class="inventory-section-heading"><span>Equipment Harness</span><small>Drag, double-click, or select an item and choose a slot</small></div>
         <div class="equipment-figure" aria-hidden="true">
           <span class="figure-halo"></span><span class="figure-head"></span><span class="figure-body"></span><span class="figure-arm left"></span><span class="figure-arm right"></span><span class="figure-leg left"></span><span class="figure-leg right"></span>
         </div>
@@ -826,11 +859,29 @@ function buildUI(){
         <div class="rarity-legend" aria-label="Item quality legend"><span class="quality-common">Common</span><span class="quality-fine">Fine</span><span class="quality-rare">Rare</span><span class="quality-flawless">Flawless</span><span class="quality-legendary">Legendary</span><span class="relic-legend">Relic seal</span></div>
         <div id="inventoryItems" class="backpack-grid" role="grid" aria-label="Backpack slots"></div>
         <div id="inventoryOverflow" class="inventory-overflow" aria-live="polite"></div>
-        <p class="inventory-help">Equipped items stay in the pack and carry a mount mark. Press Enter to inspect; press Q to equip or remove.</p>
+        <p class="inventory-help">Equipped items stay in the pack and carry a slot mark. Hover or press Enter to inspect; press Q or double-click to equip or remove.</p>
       </section>
     </div>
   </div>
   <aside id="itemTooltip" class="item-tooltip hidden" role="dialog" aria-live="polite"></aside>
+
+  <!-- Quest journal -->
+  <div id="modalJournal" class="modal journal-modal hidden" role="dialog" aria-modal="true" aria-labelledby="journalTitle">
+    <header><div id="journalTitle">Quest Journal</div><button id="xJournal" class="closeX" aria-label="Close quest journal">&#10005;</button></header>
+    <div id="journalContent" class="content journal-content"></div>
+  </div>
+
+  <!-- Merchant -->
+  <div id="modalMerchant" class="modal merchant-modal hidden" role="dialog" aria-modal="true" aria-labelledby="merchantTitle">
+    <header><div><span class="modal-kicker" id="merchantKicker">Field Exchange</span><strong id="merchantTitle">Merchant</strong></div><button id="xMerchant" class="closeX" aria-label="Close merchant">&#10005;</button></header>
+    <div id="merchantContent" class="content merchant-content"></div>
+  </div>
+
+  <!-- Failure recovery -->
+  <div id="modalLost" class="modal lost-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="lostTitle" aria-describedby="lostSummary">
+    <header><div><span class="modal-kicker">Encounter Lost</span><strong id="lostTitle">The Measure Turns</strong></div></header>
+    <div id="lostContent" class="content lost-content"></div>
+  </div>
 
   <!-- Settings modal -->
   <div id="modalSet" class="modal hidden">
@@ -862,6 +913,7 @@ function buildUI(){
       <div class="grid2">
         <div>
           <h4>Live DM</h4>
+          <p class="settings-note">Live narration enriches written free actions. Campaign decisions and rewards remain authored.</p>
           <label>Endpoint <input id="dmEndpoint" placeholder="/dm-turn" /></label><br>
           <button id="btnLiveToggle" class="btn">Toggle Live DM</button>
         </div>
@@ -903,7 +955,7 @@ function buildUI(){
 
   Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.sceneHeading=$('#sceneHeading');
 
-  Engine.el.charPanel=$('#charPanel'); Engine.el.charHeaderName=$('#charHeaderName'); Engine.el.charHeaderRace=$('#charHeaderRace'); Engine.el.hotbarPanel=$('#hotbarPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
+  Engine.el.charPanel=$('#charPanel'); Engine.el.charHeaderName=$('#charHeaderName'); Engine.el.charHeaderRace=$('#charHeaderRace'); Engine.el.hotbarPanel=$('#hotbarPanel'); Engine.el.ledgerPanel=$('#ledgerPanel'); Engine.el.objectivePanel=$('#objectivePanel'); Engine.el.btnJournal=$('#btnJournal');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.keysVal=$('#keysVal');
   Engine.el.saveStatus=$('#saveStatus'); Engine.el.weaveStatus=$('#weaveStatus'); Engine.el.toastRegion=$('#toastRegion');
   Engine.el.btnEdit=$('#btnEdit');
@@ -920,6 +972,9 @@ function buildUI(){
   Engine.el.modalInventory=$('#modalInventory'); Engine.el.xInventory=$('#xInventory'); Engine.el.inventoryItems=$('#inventoryItems'); Engine.el.inventoryOverflow=$('#inventoryOverflow');
   Engine.el.qualityFilter=$('#qualityFilter'); Engine.el.categoryFilter=$('#categoryFilter'); Engine.el.inventorySort=$('#inventorySort'); Engine.el.capacityMeter=$('#capacityMeter'); Engine.el.itemTooltip=$('#itemTooltip'); Engine.el.equipmentStats=$('#equipmentStats');
   Engine.el.equipSlots=$$('.equip-slot');
+  Engine.el.modalJournal=$('#modalJournal'); Engine.el.xJournal=$('#xJournal'); Engine.el.journalContent=$('#journalContent');
+  Engine.el.modalMerchant=$('#modalMerchant'); Engine.el.xMerchant=$('#xMerchant'); Engine.el.merchantTitle=$('#merchantTitle'); Engine.el.merchantKicker=$('#merchantKicker'); Engine.el.merchantContent=$('#merchantContent');
+  Engine.el.modalLost=$('#modalLost'); Engine.el.lostContent=$('#lostContent');
 
 Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.twOn=$('#twOn'); Engine.el.twCps=$('#twCps');
@@ -933,6 +988,7 @@ Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
 
   // epilogue modal
   Engine.el.modalEpi=$('#modalEpi'); Engine.el.xEpi=$('#xEpi'); Engine.el.epiTitle=$('#epiTitle'); Engine.el.epiContent=$('#epiContent'); Engine.el.btnEpiRestart=$('#btnEpiRestart');
+  enhanceCharacterSteppers();
 }
 
 
@@ -956,6 +1012,32 @@ function mountScrollFab(){
 }
 
 /* ---------- storage ---------- */
+const uniqueText=list=>[...new Set((Array.isArray(list)?list:[]).filter(value=>typeof value==='string'&&value.trim()).map(value=>value.trim()))];
+function inferCampaignScene(saved){
+  if(saved?.flags?.bossDealtWith) return 'unfathomer-decision';
+  if(saved?.flags?.bossReady) return 'gate-approach';
+  if(saved?.scene==='Depths') return 'depths-mullinen';
+  if(saved?.scene==='Archives') return 'archives-lithen';
+  return 'halls-briefing';
+}
+function normalizeCampaign(savedCampaign,saved){
+  const d=defaultCampaign(), raw=savedCampaign||{}, sceneId=CAMPAIGN_SCENES[raw.sceneId]?raw.sceneId:inferCampaignScene(saved);
+  return {
+    ...d,...raw,version:CAMPAIGN_VERSION,sceneId,chapter:CAMPAIGN_SCENES[sceneId].chapter,objective:raw.objective||CAMPAIGN_SCENES[sceneId].objective,
+    completedScenes:uniqueText(raw.completedScenes),completedEncounters:uniqueText(raw.completedEncounters),enteredScenes:uniqueText(raw.enteredScenes),
+    discoveries:uniqueText(raw.discoveries),consequences:uniqueText(raw.consequences),optionalCompleted:uniqueText(raw.optionalCompleted),
+    alliances:{...d.alliances,...(raw.alliances||{})},flags:{...d.flags,...(raw.flags||{})},rerollsUsed:{...(raw.rerollsUsed||{})},exploration:{...(raw.exploration||{})}
+  };
+}
+function normalizeJournal(savedJournal,campaign){
+  const raw=savedJournal||{};
+  return {
+    milestones:uniqueText(raw.milestones),
+    discoveries:uniqueText([...(raw.discoveries||[]),...(campaign.discoveries||[])]),
+    consequences:uniqueText([...(raw.consequences||[]),...(campaign.consequences||[])]),
+    optional:uniqueText([...(raw.optional||[]),...(campaign.optionalCompleted||[])])
+  };
+}
 function hydrate(){
   const saved=store.get('dds_state',null); if(!saved) return;
   const d=defaults();
@@ -969,6 +1051,7 @@ function hydrate(){
   const legacyInventory=cleanInventory(saved.character?.inventory||d.character.inventory);
   const backpack=normalizeBackpack(saved.backpack,legacyInventory);
   const migratedInventory=backpackItems(backpack);
+  const campaign=normalizeCampaign(saved.campaign,saved);
   Engine.state = {
     ...d, ...saved,
     saveVersion:SAVE_VERSION,
@@ -976,6 +1059,8 @@ function hydrate(){
     backpack,
     equipment:normalizeEquipment(saved.equipment,migratedInventory),
     flags:{...d.flags, ...savedFlags},
+    campaign,
+    journal:normalizeJournal(saved.journal,campaign),
     settings:{...d.settings, ...(saved.settings||{}), audio:{...d.settings.audio, ...savedAudio}},
     live:{...d.live, ...(saved.live||{})},
     _choiceHistory:Array.isArray(saved._choiceHistory)?saved._choiceHistory:[],
@@ -984,6 +1069,7 @@ function hydrate(){
     _arcStep:saved._arcStep||0
   };
   Engine.state.character.MaxHP=Math.max(4,+saved.character?.MaxHP||+saved.character?.HP||d.character.MaxHP);
+  Engine.state.scene=CAMPAIGN_SCENES[campaign.sceneId].title;
   Engine.loadedSave=true;
   store.set('dds_state',Engine.state);
 }
@@ -1027,17 +1113,17 @@ function openInventory(){
 function closeInventory(){ Engine.selectedInventoryItem=null; hideItemTooltip(true); closeModal(Engine.el.modalInventory); }
 function equipItem(item,slot){
   const S=Engine.state, owned=S.character.inventory.includes(item), valid=itemMeta(item).slot===slot;
-  if(!owned || !valid){ Sound.inventory('reject'); toast(`That item does not fit the ${EQUIPMENT_SLOTS.find(([key])=>key===slot)?.[1]||'mount'}.`,'warning'); return false; }
+  if(!owned || !valid){ Sound.inventory('reject'); toast(`That item does not fit the ${EQUIPMENT_SLOTS.find(([key])=>key===slot)?.[1]||'equipment slot'}.`,'warning'); return false; }
   if(!meetsRequirements(item)){ Sound.inventory('reject'); toast(`You do not meet ${itemMeta(item).name}'s requirements.`,'warning'); return false; }
   const displaced=S.equipment[slot];
   for(const [key] of EQUIPMENT_SLOTS) if(S.equipment[key]===item) S.equipment[key]=null;
   S.equipment[slot]=item; Engine.selectedInventoryItem=null;
-  persistState(displaced?`${item} swapped into place`:`${item} equipped`); Sound.inventory(displaced?'swap':'place'); renderAll(); return true;
+  hideItemTooltip(true); persistState(displaced?`${item} swapped into place`:`${item} equipped`); Sound.inventory(displaced?'swap':'place'); renderAll(); return true;
 }
 function unequipSlot(slot){
   if(!Engine.state.equipment[slot]) return;
   const item=Engine.state.equipment[slot];
-  Engine.state.equipment[slot]=null; Engine.selectedInventoryItem=null;
+  Engine.state.equipment[slot]=null; Engine.selectedInventoryItem=null; hideItemTooltip(true);
   persistState(`${item} returned to the pack`); Sound.inventory('place'); renderAll();
 }
 
@@ -1083,23 +1169,28 @@ function bind(){
   Engine.el.categoryFilter.onchange=()=>{ Engine.inventoryView.category=Engine.el.categoryFilter.value; renderInventory(); };
   Engine.el.inventorySort.onchange=()=>{ Engine.inventoryView.sort=Engine.el.inventorySort.value; renderInventory(); };
   Engine.el.inventoryItems.addEventListener('click',e=>{
-    const item=e.target.closest('[data-item]'); if(!item) return;
-    Engine.selectedInventoryItem=item.dataset.item; Engine.tooltipPinned=true; Sound.inventory('pickup'); renderInventory();
-    const fresh=Engine.el.inventoryItems.querySelector(`[data-item="${CSS.escape(Engine.selectedInventoryItem)}"]`); showItemTooltip(Engine.selectedInventoryItem,fresh||item,true);
+    const item=e.target.closest('[data-item]');
+    if(!item){ Engine.selectedInventoryItem=null; Engine.tooltipSuppressedItem=null; hideItemTooltip(true); renderInventory(); return; }
+    const name=item.dataset.item,now=performance.now();
+    if(Engine.lastInventoryClick?.item===name&&now-Engine.lastInventoryClick.time<420){ Engine.lastInventoryClick=null; Engine.tooltipSuppressedItem=name; quickEquip(name); return; }
+    Engine.lastInventoryClick={item:name,time:now};
+    if(Engine.tooltipPinned&&Engine.tooltipItem===name){ Engine.selectedInventoryItem=null; Engine.tooltipSuppressedItem=name; hideItemTooltip(true); renderInventory(); return; }
+    Engine.tooltipSuppressedItem=null; Engine.selectedInventoryItem=name; Engine.tooltipPinned=true; Sound.inventory('pickup'); renderInventory();
+    const fresh=Engine.el.inventoryItems.querySelector(`[data-item="${CSS.escape(name)}"]`); fresh?.focus(); showItemTooltip(name,fresh||item,true);
   });
-  Engine.el.inventoryItems.addEventListener('dblclick',e=>{ const item=e.target.closest('[data-item]'); if(item) quickEquip(item.dataset.item); });
-  Engine.el.inventoryItems.addEventListener('mouseover',e=>{ const item=e.target.closest('[data-item]'); if(item&&!Engine.tooltipPinned) showItemTooltip(item.dataset.item,item); });
-  Engine.el.inventoryItems.addEventListener('mouseout',e=>{ if(!e.relatedTarget?.closest?.('.item-tooltip')) hideItemTooltip(); });
+  Engine.el.inventoryItems.addEventListener('dblclick',e=>e.preventDefault());
+  Engine.el.inventoryItems.addEventListener('mouseover',e=>{ const item=e.target.closest('[data-item]'); if(item&&!Engine.tooltipPinned&&Engine.tooltipSuppressedItem!==item.dataset.item) showItemTooltip(item.dataset.item,item); });
+  Engine.el.inventoryItems.addEventListener('mouseout',e=>{ Engine.tooltipSuppressedItem=null; if(!e.relatedTarget?.closest?.('.item-tooltip')) hideItemTooltip(); });
   Engine.el.inventoryItems.addEventListener('focusin',e=>{ const item=e.target.closest('[data-item]'); if(item) showItemTooltip(item.dataset.item,item); });
   Engine.el.inventoryItems.addEventListener('focusout',()=>hideItemTooltip());
   Engine.el.inventoryItems.addEventListener('keydown',e=>{
     const current=e.target.closest('[data-grid-index]'); if(!current) return;
     const index=+current.dataset.gridIndex, columns=10;
     const nextIndex={ArrowLeft:index-1,ArrowRight:index+1,ArrowUp:index-columns,ArrowDown:index+columns,Home:0,End:BACKPACK_CAPACITY-1}[e.key];
-    if(Number.isInteger(nextIndex)){ e.preventDefault(); const next=Engine.el.inventoryItems.querySelector(`[data-grid-index="${clamp(nextIndex,0,BACKPACK_CAPACITY-1)}"]`); if(next){ current.tabIndex=-1; next.tabIndex=0; next.focus(); } return; }
+    if(Number.isInteger(nextIndex)){ e.preventDefault(); const next=Engine.el.inventoryItems.querySelector(`[data-grid-index="${clamp(nextIndex,0,BACKPACK_CAPACITY-1)}"]`); if(next){ current.tabIndex=-1; next.tabIndex=0; next.focus(); if(!next.dataset.item){ Engine.selectedInventoryItem=null; hideItemTooltip(true); renderInventory(); Engine.el.inventoryItems.querySelector(`[data-grid-index="${clamp(nextIndex,0,BACKPACK_CAPACITY-1)}"]`)?.focus(); } } return; }
     const item=current.dataset.item;
     if(item&&(e.key==='q'||e.key==='Q')){ e.preventDefault(); quickEquip(item); }
-    if(item&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); Engine.selectedInventoryItem=item; Engine.tooltipPinned=true; Sound.inventory('pickup'); renderInventory(); const fresh=Engine.el.inventoryItems.querySelector(`[data-item="${CSS.escape(item)}"]`); fresh?.focus(); showItemTooltip(item,fresh||current,true); }
+    if(item&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); if(Engine.tooltipPinned&&Engine.tooltipItem===item){ Engine.selectedInventoryItem=null; hideItemTooltip(true); renderInventory(); return; } Engine.selectedInventoryItem=item; Engine.tooltipPinned=true; Sound.inventory('pickup'); renderInventory(); const fresh=Engine.el.inventoryItems.querySelector(`[data-item="${CSS.escape(item)}"]`); fresh?.focus(); showItemTooltip(item,fresh||current,true); }
   });
   Engine.el.inventoryItems.addEventListener('dragstart',e=>{
     const item=e.target.closest('[data-item]'); if(!item) return;
@@ -1128,7 +1219,12 @@ function bind(){
     slot.addEventListener('focus',()=>{ const item=Engine.state.equipment?.[slot.dataset.slot]; if(item) showItemTooltip(item,slot); });
     slot.addEventListener('blur',()=>hideItemTooltip());
   });
-  Engine.el.inventoryOverflow.addEventListener('click',e=>{ const item=e.target.closest('[data-item]'); if(!item) return; Engine.selectedInventoryItem=item.dataset.item; Engine.tooltipPinned=true; showItemTooltip(item.dataset.item,item,true); });
+  Engine.el.inventoryOverflow.addEventListener('click',e=>{ const item=e.target.closest('[data-item]'); if(!item){ hideItemTooltip(true); return; } const name=item.dataset.item; if(Engine.tooltipPinned&&Engine.tooltipItem===name){ Engine.selectedInventoryItem=null; hideItemTooltip(true); return; } Engine.selectedInventoryItem=name; Engine.tooltipPinned=true; showItemTooltip(name,item,true); });
+
+  Engine.el.btnJournal.onclick=openJournal; Engine.el.xJournal.onclick=()=>closeModal(Engine.el.modalJournal);
+  Engine.el.xMerchant.onclick=()=>closeModal(Engine.el.modalMerchant);
+  Engine.el.merchantContent.addEventListener('click',e=>{ const buy=e.target.closest('[data-buy]'),sell=e.target.closest('[data-sell]'); if(buy) buyMerchantItem(buy.dataset.buy); if(sell) sellMerchantItem(sell.dataset.sell); });
+  Engine.el.lostContent.addEventListener('click',e=>{ const action=e.target.closest('[data-lost-action]')?.dataset.lostAction; if(action==='accept') acceptFailure(); else if(action==='gold'||action==='item') rerollFailure(action); });
 
   // settings
   if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
@@ -1163,16 +1259,19 @@ function bind(){
   Engine.el.btnEpiRestart.onclick=()=>{ close(Engine.el.modalEpi); hardResetRun(); };
 
   // global overlay close
-  Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalInventory,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); Engine.selectedInventoryItem=null; hideItemTooltip(true); };
+  Engine.el.shade.onclick=()=>{ if(Engine.el.modalLost&&!Engine.el.modalLost.classList.contains('hidden')) return; [Engine.el.modalEdit,Engine.el.modalInventory,Engine.el.modalJournal,Engine.el.modalMerchant,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m?.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); Engine.selectedInventoryItem=null; hideItemTooltip(true); };
+  document.addEventListener('pointerdown',e=>{ if(!Engine.tooltipPinned||e.target.closest('[data-item],.item-tooltip')) return; Engine.selectedInventoryItem=null; hideItemTooltip(true); if(inventoryOpen()) renderInventory(); });
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){ Engine.el.shade.onclick(); return; }
+    if(e.key==='Escape'){ if(Engine.el.modalLost&&!Engine.el.modalLost.classList.contains('hidden')){ toast('Choose a recovery option to continue','warning'); return; } Engine.el.shade.onclick(); return; }
+    if(e.key.toLowerCase()==='q'&&inventoryOpen()&&!isTypingTarget(e.target)&&Engine.selectedInventoryItem){ e.preventDefault(); quickEquip(Engine.selectedInventoryItem); return; }
+    if(e.key.toLowerCase()==='j'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!isTypingTarget(e.target)){ e.preventDefault(); Engine.el.modalJournal.classList.contains('hidden')?openJournal():closeModal(Engine.el.modalJournal); return; }
     if(e.key.toLowerCase()==='e' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target)){
       e.preventDefault(); inventoryOpen()?closeInventory():openInventory();
     }
   });
 
   // main actions
-  Engine.el.btnCont.onclick=()=>{ if(Engine.busy) return; if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(Engine.loadedSave); return; } doNarrate({ sentence:'' }); }; // silent advance
+  Engine.el.btnCont.onclick=()=>{ if(Engine.busy) return; if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(Engine.loadedSave); return; } const recommended=makeChoiceSet().find(choice=>choice.type!=='merchant')||makeChoiceSet()[0]; if(recommended) resolveChoice(recommended); };
   Engine.el.btnAct.onclick=()=>{ if(!Engine.busy) freeText(); };
   Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
 
@@ -1202,7 +1301,7 @@ function tooltipHTML(item){
     ${current?`<p class="tooltip-compare">Compared with <strong>${esc(currentName)}</strong></p>`:''}
     <p class="tooltip-mechanic">${esc(meta.mechanic)}</p><p class="tooltip-lore">${esc(meta.lore)}</p>
     <div class="tooltip-requirements"><strong>Requirements</strong> ${req.length?req.map(([stat,min])=>`<span class="${(+Engine.state.character[stat]||0)>=min?'met':'unmet'}">${stat} ${min}</span>`).join(''):'<span class="met">None</span>'}</div>
-    <div class="tooltip-state">${!meetsRequirements(item)?'Requirements not met':equippedSlotFor(item)?'Mounted and ready':`Fits the ${slotLabel.toLowerCase()} mount`}</div>`;
+    <div class="tooltip-state">${!meetsRequirements(item)?'Requirements not met':equippedSlotFor(item)?'Equipped and ready':`Fits the ${slotLabel.toLowerCase()} slot`}</div>`;
 }
 function positionItemTooltip(anchor){
   const tip=Engine.el.itemTooltip; if(!tip||!anchor) return;
@@ -1215,9 +1314,9 @@ function positionItemTooltip(anchor){
 }
 function showItemTooltip(item,anchor,pinned=false){
   if(!item||!Engine.el.itemTooltip) return;
-  Engine.tooltipPinned=pinned||Engine.tooltipPinned; Engine.el.itemTooltip.innerHTML=tooltipHTML(item); Engine.el.itemTooltip.classList.remove('hidden'); positionItemTooltip(anchor);
+  Engine.tooltipPinned=pinned||Engine.tooltipPinned; Engine.tooltipItem=item; Engine.el.itemTooltip.innerHTML=tooltipHTML(item); Engine.el.itemTooltip.classList.remove('hidden'); positionItemTooltip(anchor);
 }
-function hideItemTooltip(force=false){ if(!Engine.el.itemTooltip||(!force&&Engine.tooltipPinned)) return; Engine.tooltipPinned=false; Engine.el.itemTooltip.classList.add('hidden'); }
+function hideItemTooltip(force=false){ if(!Engine.el.itemTooltip||(!force&&Engine.tooltipPinned)) return; Engine.tooltipPinned=false; Engine.tooltipItem=null; Engine.el.itemTooltip.classList.add('hidden'); }
 function quickEquip(item){ const slot=itemMeta(item).slot; if(Engine.state.equipment?.[slot]===item) unequipSlot(slot); else equipItem(item,slot); }
 function renderInventory(){
   const S=Engine.state, E=S.equipment||blankEquipment(), pack=normalizeBackpack(S.backpack,S.character.inventory), equipped=new Set(Object.values(E).filter(Boolean));
@@ -1241,7 +1340,7 @@ function renderInventory(){
     occupied.sort((a,b)=>{ const A=itemMeta(a.item),B=itemMeta(b.item); if(Engine.inventoryView.sort==='name') return A.name.localeCompare(B.name); if(Engine.inventoryView.sort==='quality') return QUALITY_ORDER.indexOf(B.quality)-QUALITY_ORDER.indexOf(A.quality)||A.name.localeCompare(B.name); return B.value-A.value||A.name.localeCompare(B.name); });
     ordered=[...occupied,...Array(Math.max(0,BACKPACK_CAPACITY-occupied.length)).fill(null).map((_,index)=>({item:null,index:occupied.length+index}))];
   }
-  Engine.el.inventoryItems.innerHTML=ordered.map((entry,displayIndex)=>{ const item=entry.item, filtered=item&&!visible(entry); if(!item||filtered) return `<button class="backpack-slot empty${filtered?' filtered':''}" role="gridcell" data-grid-index="${displayIndex}" aria-label="${filtered?'Filtered item':'Empty backpack slot'} ${displayIndex+1}" tabindex="${displayIndex===0?'0':'-1'}">${filtered?'<span aria-hidden="true">·</span>':''}</button>`; const meta=itemMeta(item), selected=Engine.selectedInventoryItem===item; return `<button class="backpack-slot ${qualityClass(meta)}${selected?' selected':''}${equipped.has(item)?' equipped':''}${meta.relic?' relic':''}" role="gridcell" draggable="true" data-item="${esc(item)}" data-grid-index="${displayIndex}" aria-label="${esc(item)}, ${QUALITY_LABEL[meta.quality]} ${esc(meta.category)}${equipped.has(item)?', equipped':''}${meta.relic?', relic':''}" aria-pressed="${selected}" tabindex="${displayIndex===0?'0':'-1'}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><small>${esc(item)}</small>${equipped.has(item)?'<b class="equipped-mark" aria-hidden="true">M</b>':''}${meta.relic?'<i class="relic-pip" aria-hidden="true">R</i>':''}</button>`; }).join('');
+  Engine.el.inventoryItems.innerHTML=ordered.map((entry,displayIndex)=>{ const item=entry.item, filtered=item&&!visible(entry); if(!item||filtered) return `<button class="backpack-slot empty${filtered?' filtered':''}" role="gridcell" data-grid-index="${displayIndex}" aria-label="${filtered?'Filtered item':'Empty backpack slot'} ${displayIndex+1}" tabindex="${displayIndex===0?'0':'-1'}">${filtered?'<span aria-hidden="true">·</span>':''}</button>`; const meta=itemMeta(item), selected=Engine.selectedInventoryItem===item; return `<button class="backpack-slot ${qualityClass(meta)}${selected?' selected':''}${equipped.has(item)?' equipped':''}${meta.relic?' relic':''}" role="gridcell" draggable="true" data-item="${esc(item)}" data-grid-index="${displayIndex}" aria-label="${esc(item)}, ${QUALITY_LABEL[meta.quality]} ${esc(meta.category)}${equipped.has(item)?', equipped':''}${meta.relic?', relic':''}" aria-pressed="${selected}" tabindex="${displayIndex===0?'0':'-1'}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><small>${esc(item)}</small>${equipped.has(item)?'<b class="equipped-mark" aria-label="Equipped slot">S</b>':''}${meta.relic?'<i class="relic-pip" aria-hidden="true">R</i>':''}</button>`; }).join('');
   const used=pack.slots.filter(Boolean).length;
   Engine.el.capacityMeter.textContent=`${used} / ${BACKPACK_CAPACITY} slots${pack.overflow.length?` · ${pack.overflow.length} overflow`:''}`;
   Engine.el.capacityMeter.classList.toggle('near-limit',used>=BACKPACK_CAPACITY-4);
@@ -1250,7 +1349,7 @@ function renderInventory(){
     const key=slot.dataset.slot, label=EQUIPMENT_SLOTS.find(([name])=>name===key)?.[1]||key, item=E[key], meta=item&&itemMeta(item);
     const selected=Engine.selectedInventoryItem, compatible=selected&&itemMeta(selected).slot===key&&meetsRequirements(selected);
     slot.className=`equip-slot slot-${key==='mainHand'?'main':key==='offHand'?'off':key}${item?` occupied ${qualityClass(meta)}`:''}${compatible?' compatible':''}${selected&&!compatible?' incompatible':''}`;
-    slot.innerHTML=`<span class="slot-label">${label}</span>${item?`<span class="item-glyph" aria-hidden="true">${meta.glyph}</span><strong>${esc(item)}</strong>${meta.relic?'<i class="relic-pip" aria-hidden="true">R</i>':''}`:'<strong>Empty mount</strong>'}`;
+    slot.innerHTML=`<span class="slot-label">${label}</span>${item?`<span class="item-glyph" aria-hidden="true">${meta.glyph}</span><strong>${esc(item)}</strong>${meta.relic?'<i class="relic-pip" aria-hidden="true">R</i>':''}`:'<strong>Empty slot</strong>'}`;
     slot.setAttribute('aria-label',item?`${label}: ${item}. Select to unequip.`:compatible?`${label}: equip ${selected}`:`${label}: empty`);
   });
   const stats=derivedStats(S);
@@ -1264,6 +1363,10 @@ function renderAll(){
   Engine.el.sceneHeading.textContent=s.scene;
   Engine.el.charHeaderName.textContent=C.name;
   Engine.el.charHeaderRace.textContent=C.race;
+  if(Engine.el.objectivePanel){
+    const chapter=CAMPAIGN_CHAPTERS[s.campaign?.chapter]||CAMPAIGN_CHAPTERS.halls;
+    Engine.el.objectivePanel.innerHTML=`<span>${chapter.act} · ${chapter.label}</span><strong>${esc(s.campaign?.objective||'Awaiting a new commission.')}</strong>`;
+  }
 
   const mounted=EQUIPMENT_SLOTS.filter(([key])=>s.equipment?.[key]);
   const gearQuality=slot=>s.equipment?.[slot]?qualityClass(itemMeta(s.equipment[slot])):'';
@@ -1291,7 +1394,8 @@ function renderAll(){
   if (F.rumors) lines.push(`<div class="ledger-line"><span>Rumors heard</span><b>Yes</b></div>`);
   if ((F.keys||[]).length) lines.push(`<div class="ledger-line"><span>Keys</span><b>${(F.keys||[]).map(esc).join(', ')}</b></div>`);
   if (F.bossReady) lines.push(`<div class="ledger-line"><span>Gate ready</span><b>Yes</b></div>`);
-  if (F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Unfathomer dealt with</span><b>Yes</b></div>`);
+  if (F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Unfathomer resolved</span><b>${esc(s.campaign?.ending?.title||'Yes')}</b></div>`);
+  (s.campaign?.discoveries||[]).slice(-2).forEach(discovery=>lines.push(`<div class="ledger-line"><span>Discovery</span><b>${esc(discovery)}</b></div>`));
   Engine.el.ledgerPanel.innerHTML = lines.join('') || '<div class="ledger-empty">No discoveries inscribed.</div>';
 
 
@@ -1323,8 +1427,8 @@ function renderAll(){
   }
 }
 
-/* ---------- flow ---------- */
-function beginTale(preserveProgress=false){
+/* ---------- legacy prototype flow retained for save archaeology ---------- */
+function legacyBeginTale(preserveProgress=false){
   const S=Engine.state;
   S.turn=0; S.scene='Halls'; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
   if(!preserveProgress) S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false};
@@ -1333,7 +1437,7 @@ function beginTale(preserveProgress=false){
   renderChoices(makeChoiceSet(S.scene));
   S.turn++; renderAll(); persistState('Journey begun'); BGM.updateForState(Engine.state);
 }
-function endTale(){
+function legacyEndTale(){
   const S=Engine.state, C=S.character;
   const ep = `Epilogue — You leave with ${C.Gold} gold and ${C.inventory.length} items. Keys recovered: ${S.flags.keys.join(', ')||'none'}. ` +
     (S.flags.bossDealtWith?'The Unfathomer has fallen silent. For the first time in weeks, Brassreach sleeps without tremors.':'The Unfathomer still moves below the streets. In the ale halls, people speak of your descent and wonder whether you will return.');
@@ -1342,14 +1446,14 @@ function endTale(){
   Engine.el.epiContent.textContent=ep;
   openModal(Engine.el.modalEpi);
 }
-function undoTurn(){
+function legacyUndoTurn(){
   const S=Engine.state, previous=S._undoStack?.pop();
   if(!previous){ toast('Nothing to undo'); return; }
   Object.assign(S,previous,{_undoStack:S._undoStack});
   renderChoices(makeChoiceSet(S.scene)); renderAll(); BGM.updateForState(S);
 }
 
-function hardResetRun(){
+function legacyHardResetRun(){
   const S=Engine.state, fresh=defaults();
   fresh.settings={...fresh.settings,...S.settings,audio:{...fresh.settings.audio,...S.settings.audio}};
   fresh.live={...fresh.live,...S.live};
@@ -1361,7 +1465,7 @@ function hardResetRun(){
 }
 
 /* ---------- choices ---------- */
-function renderChoices(choices){
+function legacyRenderChoices(choices){
   const list=Engine.el.choiceList; if(!list) return;
 
   if (!Array.isArray(Engine.state._choiceHistory)) Engine.state._choiceHistory=[];
@@ -1392,20 +1496,20 @@ function modulateChoices(arr){
 }
 
 /* ---------- narration ---------- */
-function freeText(){
+function legacyFreeText(){
   const text=(Engine.el.freeText.value||'').trim(); if(!text) return;
   Engine.el.freeText.value='';
   const italic=`<em>${esc(text)}</em>`;
   doNarrate({ sentence:`You attempt this action: ${italic}.` });
 }
-function doNarrate(ch){
+function legacyDoNarrate(ch){
   if(Engine.busy) return; setBusy(true);
   const payload={ action:ch.sentence, source:'narrate', stat:null, dc:null, passed:null, game_state:snapshotState(), history:recentHistory() };
   Promise.resolve(Weaver.turn(payload, localTurn)).then(resp=>applyTurn(resp,null)).catch(()=>applyTurn(localTurn(payload),null)).finally(()=>setBusy(false));
 }
 
 /* ---------- resolve ---------- */
-function resolveChoice(ch){
+function legacyResolveChoice(ch){
   if(Engine.busy) return; setBusy(true);
   const S=Engine.state, C=S.character;
   const stat=ch.stat||'INT', mod=modFrom(C[stat]||10); const dc=clamp(11+rnd(-1,3),8,18); const r=rnd(1,20); const total=r+mod; const passed=(total>=dc);
@@ -1517,7 +1621,7 @@ function localTurn(payload){
 }
 
 /* ---------- choice pools ---------- */
-function makeChoiceSet(scene){
+function legacyMakeChoiceSet(scene){
   const sets={
     Halls:[
       {id:'h-int', sentence:'Study the water pulses and find a safe crossing (INT)', stat:'INT'},
@@ -1538,6 +1642,203 @@ function makeChoiceSet(scene){
   return (sets[scene]||sets.Halls).slice(0);
 }
 
+/* ---------- authored campaign flow (overrides the legacy prototype above) ---------- */
+function currentScene(){ return CAMPAIGN_SCENES[Engine.state.campaign?.sceneId]||CAMPAIGN_SCENES['halls-briefing']; }
+function addJournal(kind,text){
+  if(!text) return;
+  const C=Engine.state.campaign,J=Engine.state.journal,campaignKey=kind==='optional'?'optionalCompleted':kind;
+  if(Array.isArray(C[campaignKey])&&!C[campaignKey].includes(text)) C[campaignKey].push(text);
+  if(Array.isArray(J[kind])&&!J[kind].includes(text)) J[kind].push(text);
+}
+function grantItem(name,reason){
+  if(!name) return false;
+  const S=Engine.state;
+  if(S.character.inventory.some(item=>item.toLowerCase()===name.toLowerCase())) return false;
+  S.character.inventory=cleanInventory([...S.character.inventory,name]); syncInventoryState(S);
+  appendBeat(`${reason||'You add it to your field case'} Item acquired: ${name}.`,null,'story');
+  toast(`${name} added to the field case`); return true;
+}
+function applyEffects(effect={}){
+  const S=Engine.state,C=S.campaign;
+  if(typeof effect.gold==='number'){ S.character.Gold=Math.max(0,S.character.Gold+effect.gold); if(effect.gold) toast(`${effect.gold>0?'+':''}${effect.gold} gold`); }
+  if(typeof effect.hp==='number'){ S.character.HP=clamp(S.character.HP+effect.hp,1,S.character.MaxHP||S.character.HP); if(effect.hp<0) toast(`${Math.abs(effect.hp)} HP lost`,'warning'); }
+  if(effect.item) grantItem(effect.item.name||effect.item,effect.item.reason);
+  (effect.items||[]).forEach(item=>grantItem(item.name||item,item.reason));
+  if(effect.key){
+    S.flags.keys=uniqueText([...(S.flags.keys||[]),effect.key]);
+    if(effect.keyReason) appendBeat(`${effect.keyReason} Key acquired: ${effect.key}.`,null,'story');
+    toast(`${effect.key} Key recovered`);
+  }
+  if(effect.flag) C.flags[effect.flag]=true;
+  Object.entries(effect.flags||{}).forEach(([key,value])=>{ C.flags[key]=value; });
+  Object.entries(effect.alliance||{}).forEach(([key,value])=>{ C.alliances[key]=(C.alliances[key]||0)+value; });
+  addJournal('discoveries',effect.discovery); addJournal('consequences',effect.consequence); addJournal('optional',effect.optional); addJournal('milestones',effect.milestone);
+  S.flags.bossReady=(S.flags.keys||[]).length>=2;
+}
+function pushUndo(){
+  const S=Engine.state; S._undoStack=S._undoStack||[]; S._undoStack.push(captureRunState(S));
+  while(S._undoStack.length>24) S._undoStack.shift();
+}
+function enterScene(sceneId,{appendStory=true}={}){
+  const S=Engine.state,C=S.campaign,next=CAMPAIGN_SCENES[sceneId]; if(!next) return;
+  const previous=C.sceneId;
+  if(previous&&previous!==sceneId&&!C.completedScenes.includes(previous)) C.completedScenes.push(previous);
+  C.sceneId=sceneId; C.chapter=next.chapter; C.objective=next.objective; S.scene=next.title;
+  const firstEntry=!C.enteredScenes.includes(sceneId);
+  if(appendStory) appendBeat(next.story,null,'story');
+  if(firstEntry){ C.enteredScenes.push(sceneId); applyEffects(next.enter||{}); }
+  renderChoices(next.choices); S.turn++; renderAll(); persistState('Objective updated'); BGM.updateForState(S);
+}
+function beginTale(preserveProgress=false){
+  const S=Engine.state;
+  S.turn=0; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
+  if(!preserveProgress){ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false}; S.campaign=defaultCampaign(); S.journal=defaultJournal(); }
+  else{ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false,...S.flags}; S.campaign=normalizeCampaign(S.campaign,S); S.journal=normalizeJournal(S.journal,S.campaign); }
+  enterScene(S.campaign.sceneId||'halls-briefing');
+}
+function endTale(){
+  const S=Engine.state,C=S.character,ending=S.campaign.ending;
+  const ep=ending?.text||`You return from ${currentScene().title} with ${C.Gold} gold, ${C.inventory.length} carried items, and ${(S.flags.keys||[]).length} recovered Keys. The expedition remains unfinished, and the Unfathomer still waits below Brassreach.`;
+  if(!ending) appendBeat(ep,null,'story'); renderChoices([]); renderAll();
+  Engine.el.epiTitle.textContent=ending?.title||'Expedition Retired'; Engine.el.epiContent.textContent=ep; openModal(Engine.el.modalEpi);
+}
+function undoTurn(){
+  const S=Engine.state,previous=S._undoStack?.pop(); if(!previous){ toast('Nothing to undo'); return; }
+  Object.assign(S,previous,{_undoStack:S._undoStack}); renderChoices(makeChoiceSet()); renderAll(); persistState('Turn restored'); BGM.updateForState(S);
+}
+function hardResetRun(){
+  const S=Engine.state,fresh=defaults(); fresh.settings={...fresh.settings,...S.settings,audio:{...fresh.settings.audio,...S.settings.audio}}; fresh.live={...fresh.live,...S.live};
+  Object.keys(S).forEach(key=>delete S[key]); Object.assign(S,fresh); beginTale(); store.set('dds_state',S); toast('New run started');
+}
+
+function choiceBonusBreakdown(ch){
+  const S=Engine.state,C=S.character,campaign=S.campaign,owned=new Set(C.inventory),equipped=new Set(Object.values(S.equipment||{}).filter(Boolean));
+  const parts=[]; let total=ch.stat?modFrom(C[ch.stat]||10):0;
+  if(ch.stat) parts.push({label:ch.stat,value:total,base:true});
+  for(const bonus of (ch.bonuses||[])){
+    let active=false,value=bonus.bonus||0,label=bonus.label||bonus.item||'advantage';
+    if(bonus.item&&owned.has(bonus.item)){ active=true; if(equipped.has(bonus.item)){ value+=1; label+=', equipped'; } }
+    if(bonus.derived&&derivedStats(S)[bonus.derived]>=bonus.threshold) active=true;
+    if(bonus.flag&&campaign.flags?.[bonus.flag]) active=true;
+    if(bonus.alliance&&(campaign.alliances?.[bonus.alliance]||0)>0) active=true;
+    if(bonus.keys&&(S.flags.keys||[]).length>=bonus.keys) active=true;
+    if(active){ total+=value; parts.push({label,value}); }
+  }
+  return {total,parts};
+}
+function modifierText(ch){
+  if(ch.type!=='check'&&ch.type!=='ending') return ch.type==='merchant'?'Merchant · buy and sell':'No roll';
+  const active=choiceBonusBreakdown(ch).parts.map(part=>`${part.label} ${fmt(part.value)}`); return `DC ${ch.dc} · ${active.join(' · ')}`;
+}
+function renderChoices(choices){
+  const list=Engine.el.choiceList; if(!list) return; list.innerHTML='';
+  const pool=Array.isArray(choices)?choices:[]; Engine.state._lastChoices=pool.map(ch=>ch.id);
+  pool.forEach((ch,index)=>{
+    const btn=document.createElement('button'); btn.className=`choice-btn choice-${ch.type||'check'}${index===0?' recommended':''}`;
+    btn.innerHTML=`<span class="choice-label">${esc(ch.label||ch.sentence)}</span><small>${esc(modifierText(ch))}</small>`;
+    btn.dataset.choiceId=ch.id; btn.onclick=()=>{ Sound.click(); resolveChoice(ch); }; list.appendChild(btn);
+  });
+}
+
+function freeText(){ const text=(Engine.el.freeText.value||'').trim(); if(!text) return; Engine.el.freeText.value=''; doNarrate({sentence:text}); }
+function campaignExplorationText(ch){
+  const S=Engine.state,scene=currentScene(),count=S.campaign.exploration[scene.id]||0;
+  const context={
+    halls:['You find fresh boot marks leading toward the lower route, but no safer passage than the one already marked.','The nearby masonry is damp but stable. The next pressure pulse will arrive soon.'],
+    archives:['The shelves confirm the same transfer route recorded in the active objective. Nothing here changes the immediate danger.','A marginal note supports Lithen’s account and warns against delaying near the open shaft.'],
+    depths:['Cold water carries the Gate’s four-beat pulse through the floor. Your chosen route remains the only usable way forward.','You secure a loose strap and mark the return path. The hazard ahead has not moved.'],
+    gate:['The Gate answers with a low mechanical note. Its controls still await the decision named in your objective.'],
+    unfathomer:['The vast presence listens, but the current Measure remains unanswered.']
+  };
+  const lines=context[scene.chapter]||context.halls,line=lines[count%lines.length]; S.campaign.exploration[scene.id]=count+1;
+  return `You ${ch.sentence.replace(/^you\s+/i,'')}. ${line}`;
+}
+function commitExploration(text,html=null){ appendBeat(text,null,'story',html); Engine.state.turn++; renderAll(); persistState('Exploration stored'); }
+function doNarrate(ch){
+  if(Engine.busy) return; setBusy(true); pushUndo();
+  const fallbackText=campaignExplorationText(ch);
+  if(!Engine.state.live.on){ commitExploration(fallbackText); setBusy(false); return; }
+  const payload={action:ch.sentence,source:'narrate',stat:null,dc:null,passed:null,game_state:snapshotState(),history:recentHistory()};
+  const fallback=()=>({story_paragraph:fallbackText});
+  Promise.resolve(Weaver.turn(payload,fallback)).then(resp=>{
+    const text=resp?.story_paragraph||fallbackText,html=resp?.story_paragraph_html?sanitizeRichHTML(resp.story_paragraph_html):null;
+    commitExploration(stripHTML(text),html);
+  }).catch(()=>commitExploration(fallbackText)).finally(()=>setBusy(false));
+}
+
+function resolveChoice(ch){
+  if(Engine.busy||!ch) return;
+  if(ch.type==='merchant'){ openMerchant(ch.merchant); return; }
+  pushUndo();
+  if(ch.type==='advance'){ appendBeat(ch.outcome||'You move on.',null,'story'); applyEffects(ch.effects||{}); enterScene(ch.next); return; }
+  setBusy(true);
+  const bonus=choiceBonusBreakdown(ch),roll=rnd(1,20),total=roll+bonus.total,result={roll,total,dc:ch.dc,bonus,passed:total>=ch.dc};
+  if(!result.passed){ openLostEncounter(ch,result); setBusy(false); return; }
+  completeCheckedChoice(ch,result,true); setBusy(false);
+}
+function markEncounter(ch){
+  const id=ch.encounter||ch.id,C=Engine.state.campaign;
+  if(id&&!C.completedEncounters.includes(id)) C.completedEncounters.push(id);
+  if(ch.bossPhase) C.bossPhase=Math.max(C.bossPhase,ch.bossPhase);
+}
+function rollLabel(result){
+  const extras=result.bonus.parts.slice(1).map(part=>`${part.label} ${fmt(part.value)}`).join(', ');
+  return `d20 ${result.roll} ${fmt(result.bonus.parts[0]?.value||0)}${extras?` + ${extras}`:''} vs DC ${result.dc} = ${result.total}`;
+}
+function completeCheckedChoice(ch,result,passed){
+  markEncounter(ch); appendBeat(passed?(ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.'),rollLabel(result),passed?'success':'fail');
+  const effects=ch.effects?(ch.effects[passed?'success':'failure']||{}):{}; applyEffects(effects); Sound.sfx(passed?'success':'fail');
+  if(ch.type==='ending'){ finalizeEnding(ch.ending,passed,result); return; }
+  enterScene(passed?(ch.nextSuccess||ch.next):(ch.nextFail||ch.next));
+}
+function eligibleSacrifices(){
+  const equipped=new Set(Object.values(Engine.state.equipment||{}).filter(Boolean));
+  return Engine.state.character.inventory.filter(name=>{ const meta=itemMeta(name); return !equipped.has(name)&&!meta.relic&&!['Key','Quest'].includes(meta.category); });
+}
+function failureCost(){ const order=['halls','archives','depths','gate','unfathomer'],index=Math.max(0,order.indexOf(Engine.state.campaign.chapter)); return 4+(index*2); }
+function openLostEncounter(ch,result){
+  const id=ch.encounter||ch.id,used=!!Engine.state.campaign.rerollsUsed[id],cost=failureCost(),items=eligibleSacrifices(); Engine.pendingFailure={ch,result,id,cost};
+  Engine.el.lostContent.innerHTML=`<p id="lostSummary">${esc(ch.failure||'The attempt fails, but the expedition can continue.')}</p><div class="lost-roll"><span>Result</span><strong>${esc(rollLabel(result))}</strong></div><p class="lost-copy">Accept the consequence, or pay once to make a new attempt. Keys, relics, quest items, and equipped gear are protected.</p><div class="lost-options"><button class="btn gold" data-lost-action="gold" ${used||Engine.state.character.Gold<cost?'disabled':''}>Spend ${cost} gold<br><small>${used?'Reroll already used':`${Engine.state.character.Gold} available`}</small></button><button class="btn" data-lost-action="item" ${used||!items.length?'disabled':''}>Risk a random item<br><small>${items.length} eligible</small></button><button class="btn red" data-lost-action="accept">Accept consequence<br><small>The story moves forward</small></button></div>`;
+  openModal(Engine.el.modalLost); Engine.el.modalLost.querySelector('button:not([disabled])')?.focus();
+}
+function closeLost(){ Engine.pendingFailure=null; closeModal(Engine.el.modalLost); }
+function acceptFailure(){ const pending=Engine.pendingFailure; if(!pending) return; closeLost(); completeCheckedChoice(pending.ch,pending.result,false); }
+function rerollFailure(method){
+  const pending=Engine.pendingFailure; if(!pending) return; const S=Engine.state; if(S.campaign.rerollsUsed[pending.id]) return; let payment='';
+  if(method==='gold'){ if(S.character.Gold<pending.cost) return; S.character.Gold-=pending.cost; payment=`You pay ${pending.cost} gold for another attempt.`; }
+  else{ const eligible=eligibleSacrifices(); if(!eligible.length) return; const lost=pick(eligible); S.character.inventory=S.character.inventory.filter(item=>item!==lost); syncInventoryState(S); payment=`You abandon ${lost} to recover your position and try again.`; }
+  S.campaign.rerollsUsed[pending.id]=true; appendBeat(payment,null,'story');
+  const bonus=choiceBonusBreakdown(pending.ch),roll=rnd(1,20),total=roll+bonus.total+1,result={roll,total,dc:pending.ch.dc,bonus:{...bonus,parts:[...bonus.parts,{label:'resolve',value:1}]},passed:total>=pending.ch.dc},ch=pending.ch;
+  closeLost(); completeCheckedChoice(ch,result,result.passed);
+}
+function finalizeEnding(id,passed,result){
+  const S=Engine.state,ending=ENDINGS[id]||ENDINGS.bind,keys=(S.flags.keys||[]).length; let text=passed?ending.success:ending.failure;
+  text+=keys===3?' With all three Keys intact, the Gate records the decision clearly and leaves no hidden clause.':' Two Keys were enough to decide the crisis, but the missing Tone circuit leaves part of the old mechanism unreadable.';
+  S.campaign.ending={id,title:ending.title,text,passed,roll:rollLabel(result)}; S.flags.bossDealtWith=true; S.campaign.objective='The expedition is complete.';
+  addJournal('milestones',ending.title); appendBeat(text,rollLabel(result),passed?'success':'fail'); renderChoices([]); S.turn++; renderAll(); persistState('Epilogue stored');
+  Engine.el.epiTitle.textContent=ending.title; Engine.el.epiContent.textContent=text; openModal(Engine.el.modalEpi); BGM.updateForState(S);
+}
+
+function openMerchant(id){ Engine.activeMerchant=MERCHANTS[id]; if(!Engine.activeMerchant) return; renderMerchant(); openModal(Engine.el.modalMerchant); }
+function merchantBuyPrice(name){ return Math.max(1,Math.ceil(itemMeta(name).value*.65)); }
+function merchantSellPrice(name){ return Math.max(1,Math.floor(itemMeta(name).value*.45)); }
+function canSell(name){ const meta=itemMeta(name); return !Object.values(Engine.state.equipment||{}).includes(name)&&!meta.relic&&!['Key','Quest'].includes(meta.category); }
+function renderMerchant(){
+  const merchant=Engine.activeMerchant;if(!merchant) return; const S=Engine.state; Engine.el.merchantTitle.textContent=merchant.name; Engine.el.merchantKicker.textContent=merchant.title;
+  const stock=merchant.stock.map(name=>{ const meta=itemMeta(name),price=merchantBuyPrice(name),owned=S.character.inventory.includes(name); return `<article class="trade-item ${qualityClass(meta)}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><div><strong>${esc(name)}</strong><small>${QUALITY_LABEL[meta.quality]} ${esc(meta.category)} · ${price} gold</small><p>${esc(meta.mechanic)}</p></div><button class="btn mini" data-buy="${esc(name)}" ${owned||S.character.Gold<price?'disabled':''}>${owned?'Owned':'Buy'}</button></article>`; }).join('');
+  const sellable=S.character.inventory.map(name=>{ const meta=itemMeta(name),allowed=canSell(name); return `<article class="trade-item ${qualityClass(meta)}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><div><strong>${esc(name)}</strong><small>${merchantSellPrice(name)} gold</small></div><button class="btn mini" data-sell="${esc(name)}" ${allowed?'':'disabled'}>${allowed?'Sell':'Protected'}</button></article>`; }).join('')||'<p class="merchant-empty">Your field case is empty.</p>';
+  Engine.el.merchantContent.innerHTML=`<div class="merchant-intro"><p>${esc(merchant.greeting)}</p><strong>${S.character.Gold} gold</strong></div><div class="trade-columns"><section><h4>For Sale</h4>${stock}</section><section><h4>Your Field Case</h4>${sellable}</section></div>`;
+}
+function buyMerchantItem(name){ const price=merchantBuyPrice(name),S=Engine.state;if(S.character.Gold<price||S.character.inventory.includes(name)) return; S.character.Gold-=price; grantItem(name,`${Engine.activeMerchant.name} sells it to you for ${price} gold.`); persistState('Purchase stored'); renderAll(); renderMerchant(); Sound.inventory('place'); }
+function sellMerchantItem(name){ if(!canSell(name)) return; const S=Engine.state,price=merchantSellPrice(name); S.character.inventory=S.character.inventory.filter(item=>item!==name); S.character.Gold+=price; syncInventoryState(S); appendBeat(`${Engine.activeMerchant.name} buys ${name} for ${price} gold.`,null,'story'); persistState('Sale stored'); renderAll(); renderMerchant(); Sound.inventory('pickup'); }
+function renderJournal(){
+  const C=Engine.state.campaign,J=Engine.state.journal,scene=currentScene(),chapter=CAMPAIGN_CHAPTERS[C.chapter]||CAMPAIGN_CHAPTERS.halls;
+  const section=(title,items,empty)=>`<section><h4>${title}</h4>${items.length?`<ol>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ol>`:`<p class="journal-empty">${empty}</p>`}</section>`;
+  Engine.el.journalContent.innerHTML=`<div class="journal-current"><span>${chapter.act} · ${chapter.label}</span><h3>${esc(scene.title)}</h3><p>${esc(C.objective)}</p></div><div class="journal-grid">${section('Milestones',J.milestones,'No milestones recorded yet.')}${section('Discoveries',J.discoveries,'No discoveries recorded yet.')}${section('Consequences',J.consequences,'No lasting consequences yet.')}${section('Optional Work',J.optional,'No optional work recorded yet.')}</div>`;
+}
+function openJournal(){ renderJournal(); openModal(Engine.el.modalJournal); }
+function makeChoiceSet(){ return currentScene().choices||[]; }
+
 /* ---------- helpers ---------- */
 function appendBeat(text, roll, kind=null, html=null){
   const entry= html?{html:sanitizeRichHTML(html),roll,kind}:{text,roll,kind};
@@ -1549,12 +1850,12 @@ function captureRunState(S){
   return JSON.parse(JSON.stringify({
     seed:S.seed, turn:S.turn, scene:S.scene,
     storyBeats:S.storyBeats, transcript:S.transcript,
-    character:S.character, backpack:S.backpack, equipment:S.equipment, flags:S.flags,
+    character:S.character, backpack:S.backpack, equipment:S.equipment, flags:S.flags, campaign:S.campaign, journal:S.journal,
     _choiceHistory:S._choiceHistory, _lastChoices:S._lastChoices,
     _arcStep:S._arcStep, _pendingType:false
   }));
 }
-function snapshotState(){ const S=Engine.state; return {character:S.character, backpack:S.backpack, equipment:S.equipment, flags:S.flags, scene:S.scene, turn:S.turn}; }
+function snapshotState(){ const S=Engine.state; return {character:S.character, backpack:S.backpack, equipment:S.equipment, flags:S.flags, campaign:S.campaign, journal:S.journal, scene:S.scene, turn:S.turn}; }
 function recentHistory(){ const T=Engine.state.transcript; return T.slice(Math.max(0,T.length-10)); }
 function fmt(n){ return (n>=0?'+':'')+n; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[c])); }
@@ -1589,7 +1890,7 @@ function sanitizeRichHTML(html){
 }
 function autoGen(){ const n=['Eldan','Brassa','Keled','Varek','Moriah','Thrain','Ysolda','Kael']; const C=Engine.state.character;
   C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.MaxHP=C.HP; C.Gold=rnd(0,25); C.inventory=['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)); Engine.state.equipment=blankEquipment(); syncInventoryState(Engine.state); renderAll(); }
-function toast(txt,tone='info'){ const region=Engine.el.toastRegion||document.body; const t=document.createElement('div'); t.className=`toast ${tone}`; t.textContent=txt; region.appendChild(t); requestAnimationFrame(()=>t.classList.add('show')); setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),240); },2400); }
+function toast(txt,tone='info'){ const region=Engine.el.toastRegion||document.body; while(region.children.length>=4) region.firstElementChild?.remove(); const t=document.createElement('div'); t.className=`toast ${tone}`; t.textContent=txt; region.appendChild(t); requestAnimationFrame(()=>t.classList.add('show')); setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),240); },2400); }
 function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url); }
 
 /* ---------- rich typewriter (preserves glossary and roll markup) ---------- */
@@ -1637,7 +1938,7 @@ function getIntroSlidesHTML(){
     <section class="slide s1 active" data-side="img-left" aria-label="Slide 1">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Lanterns burn across the terraces of <span class="gloss" data-def="A dwarven city built in tiers above vast reservoirs and service vaults.">Brassreach</span>. Beneath the streets lies the <span class="gloss" data-def="The engineered maze below Brassreach: stone ribs, brass collars, and channels that carry sound.">under-works</span>, a network of tuned caverns built by the city's founders. Dwarves record important deeds as law, and the delvers who carry those records are called <span class="gloss" data-def="A delver who records deeds so the city can identify where it is weak or strong.">thread-bearers</span>. You enter the <span class="gloss" data-def="The first tier of civic tunnels, where rumors become maps and new delvers face their first tests.">Halls</span>. Water moves beneath the floor, and old survey marks lead toward the <span class="gloss" data-def="Sunless reservoirs that supply the city and carry sound across great distances.">cisterns</span>. Wardens test the walls for faults while Archivists record every warning. Brassreach needs someone willing to descend.</p>
+        <p>Lanterns burn across the terraces of <span class="gloss" data-def="A tiered dwarven city built above reservoirs and service vaults.">Brassreach</span>. Beneath the streets lies the <span class="gloss" data-def="Service tunnels and machines beneath Brassreach.">under-works</span>, a network of tuned caverns built by the city's founders. Dwarves record important deeds as law, and the delvers who carry those records are called <span class="gloss" data-def="Delvers who record important deeds for the city.">thread-bearers</span>. You enter the <span class="gloss" data-def="The upper civic tunnels where new expeditions begin.">Halls</span>. Water moves beneath the floor, and old survey marks lead toward the <span class="gloss" data-def="Underground reservoirs that supply Brassreach.">cisterns</span>. Wardens test the walls for faults while Archivists record every warning. Brassreach needs someone willing to descend.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introSkip1">Skip</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1646,7 +1947,7 @@ function getIntroSlidesHTML(){
     <section class="slide s2" data-side="img-left" aria-label="Slide 2">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Far below, the <span class="gloss" data-def="A slow, deliberate tide that learns rhythms and presses against weak parts of the city.">Unfathomer</span> gathers in the dark. It behaves like a <span class="gloss" data-def="Many tones acting as one force. It grows stronger where the city's channels fall out of tune.">chorus</span> trained by centuries of bells. The <span class="gloss" data-def="The old engineering law that kept channels, bells, and gates tuned so the chorus remained calm.">Cadence Law</span> once kept it quiet, but poor repairs have broken the city's harmony. Three ancient instruments may restore control: the <span class="gloss" data-def="Stone, Brass, and Echo: three instruments that command parts of the Gate of Measures.">Three Keys</span>—<span class="gloss" data-def="The Stone Key represents Weight: foundation, oath, burden, and consequence.">Stone</span>, <span class="gloss" data-def="The Brass Key represents Tone: resonance, harmony, and tuned relationships.">Brass</span>, and <span class="gloss" data-def="The Echo Key represents Pattern: memory, return, law, and recurrence.">Echo</span>. <span class="gloss" data-def="Archivist of the Lower Stacks, who believes the chorus can be bargained with through honest measures.">Lithen the Wise</span> wants a treaty. <span class="gloss" data-def="Warden of the Brassworks, who wants to force the city back into tune and seal the culverts.">Mullinen the Stout</span> wants iron clamps and decisive force. You must choose which counsel to trust.</p>
+        <p>Far below, the <span class="gloss" data-def="A powerful presence moving through the water and stone below the city.">Unfathomer</span> gathers in the dark. It behaves like a <span class="gloss" data-def="Many tones acting together as one force.">chorus</span> trained by centuries of bells. The <span class="gloss" data-def="The old law that kept the city’s channels and gates in tune.">Cadence Law</span> once kept it quiet, but poor repairs have broken the city's harmony. Three ancient instruments may restore control: the <span class="gloss" data-def="Stone, Brass, and Echo activate different parts of the Gate.">Three Keys</span>—<span class="gloss" data-def="Stone governs Weight, burden, and consequence.">Stone</span>, <span class="gloss" data-def="Brass governs Tone and harmony.">Brass</span>, and <span class="gloss" data-def="Echo governs Pattern, memory, and return.">Echo</span>. <span class="gloss" data-def="A Lower Stacks Archivist who believes honest terms can prevent conflict.">Lithen the Wise</span> wants a treaty. <span class="gloss" data-def="A Brassworks Warden who favors strong repairs and sealed channels.">Mullinen the Stout</span> wants iron clamps and decisive force. You must choose which counsel to trust.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack2">◂ Back</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1655,7 +1956,7 @@ function getIntroSlidesHTML(){
     <section class="slide s3" data-side="img-left" aria-label="Slide 3">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Rumor places the <span class="gloss" data-def="An ancient tuning engine that once set the city's Measures with a single motion.">Gate of Measures</span> in the cistern fields. Your route leads through the <span class="gloss" data-def="The upper tunnels where you gather information and choose your first path.">Halls</span>, into the <span class="gloss" data-def="The guarded library where ledgers, oaths, and tuning charts are stored.">Archives</span>, and down to the <span class="gloss" data-def="The flooded galleries where the Unfathomer has the greatest strength.">Depths</span>. At chambers with clear <span class="gloss" data-def="A stable agreement of sound that allows voices and mechanisms to work together.">resonance</span>, you may <span class="gloss" data-def="Restrain the chorus by restoring honest measures and working channels.">bind</span> the Unfathomer, <span class="gloss" data-def="Match its rhythm and make terms the city can honor.">bargain</span> with it, or <span class="gloss" data-def="Drive the chorus away at a cost the city must bear.">banish</span> it. Gather the Keys, record what you learn, and watch your footing. Your decisions will determine what survives below Brassreach.</p>
+        <p>Rumor places the <span class="gloss" data-def="An ancient engine and covenant chamber in the cistern fields.">Gate of Measures</span> in the cistern fields. Your route leads through the <span class="gloss" data-def="The upper tunnels where expeditions begin.">Halls</span>, into the <span class="gloss" data-def="A guarded library of records, oaths, and engineering charts.">Archives</span>, and down to the <span class="gloss" data-def="Flooded galleries where the Unfathomer is strongest.">Depths</span>. At chambers with clear <span class="gloss" data-def="A stable harmony between voices or machines.">resonance</span>, you may <span class="gloss" data-def="Restrain the Unfathomer with a repaired covenant.">bind</span> the Unfathomer, <span class="gloss" data-def="Make terms that both sides agree to honor.">bargain</span> with it, or <span class="gloss" data-def="Drive it away and accept the damage left behind.">banish</span> it. Gather the Keys, record what you learn, and watch your footing. Your decisions will determine what survives below Brassreach.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack3">◂ Back</button><button class="btn gold intro-begin">Begin Story</button></div>
       <div class="mist" aria-hidden="true"></div>
