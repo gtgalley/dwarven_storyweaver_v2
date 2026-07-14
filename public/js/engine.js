@@ -470,7 +470,659 @@ function insertIntro(){
       imgInPic = strayImg;
     }
 
-    // V…8190 tokens truncated… vent.",
+    // Visible placeholder if no image has been assigned yet.
+    const cs = getComputedStyle(imgInPic);
+    const hasBG = cs.backgroundImage && cs.backgroundImage !== 'none';
+    if(!hasBG){
+      imgInPic.style.backgroundImage =
+        "linear-gradient(135deg, rgba(213,168,74,.28), rgba(22,16,10,.28))";
+      imgInPic.style.backgroundSize = 'cover';
+      imgInPic.style.backgroundPosition = 'center';
+    }
+  });
+})();
+  
+
+  // Title at top of slides with double underline
+if (!Engine.el.intro.querySelector('.intro-title')){
+  const t = document.createElement('div');
+  t.className = 'intro-title u-double-underline';
+  t.innerHTML = '<span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>';
+  Engine.el.intro.appendChild(t);
+}
+  // One-at-a-time slides + per-slide typewriter
+  let idx = 0;
+  const show = (i)=>{
+    idx = Math.max(0, Math.min(Engine.el.slides.length - 1, i));
+    Engine.el.slides.forEach((s, k)=>{
+      const active = (k === idx);
+      s.classList.toggle('active', active);
+      if (!active) return;
+
+      // trigger typewriter once per slide
+      const p = s.querySelector('.scroll p');
+      if (p && !p.dataset.typed){
+        p.dataset.typed = '1';
+        typewriteRich(p, Engine.state.settings.cps); // your existing typed routine
+      }
+    });
+  };
+
+  // Button wiring
+  Engine.el.nextBtns.forEach(b => b.addEventListener('click', ()=>{
+    Sound.sfx('story'); show(idx + 1);
+  }));
+  const back2 = Engine.el.intro.querySelector('#introBack2');
+  const back3 = Engine.el.intro.querySelector('#introBack3');
+  const skip1 = Engine.el.intro.querySelector('#introSkip1');
+
+  back2 && back2.addEventListener('click', ()=>{ Sound.click(); show(idx - 1); });
+  back3 && back3.addEventListener('click', ()=>{ Sound.click(); show(idx - 1); });
+  skip1 && skip1.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
+
+  if (Engine.el.beginBtn){
+    Engine.el.beginBtn.onclick = ()=>{
+      BGM.crossTo('prelude');
+      Sound.gong();
+  
+      // stop/remove intro embers so only main-screen embers remain
+      try { Engine.el.fxIntroCtl && Engine.el.fxIntroCtl.stop && Engine.el.fxIntroCtl.stop(); } catch {}
+      const fxIntro = document.getElementById('fxIntro'); if (fxIntro) fxIntro.remove();
+  
+      Engine.el.intro.classList.add('hidden');
+      store.set('intro_seen', true);
+      if (!Engine.state.storyBeats.length) beginTale();
+  
+      // open editor and mount scroll icon
+      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
+    };
+  }
+  
+// ---- Intro embers layer (behind panels, above crest) ----
+if (!document.getElementById('fxIntro')){
+  const fx = document.createElement('div');
+  fx.id = 'fxIntro';
+  fx.setAttribute('aria-hidden','true');
+  Object.assign(fx.style, {
+    position:'fixed', inset:'0', pointerEvents:'none', zIndex:'1'
+  });
+  // put embers behind everything in the intro stack
+  Engine.el.intro.prepend(fx);
+}
+// start intro embers and keep a handle to stop later
+Engine.el.fxIntroCtl = FX.start('fxIntro');
+// --- Assign baked-edge intro art (no veil mask) ---
+(function(){
+  // IMPORTANT: use relative paths so GH Pages serves from the project root
+  const ART = {
+    0: 'public/img/intro/intro_city_baked.png',
+    1: 'public/img/intro/intro_unfathomer_baked.png',
+    2: 'public/img/intro/intro_gate_baked.png'
+  };
+
+  Object.entries(ART).forEach(([i, url])=>{
+    const idx = +i;
+    const sl  = Engine.el.slides?.[idx];
+    if (!sl) return;
+    sl.classList.add('baked');          // hide veil via CSS
+    setSlideImage(idx, url);            // (replaces missing setIntroImage)
+  });
+})();
+  
+  // Start at the first slide
+  show(0);
+  tuneIntroLayout();
+}
+
+/* ---------- DOM ---------- */
+function buildUI(){
+  document.body.innerHTML = `
+  <div class="app">
+    <div class="crest" aria-hidden="true"></div>
+    <div id="glow" aria-hidden="true"></div>
+    <div id="fx" aria-hidden="true"></div>
+    <div id="letterbox" class="letterbox hidden">
+      <div class="bar top"></div><div class="bar bottom"></div>
+    </div>
+    <header class="masthead">
+      <div class="masthead-rivet rail-left" aria-hidden="true"></div>
+      <div class="brand-lockup">
+        <span class="brand-kicker">The Dwarven Storyweaver</span>
+        <div class="brand-title u-double-underline" aria-label="Brassreach">
+          <span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>
+        </div>
+        <span class="brand-motto">Stories are woven into law</span>
+      </div>
+      <div class="toolbar cardish frame" aria-label="Story controls">
+        <div class="controls">
+          <div class="keys-meter" title="Keys acquired">
+            <svg id="keysRing" viewBox="0 0 100 100" aria-label="Keys acquired">
+              <circle class="ticks" cx="50" cy="50" r="46" />
+              <circle class="bg" cx="50" cy="50" r="40" />
+              <circle id="keysArc" class="arc" cx="50" cy="50" r="40" />
+              <circle class="hub" cx="50" cy="50" r="24" />
+            </svg>
+            <span class="keys-copy"><small>Relic circuit</small><strong>Keys</strong></span>
+          </div>
+          <div class="command-actions">
+            <button id="btnEnd" class="btn">End the Story</button>
+            <button id="btnSettings" class="btn">Settings</button>
+          </div>
+          <span class="tag engine-status"><i aria-hidden="true"></i>Engine <b id="engineTag">Local</b></span>
+        </div>
+      </div>
+      <div class="masthead-rivet rail-right" aria-hidden="true"></div>
+    </header>
+
+    <div class="pacing" id="pacing" aria-label="Story cadence"><div class="chip" data-i="0">Explore</div><div class="chip" data-i="1">Light Check</div><div class="chip" data-i="2">Explore</div><div class="chip" data-i="3">Risk Choice</div></div>
+
+    <div class="main">
+      <section class="storywrap">
+        <div class="panel-heading story-heading">
+          <span class="panel-kicker">Active Thread</span>
+          <span class="panel-rule" aria-hidden="true"></span>
+          <span class="panel-mark" aria-hidden="true">◆</span>
+        </div>
+        <div id="story" class="story-scroll frame" role="log" aria-live="polite" aria-label="Story transcript"></div>
+        <div class="choices frame">
+          <div class="panel-heading choice-heading">
+            <span class="panel-kicker">Choose Your Measure</span>
+            <span class="panel-rule" aria-hidden="true"></span>
+          </div>
+          <div id="choices"></div>
+          <div class="free">
+            <input id="freeText" aria-label="Write your own action" placeholder="Write your own action — search the alcove, read the tablet…" />
+            <button id="btnAct" class="btn gold">ACT</button>
+            <button id="btnCont" class="btn">Continue story</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <div class="card deco frame">
+          <h3><span>Character</span><button id="btnEdit" class="btn mini">Edit</button></h3>
+          <div id="charPanel" class="centered"></div>
+        </div>
+        <div class="card deco frame">
+          <h3><span>Ledger</span></h3>
+          <div id="ledgerPanel" class="centered"></div>
+        </div>
+        <div class="card deco frame">
+          <h3><span>Session</span></h3>
+          <div class="centered session-grid">
+            <div><span>Seed</span><strong id="seedVal"></strong></div>
+            <div><span>Turn</span><strong id="turnVal"></strong></div>
+            <div><span>Scene</span><strong id="sceneVal"></strong></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div id="nowplay" class="nowplay frame">
+      <div class="np-inner">
+        <span class="np-dot" aria-hidden="true"></span>
+        <span class="np-label">Now Playing:</span>
+        <span id="npTitle">—</span>
+      </div>
+    </div>
+
+  <div id="shade"  class="shade hidden"></div>
+
+  <!-- Character modal -->
+  <div id="modalEdit" class="modal hidden">
+    <header><div>Edit Character</div><div id="xEdit" class="closeX">✕</div></header>
+    <div class="content">
+      <div class="grid2">
+        <label>Name <input id="edName"></label>
+        <label>Race
+          <select id="edRace">
+            <option>Dwarf</option><option>Human</option><option>Elf</option>
+            <option>Gnome</option><option>Halfling</option><option>Orc</option>
+          </select>
+        </label>
+        <label>STR <input id="edSTR" type="number" min="6" max="18"></label>
+        <label>DEX <input id="edDEX" type="number" min="6" max="18"></label>
+        <label>INT <input id="edINT" type="number" min="6" max="18"></label>
+        <label>CHA <input id="edCHA" type="number" min="6" max="18"></label>
+        <label>HP  <input id="edHP"  type="number" min="4" max="30"></label>
+        <label>Gold<input id="edGold"type="number" min="0" max="999"></label>
+      </div>
+      <label>Inventory (comma separated) <input id="edInv"></label>
+      <div class="modal-actions">
+        <button id="btnAuto" class="btn">Auto-generate</button>
+        <span style="flex:1"></span>
+        <button id="btnEditSave" class="btn gold">Save</button>
+        <button id="btnEditCancel" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="modalSet" class="modal hidden">
+    <header><div>Settings</div><div id="xSet" class="closeX">✕</div></header>
+    <div class="content">
+      <div class="grid2">
+        <div>
+          <h4>Accessibility</h4>
+          <label><input type="checkbox" id="hcMode"> High-contrast mode</label>
+        </div>
+        <div>
+          <h4>Typewriter</h4>
+          <label><input type="checkbox" id="twOn"> Enable</label><br>
+          <label>Chars/sec <input type="number" id="twCps" min="10" max="120" step="5"></label>
+        </div>
+        <div>
+          <h4>Audio</h4>
+          <label>Master <input type="range" id="aMaster" min="0" max="0.8" step="0.01"></label><br>
+          <label>UI <input type="range" id="aUi" min="0" max="0.8" step="0.01"></label><br>
+          <label>Music <input type="range" id="aMusic" min="0" max="0.8" step="0.01"></label><br>
+          <label><input type="checkbox" id="sfxSuccess"> Success SFX</label><br>
+          <label><input type="checkbox" id="sfxFail"> Fail SFX</label><br>
+          <label><input type="checkbox" id="sfxStory"> Story SFX</label>
+        </div>
+      </div>
+
+      <hr class="sep"/>
+
+      <div class="grid2">
+        <div>
+          <h4>Live DM</h4>
+          <label>Endpoint <input id="dmEndpoint" placeholder="/dm-turn" /></label><br>
+          <button id="btnLiveToggle" class="btn">Toggle Live DM</button>
+        </div>
+        <div>
+          <h4>Session</h4>
+          <div class="btnrow">
+            <button id="btnSave"   class="btn">Save</button>
+            <button id="btnLoad"   class="btn">Load</button>
+            <button id="btnExport" class="btn">Export</button>
+            <button id="btnUndo"   class="btn">Undo</button>
+            <button id="btnRestart" class="btn">Restart Run</button>
+            <button id="btnResetAll" class="btn red">Reset Everything</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lore scroll modal -->
+  <div id="modalScroll" class="modal hidden">
+    <header><div>The Weaver’s Scroll</div><div id="xScroll" class="closeX">✕</div></header>
+    <div class="content" id="scrollContent"></div>
+  </div>
+
+  <!-- Epilogue / Game Over -->
+  <div id="modalEpi" class="modal hidden">
+    <header><div id="epiTitle">Epilogue</div><div id="xEpi" class="closeX">✕</div></header>
+    <div class="content" id="epiContent"></div>
+    <div class="modal-actions"><button id="btnEpiRestart" class="btn gold">New Run</button></div>
+  </div>
+  </div>
+  `;
+
+  // cache
+  document.querySelectorAll('.frame').forEach(el=>{['tl','tr','bl','br'].forEach(pos=>{const s=document.createElement('span'); s.className='chev '+pos; el.appendChild(s);});});
+  Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
+  if(!document.getElementById('storyBottomLine')){ const line=document.createElement('div'); line.id='storyBottomLine'; Object.assign(line.style,{position:'absolute',left:'0',right:'0',bottom:'0',height:'2px',boxShadow:'inset 0 -2px 0 0 rgba(213,168,74,.75)'}); Engine.el.story.appendChild(line);}
+  Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
+
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.pacing=$('#pacing');
+
+  Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
+  Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
+  Engine.el.btnEdit=$('#btnEdit');
+  Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle');
+
+  // character modal refs
+  Engine.el.modalEdit=$('#modalEdit'); Engine.el.xEdit=$('#xEdit');
+  Engine.el.edName=$('#edName'); Engine.el.edRace=$('#edRace');
+  Engine.el.edSTR=$('#edSTR'); Engine.el.edDEX=$('#edDEX'); Engine.el.edINT=$('#edINT'); Engine.el.edCHA=$('#edCHA');
+  Engine.el.edHP=$('#edHP'); Engine.el.edGold=$('#edGold'); Engine.el.edInv=$('#edInv');
+  Engine.el.btnAuto=$('#btnAuto'); Engine.el.btnEditSave=$('#btnEditSave'); Engine.el.btnEditCancel=$('#btnEditCancel');
+
+Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
+  Engine.el.twOn=$('#twOn'); Engine.el.twCps=$('#twCps');
+  Engine.el.aMaster=$('#aMaster'); Engine.el.aUi=$('#aUi'); Engine.el.aMusic=$('#aMusic'); Engine.el.sfxSuccess=$('#sfxSuccess'); Engine.el.sfxFail=$('#sfxFail'); Engine.el.sfxStory=$('#sfxStory');
+  Engine.el.dmEndpoint=$('#dmEndpoint'); Engine.el.btnLiveToggle=$('#btnLiveToggle');
+  Engine.el.btnSave=$('#btnSave'); Engine.el.btnLoad=$('#btnLoad'); Engine.el.btnExport=$('#btnExport'); Engine.el.btnUndo=$('#btnUndo');
+  Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll'); Engine.el.hcMode=$('#hcMode');
+
+  // scroll modal
+  Engine.el.modalScroll=$('#modalScroll'); Engine.el.xScroll=$('#xScroll'); Engine.el.scrollContent=$('#scrollContent');
+
+  // epilogue modal
+  Engine.el.modalEpi=$('#modalEpi'); Engine.el.xEpi=$('#xEpi'); Engine.el.epiTitle=$('#epiTitle'); Engine.el.epiContent=$('#epiContent'); Engine.el.btnEpiRestart=$('#btnEpiRestart');
+}
+
+
+/* ---------- floating Scroll button (SVG) ---------- */
+function mountScrollFab(){
+  if ($('#scrollFab')) return;
+  const btn=document.createElement('button');
+  btn.id='scrollFab';
+  btn.className='scroll-btn';
+  btn.style.display='block';
+  btn.innerHTML = `
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M12 8h36a6 6 0 0 1 6 6v30a6 6 0 0 1-6 6H22l-8 6v-6h-2a6 6 0 0 1-6-6V14a6 6 0 0 1 6-6z" />
+      <path d="M18 18h28M18 28h22M18 38h26" />
+    </svg>`;
+  document.body.appendChild(btn);
+  btn.addEventListener('click', ()=>{
+    Engine.el.scrollContent.innerHTML = getIntroScrollHTML();
+    openModal(Engine.el.modalScroll);
+  });
+}
+
+/* ---------- storage ---------- */
+function hydrate(){
+  const saved=store.get('dds_state',null); if(!saved) return;
+  const d=defaults();
+  const savedFlags={...(saved.flags||{})};
+  if(!Array.isArray(savedFlags.keys) && Array.isArray(savedFlags.seals)) savedFlags.keys=savedFlags.seals;
+  delete savedFlags.seals;
+  const savedAudio={...((saved.settings||{}).audio||{})};
+  if(typeof savedAudio.music!=='number' && typeof savedAudio.amb==='number') savedAudio.music=savedAudio.amb;
+  delete savedAudio.amb;
+  delete savedAudio.drums;
+  Engine.state = {
+    ...d, ...saved,
+    character:{...d.character, ...(saved.character||{})},
+    flags:{...d.flags, ...savedFlags},
+    settings:{...d.settings, ...(saved.settings||{}), audio:{...d.settings.audio, ...savedAudio}},
+    live:{...d.live, ...(saved.live||{})},
+    _choiceHistory:Array.isArray(saved._choiceHistory)?saved._choiceHistory:[],
+    _lastChoices:Array.isArray(saved._lastChoices)?saved._lastChoices:[],
+    _undoStack:Array.isArray(saved._undoStack)?saved._undoStack:[],
+    _arcStep:saved._arcStep||0
+  };
+}
+
+/* ---------- bind ---------- */
+function bind(){
+  const S=Engine.state;
+  const open=m=>{ Engine.el.shade.classList.remove('hidden'); m.classList.remove('hidden'); };
+  const close=m=>{ m.classList.add('hidden'); Engine.el.shade.classList.add('hidden'); };
+
+  // character modal
+  Engine.el.btnEdit.onclick=()=>{ const C=S.character;
+    Engine.el.edName.value=C.name; Engine.el.edRace.value=C.race||'Dwarf';
+    Engine.el.edSTR.value=C.STR; Engine.el.edDEX.value=C.DEX; Engine.el.edINT.value=C.INT; Engine.el.edCHA.value=C.CHA;
+    Engine.el.edHP.value=C.HP; Engine.el.edGold.value=C.Gold; Engine.el.edInv.value=C.inventory.join(', ');
+    open(Engine.el.modalEdit);
+  };
+  Engine.el.btnAuto.onclick=()=>{ autoGen(); Engine.el.btnEdit.onclick(); };
+  Engine.el.btnEditSave.onclick=()=>{ const C=S.character;
+    C.name=Engine.el.edName.value||C.name; C.race=Engine.el.edRace.value||C.race;
+    C.STR=+Engine.el.edSTR.value||C.STR; C.DEX=+Engine.el.edDEX.value||C.DEX; C.INT=+Engine.el.edINT.value||C.INT; C.CHA=+Engine.el.edCHA.value||C.CHA;
+    C.HP=+Engine.el.edHP.value||C.HP; C.Gold=+Engine.el.edGold.value||C.Gold;
+    C.inventory=Engine.el.edInv.value.split(',').map(x=>x.trim()).filter(Boolean);
+    close(Engine.el.modalEdit); renderAll();
+  };
+  Engine.el.btnEditCancel.onclick=()=>close(Engine.el.modalEdit);
+  Engine.el.xEdit.onclick=()=>close(Engine.el.modalEdit);
+
+  // settings
+  if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
+  Engine.el.btnSettings.onclick=()=>{ Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps; if(Engine.el.hcMode) Engine.el.hcMode.checked=document.body.classList.contains('hc');
+    Engine.el.aMaster.value=S.settings.audio.master; Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aMusic.value=S.settings.audio.music;
+    Engine.el.dmEndpoint.value=S.live.endpoint; Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On';
+    Engine.el.sfxSuccess.checked = (S.settings.audio.sfx_success!==false);
+    Engine.el.sfxFail.checked    = (S.settings.audio.sfx_fail!==false);
+    Engine.el.sfxStory.checked   = (S.settings.audio.sfx_story!==false);
+    open(Engine.el.modalSet); };
+  Engine.el.xSet.onclick=()=>close(Engine.el.modalSet);
+  Engine.el.twOn.onchange=()=>{S.settings.typewriter=Engine.el.twOn.checked; store.set('dds_state',S);};
+  Engine.el.twCps.onchange=()=>{S.settings.cps=clamp(+Engine.el.twCps.value||40,10,120); store.set('dds_state',S);};
+  [Engine.el.aMaster,Engine.el.aUi,Engine.el.aMusic].forEach(sl=>sl.oninput=()=>{S.settings.audio.master=+Engine.el.aMaster.value; S.settings.audio.ui=+Engine.el.aUi.value; S.settings.audio.music=+Engine.el.aMusic.value; Sound.setLevels(); BGM.setLevel(S.settings.audio.music); store.set('dds_state',S);});
+  Engine.el.dmEndpoint.onchange=()=>{S.live.endpoint=Engine.el.dmEndpoint.value.trim()||'/dm-turn'; store.set('dm_ep',S.live.endpoint);};
+  Engine.el.btnLiveToggle.onclick=()=>{ S.live.on=!S.live.on; store.set('dm_on',S.live.on); Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On'; const tag=$('#engineTag'); if(tag) tag.textContent=S.live.on?'Live':'Local'; };
+  Engine.el.sfxSuccess.onchange=()=>{S.settings.audio.sfx_success=Engine.el.sfxSuccess.checked; store.set('dds_state',S);};
+  Engine.el.sfxFail.onchange=()=>{S.settings.audio.sfx_fail=Engine.el.sfxFail.checked; store.set('dds_state',S);};
+  Engine.el.sfxStory.onchange=()=>{S.settings.audio.sfx_story=Engine.el.sfxStory.checked; store.set('dds_state',S);};
+  Engine.el.btnSave.onclick=()=>{ store.set('dds_state',S); toast('Game saved'); };
+  Engine.el.btnLoad.onclick=()=>{ if(store.get('dds_state',null)) location.reload(); else toast('No saved game'); };
+  Engine.el.btnExport.onclick=exportTranscript;
+  Engine.el.btnUndo.onclick=()=>{ undoTurn(); close(Engine.el.modalSet); };
+  Engine.el.btnRestart.onclick=()=>{ close(Engine.el.modalSet); hardResetRun(); };
+  Engine.el.btnResetAll.onclick=()=>{ close(Engine.el.modalSet); store.clearProject(); location.reload(); };
+
+  // scroll modal
+  Engine.el.xScroll.onclick=()=>close(Engine.el.modalScroll);
+
+  // epilogue modal
+  Engine.el.xEpi.onclick=()=>close(Engine.el.modalEpi);
+  Engine.el.btnEpiRestart.onclick=()=>{ close(Engine.el.modalEpi); hardResetRun(); };
+
+  // global overlay close
+  Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') Engine.el.shade.onclick(); });
+
+  // main actions
+  Engine.el.btnCont.onclick=()=>{ if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(); return; } doNarrate({ sentence:'' }); }; // silent advance
+  Engine.el.btnAct.onclick=()=>freeText();
+  Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
+
+  Engine.el.btnEnd.onclick=endTale;
+  document.addEventListener('keydown', (e)=>{
+  if (e.shiftKey && e.key.toLowerCase() === 'd'){
+    const t = document.getElementById('npTitle')?.textContent || '—';
+    alert(`BGM: ${t}`);
+  }
+});
+}
+
+/* ---------- render ---------- */
+function renderAll(){
+  const s=Engine.state, C=s.character, F=s.flags;
+  $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn; $('#sceneVal').textContent=s.scene;
+
+  // Character (no Bag here; moved to Ledger)
+  Engine.el.charPanel.innerHTML = `
+    <div class="identity"><b>${esc(C.name)}</b><span>${esc(C.race)}</span></div>
+    <div class="stat-grid">
+      <div><span>STR</span><strong>${C.STR}</strong><small>${fmt(modFrom(C.STR))}</small></div>
+      <div><span>DEX</span><strong>${C.DEX}</strong><small>${fmt(modFrom(C.DEX))}</small></div>
+      <div><span>INT</span><strong>${C.INT}</strong><small>${fmt(modFrom(C.INT))}</small></div>
+      <div><span>CHA</span><strong>${C.CHA}</strong><small>${fmt(modFrom(C.CHA))}</small></div>
+    </div>
+    <div class="vitals"><span>HP <b>${C.HP}</b></span><span>Gold <b>${C.Gold}</b></span></div>`;
+
+  // Ledger — inventory always visible; other lines appear only when relevant
+  const lines = [];
+  lines.push(`<div class="ledger-line"><span>Inventory</span><b>${C.inventory.map(esc).join(', ')||'—'}</b></div>`);
+  if (F.rumors) lines.push(`<div class="ledger-line"><span>Rumors heard</span><b>Yes</b></div>`);
+  if ((F.keys||[]).length) lines.push(`<div class="ledger-line"><span>Keys</span><b>${(F.keys||[]).map(esc).join(', ')}</b></div>`);
+  if (F.bossReady) lines.push(`<div class="ledger-line"><span>Gate ready</span><b>Yes</b></div>`);
+  if (F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Unfathomer dealt with</span><b>Yes</b></div>`);
+  Engine.el.ledgerPanel.innerHTML = lines.join('');
+
+
+  // Keys ring arc
+  try{
+    const keysCt = (F.keys||[]).length; const circ = 2*Math.PI*40; const frac = Math.min(1, keysCt/3);
+    const dash = Math.max(0.0001, circ*frac);
+    if(Engine.el.keysArc){ Engine.el.keysArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
+  }catch{}
+  // Pacing chips
+  try{
+    if(Engine.el.pacing){ const k = s.turn % 4; Array.from(Engine.el.pacing.children).forEach((c,i)=>c.classList.toggle('on', i===k)); }
+  }catch{}
+
+  // Story
+
+  Engine.el.story.innerHTML='';
+  for(const beat of s.storyBeats){
+    const p=document.createElement('p');
+    p.classList.add('beat');
+    p.innerHTML=beat.html?sanitizeRichHTML(beat.html):esc(beat.text);
+    if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
+    if(beat.kind==='success'){ p.classList.add('glow-success'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#D5A84A'; }
+    if(beat.kind==='fail'){ p.classList.add('glow-fail'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#A12525'; }
+    if(beat.kind==='story') p.classList.add('glow-story');
+    Engine.el.story.appendChild(p);
+  }
+  Engine.el.story.scrollTop=Engine.el.story.scrollHeight;
+
+  if (s.settings.typewriter && s._pendingType){
+    const p=Engine.el.story.lastElementChild;
+    if (p && !p.dataset.typed){ p.dataset.typed='1'; typewriteRich(p, s.settings.cps); }
+    s._pendingType=false;
+  }
+}
+
+/* ---------- flow ---------- */
+function beginTale(){
+  const S=Engine.state;
+  S.turn=0; S.scene='Halls'; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
+  S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false};
+  appendBeat("Lanterns throw steady light across carved lintels and iron mosaics. Word passes of a slow, otherworldly tide called the Unfathomer, pooling in the buried cisterns. You wait at the mouth of the Halls, where corridors open like patient books.");
+  renderChoices(makeChoiceSet(S.scene));
+  S.turn++; renderAll(); BGM.updateForState(Engine.state);
+}
+function endTale(){
+  const S=Engine.state, C=S.character;
+  const ep = `Epilogue — You carry ${C.Gold} gold and ${C.inventory.length} keepsakes. Keys gained: ${S.flags.keys.join(', ')||'none'}. ` +
+    (S.flags.bossDealtWith?'The Unfathomer is quiet; people sleep deeply this week.':'The Unfathomer still turns beneath the streets. Quiet talk in ale-halls carries your name.');
+  appendBeat(ep); renderChoices([]); renderAll();
+  Engine.el.epiTitle.textContent='Epilogue';
+  Engine.el.epiContent.textContent=ep;
+  openModal(Engine.el.modalEpi);
+}
+function undoTurn(){
+  const S=Engine.state, previous=S._undoStack?.pop();
+  if(!previous){ toast('Nothing to undo'); return; }
+  Object.assign(S,previous,{_undoStack:S._undoStack});
+  renderChoices(makeChoiceSet(S.scene)); renderAll(); BGM.updateForState(S);
+}
+
+function hardResetRun(){
+  const S=Engine.state, fresh=defaults();
+  fresh.settings={...fresh.settings,...S.settings,audio:{...fresh.settings.audio,...S.settings.audio}};
+  fresh.live={...fresh.live,...S.live};
+  Object.keys(S).forEach(k=>delete S[k]);
+  Object.assign(S,fresh);
+  beginTale();
+  store.set('dds_state',S);
+  toast('New run started');
+}
+
+/* ---------- choices ---------- */
+function renderChoices(choices){
+  const list=Engine.el.choiceList; if(!list) return;
+
+  if (!Array.isArray(Engine.state._choiceHistory)) Engine.state._choiceHistory=[];
+  if (!Array.isArray(Engine.state._lastChoices))   Engine.state._lastChoices=[];
+
+  const hist=Engine.state._choiceHistory, pool=[...(choices||[])];
+  list.innerHTML='';
+  if(!pool.length){ Engine.state._lastChoices=[]; return; }
+  const fresh=pool.filter(c=>!hist.includes(c.id));
+  let picked=[];
+  if(fresh.length){ picked.push(pick(fresh)); const rest=pool.filter(c=>c.id!==picked[0].id); if(rest.length) picked.push(pick(rest)); }
+  else{ picked=[pick(pool)]; const second=pool.filter(c=>c.id!==picked[0]?.id); if(second.length) picked.push(pick(second)); }
+  hist.push(...picked.map(c=>c.id)); while(hist.length>10) hist.shift();
+
+  const prev=Engine.state._lastChoices;
+  if(picked.map(c=>c.sentence).join('|')===prev.join('|')) picked=modulateChoices(picked);
+  Engine.state._lastChoices=picked.map(c=>c.sentence);
+
+  picked.forEach(ch=>{
+    const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=ch.sentence;
+    btn.onclick=()=>{ Sound.click(); resolveChoice(ch); };
+    list.appendChild(btn);
+  });
+}
+function modulateChoices(arr){
+  const suffix=[' — carefully',' — quickly',' — with a steady breath',' — in a roundabout way'];
+  return arr.map(c=>({ ...c, sentence: c.sentence.replace(/\s+—.*$/,'') + suffix[rnd(0,suffix.length-1)] }));
+}
+
+/* ---------- narration ---------- */
+function freeText(){
+  const text=(Engine.el.freeText.value||'').trim(); if(!text) return;
+  Engine.el.freeText.value='';
+  const italic=`<em>${esc(text)}</em>`;
+  doNarrate({ sentence:`${italic} — the scene follows…` });
+}
+function doNarrate(ch){
+  const payload={ action:ch.sentence, source:'narrate', stat:null, dc:null, passed:null, game_state:snapshotState(), history:recentHistory() };
+  Promise.resolve(Weaver.turn(payload, localTurn)).then(resp=>applyTurn(resp,null)).catch(()=>applyTurn(localTurn(payload),null));
+}
+
+/* ---------- resolve ---------- */
+function resolveChoice(ch){
+  const S=Engine.state, C=S.character;
+  const stat=ch.stat||'INT', mod=modFrom(C[stat]||10); const dc=clamp(11+rnd(-1,3),8,18); const r=rnd(1,20); const total=r+mod; const passed=(total>=dc);
+  const payload={ action:ch.sentence, source:'choice', stat, dc, passed, game_state:snapshotState(), history:recentHistory() };
+  Promise.resolve(Weaver.turn(payload, localTurn)).then(resp=>applyTurn(resp,{r,mod,dc,total})).catch(()=>applyTurn(localTurn(payload),{r,mod,dc,total}));
+}
+function applyTurn(resp,roll){
+  const S=Engine.state;
+  S._undoStack=S._undoStack||[];
+  S._undoStack.push(captureRunState(S));
+  while(S._undoStack.length>20) S._undoStack.shift();
+  if(resp?.flags_patch){
+    const patch={...resp.flags_patch};
+    if(!Array.isArray(patch.keys) && Array.isArray(patch.seals)) patch.keys=patch.seals;
+    delete patch.seals;
+    Object.assign(S.flags,patch);
+  }
+  if(!Array.isArray(S.flags.keys)) S.flags.keys=[];
+  if(resp?.inventory_delta){ const add=resp.inventory_delta.add||[], rem=resp.inventory_delta.remove||[]; S.character.inventory=S.character.inventory.filter(x=>!rem.includes(x)).concat(add); }
+  if(typeof resp?.gold_delta==='number'){ S.character.Gold=Math.max(0,S.character.Gold+resp.gold_delta); }
+  if(typeof resp?.hp_delta==='number'){ S.character.HP=Math.max(0,S.character.HP+resp.hp_delta); }
+  if(resp?.scene) S.scene=resp.scene;
+  if(!S.flags.bossReady && S.flags.keys.length>=2) S.flags.bossReady=true;
+
+  const kind = roll ? (roll.total>=roll.dc ? 'success':'fail') : 'story';
+  const html = resp?.story_paragraph_html ? sanitizeRichHTML(resp.story_paragraph_html) : null;
+  appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, kind, html);
+  Sound.sfx(kind);
+
+  if (S.character.HP<=0){
+    // modal epilogue
+    const dead = "Your pulse falters; the lantern’s ring dims. Companions—if any—carry a line back to daylight. The Unfathomer keeps its quiet measure.";
+    Engine.el.epiTitle.textContent = 'Fallen Line';
+    Engine.el.epiContent.textContent = dead;
+    openModal(Engine.el.modalEpi);
+    renderChoices([]);
+    S.turn++; renderAll(); BGM.updateForState(Engine.state); return;
+  }
+
+  if(kind==='story'){ cinematicFocus(); }
+  const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
+  renderChoices(next); S.turn++; renderAll(); BGM.updateForState(Engine.state);
+}
+
+/* ---------- local DM with four-beat spine ---------- */
+function localTurn(payload){
+  const {action,passed,stat,source,game_state}=payload; const S=game_state;
+  const keys=S.flags.keys||[]; const have=new Set(keys);
+  let story=''; let flags_patch={}; let inv={add:[],remove:[]}; let gold_delta=0, hp_delta=0; let scene=S.scene;
+
+  if(source==='choice'){
+    if(passed){ if(rnd(1,10)<=4) gold_delta+=rnd(1,3); if(rnd(1,10)===1) hp_delta+=1; if(rnd(1,10)<=2) inv.add.push(pick(['Oil Flask','Lockpin','Rope Coil','Canteen'])); }
+    else{ hp_delta-= (rnd(1,10)<=7?1:2); if(rnd(1,10)<=2) gold_delta-=rnd(0,2); }
+  }
+
+  let award=null; if(source==='choice' && passed && have.size<3 && rnd(1,6)===1){ const pool=['Brass','Echo','Stone'].filter(x=>!have.has(x)); if(pool.length) award=pick(pool); }
+  if(award) flags_patch.keys=[...keys, award];
+
+  if(source==='narrate'){
+    const aText = stripHTML(action||'').trim();
+    if(scene==='Halls'){
+      const steps=[
+        "You mark the older chisel-strokes, finding where surveyors left anchors yet to be used. The pitch carries true here; you set a chalk ring and breathe in the clean echo.",
+        "A map resolves out of rumor: a side stair gritted with salt, a culvert where lantern smoke drifts sideways. Threads tug toward a ledger kept below.",
+        "A Warden’s chalk note matches an Archivist’s inked correction. Together they point to the same door—its hinges cold, its lock polite."
+      ];
+      const seg = steps[Math.min(Engine.state._arcStep, steps.length-1)];
+      story = aText ? `${aText} ${seg}` : seg;
+      Engine.state._arcStep++; if(Engine.state._arcStep>=3){ scene='Archives'; }
+    }else if(scene==='Archives'){
+      const steps=[
+        "Stacks breathe like organ pipes. You copy a cadence table that names three safe rests and a forbidden vent.",
         "Lithen’s notes mention a trial in the cistern fields. The page is thin where the quill pressed—care and doubt in the same line.",
         "A key-drawing shows a gate with three collars—Stone, Brass, Echo—engraved with simple measures."
       ];
@@ -824,4 +1476,3 @@ window.debugCutout = function(on=true){
     st.remove();
   }
 };
-
