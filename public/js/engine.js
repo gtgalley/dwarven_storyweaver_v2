@@ -6,7 +6,7 @@
 
 // public/js/engine.js
 // v13b — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
-// Ledger panel (Inventory + revealed keys/rumors/gate/boss), 20 BPM ambience,
+// Ledger panel (Inventory + revealed keys/rumors/gate/boss), scene-based BGM,
 // per-slide intro typewriter, success/fail/story SFX, silent continue, death modal,
 // injected glossary tooltips with edge-aware positioning.
 
@@ -20,9 +20,31 @@ const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const modFrom=(s)=>Math.floor((s-10)/2);
 const pick=a=>a[rnd(0,a.length-1)];
 const jitter=(f,amt=0.10)=>f*(1+ (Math.random()*2-1)*amt);
-const store={ get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},
-              set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}},
-              del(k){try{localStorage.removeItem(k)}catch{}} };
+const STORAGE_PREFIX='brassreach:';
+const PROJECT_STORAGE_KEYS=['dds_state','intro_seen','dm_on','dm_ep'];
+const store={
+  get(k,d){
+    try{
+      const current=localStorage.getItem(STORAGE_PREFIX+k);
+      if(current!==null) return JSON.parse(current);
+
+      // One-time compatibility read for saves created before keys were namespaced.
+      const legacy=localStorage.getItem(k);
+      if(legacy===null) return d;
+      const value=JSON.parse(legacy);
+      this.set(k,value);
+      return value;
+    }catch{return d}
+  },
+  set(k,v){try{localStorage.setItem(STORAGE_PREFIX+k,JSON.stringify(v))}catch{}},
+  del(k){
+    try{
+      localStorage.removeItem(STORAGE_PREFIX+k);
+      localStorage.removeItem(k);
+    }catch{}
+  },
+  clearProject(){ PROJECT_STORAGE_KEYS.forEach(k=>this.del(k)); }
+};
 
 /* ---------- state ---------- */
 function defaults(){
@@ -30,9 +52,9 @@ function defaults(){
     seed:rnd(1,9_999_999), turn:0, scene:'Halls',
     storyBeats:[], transcript:[],
     character:{ name:'Eldan', race:'Dwarf', STR:12,DEX:14,INT:12,CHA:10, HP:14, Gold:5, inventory:['Torch','Canteen'] },
-    flags:{ rumors:false, seals:[], bossReady:false, bossDealtWith:false },
-    _choiceHistory:[], _lastChoices:[], _arcStep:0, _pendingType:false,
-    settings:{ typewriter:true, cps:40, audio:{ master:0.5, ui:0.45, amb:0.5, drums:0.52, sfx_success:true, sfx_fail:true, sfx_story:true } },
+    flags:{ rumors:false, keys:[], bossReady:false, bossDealtWith:false },
+    _choiceHistory:[], _lastChoices:[], _undoStack:[], _arcStep:0, _pendingType:false,
+    settings:{ typewriter:true, cps:40, audio:{ master:0.5, ui:0.45, music:0.5, sfx_success:true, sfx_fail:true, sfx_story:true } },
     live:{ on:store.get('dm_on',false), endpoint:store.get('dm_ep','/dm-turn') }
   };
 }
@@ -58,10 +80,12 @@ window.setNowPlaying = (title)=>{
 
 /* ---------- background music manager (file-based, crossfades) ---------- */
 const BGM = (function(){
-  let ctx, bus, cur = null, nextGain=null, curGain=null, fadeMs=1400;
+  let ctx, bus, cur=null, curGain=null, fadeMs=1400;
+  let currentName=null, targetName=null, requestToken=0;
+  let unlocked=false, pendingName=null;
   const tracks = {
     intro:    { title:"Overture of the Foundry", srcs:["./public/audio/034842c5-ddc2-4b5c-abc3-bff6ab9c455f.mp3"] },
-    prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a","./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.mp3"] },
+    prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a"] },
     halls:    { title:"Halls of the Brassreach", srcs:["./public/audio/8b264fe3-26f0-4c6c-9356-60a270d2ef21.mp3"] },
     depths2:  { title:"When the Unfathomer Stirs", srcs:["./public/audio/66bf880d-6cea-470f-8dba-7de081c046fa.mp3"] },
     depths:   { title:"Beneath the Cistern Fields", srcs:["./public/audio/662478af-b29d-4034-a2fc-d2ea9fd75dc4.mp3"] },
@@ -72,7 +96,7 @@ const BGM = (function(){
   async function load(name){
     if(cache.has(name)) return cache.get(name);
     const t = tracks[name]; if(!t) return null;
-    const C = getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.amb ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+    const C = getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.music ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
     for(const url of t.srcs){
       try{
         const res = await fetch(url, {cache:"force-cache"}); if(!res.ok) continue;
@@ -85,9 +109,14 @@ const BGM = (function(){
   }
   function setBus(v){ if(bus) bus.gain.value=v; }
   async function crossTo(name){
+    if(!unlocked){ pendingName=name; return; }
+    if(name===targetName || (name===currentName && cur)) return;
+    targetName=name;
+    const token=++requestToken;
     try{
-      const data = await load(name); if(!data) return;
-      const C = ctx || getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.amb ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+      const data = await load(name);
+      if(!data || token!==requestToken){ if(token===requestToken) targetName=currentName; return; }
+      const C = ctx || getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.music ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
       // next source
       const src = C.createBufferSource(); src.buffer=data.buffer; src.loop=true;
       const ng = C.createGain(); ng.gain.value=0; src.connect(ng).connect(bus); const now=C.currentTime;
@@ -101,11 +130,25 @@ const BGM = (function(){
       }
       const prev = cur;
       cur = src; curGain = ng;
+      currentName=name;
       if(prev){ setTimeout(()=>{ try{ prev.stop(); }catch{} }, fade*1000+120); }
       const t=tracks[name]; if(t) setNowPlaying(t.title);
-    }catch(e){ console.error('BGM crossTo error', e); }
+    }catch(e){
+      if(token===requestToken) targetName=currentName;
+      console.error('BGM crossTo error', e);
+    }
   }
-  function stop(){ try{ if(cur){ const C=ctx||getCtx(); const now=C.currentTime; curGain.gain.cancelScheduledValues(now); curGain.gain.linearRampToValueAtTime(0, now+.25); setTimeout(()=>{ try{cur.stop()}catch{} }, 360);} }catch{} }
+  function stop(){
+    try{
+      if(cur){
+        const source=cur, gain=curGain, C=ctx||getCtx(), now=C.currentTime;
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.linearRampToValueAtTime(0, now+.25);
+        setTimeout(()=>{ try{source.stop()}catch{} }, 360);
+      }
+    }catch{}
+    cur=null; curGain=null; currentName=null; targetName=null; pendingName=null; requestToken++;
+  }
   function updateForState(S){
     const introOpen = !!(Engine.el?.intro && !Engine.el.intro.classList.contains('hidden'));
     if(introOpen) return crossTo('intro');
@@ -114,11 +157,17 @@ const BGM = (function(){
     if(S.scene==='Depths'){ if(S.flags?.bossDealtWith || S.flags?.bossReady) return crossTo('depths2'); return crossTo('depths'); }
     return crossTo('halls');
   }
-  function attachWidget(){
-    const mute=document.getElementById('npMute'); if(mute){ mute.onclick=()=>{ const v=bus?bus.gain.value:1; const nv=(v>0)?0:(Engine.state?.settings?.audio?.amb ?? .5); setBus(nv); mute.textContent = nv>0 ? 'Mute' : 'Unmute'; }; }
-  }
   function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
-  return {crossTo, stop, updateForState, attachWidget};
+  function unlock(){
+    if(unlocked) return Sound.resume();
+    unlocked=true;
+    Sound.ensure();
+    Sound.resume();
+    const requested=pendingName;
+    pendingName=null;
+    if(requested) crossTo(requested);
+  }
+  return {crossTo, stop, updateForState, setLevel:setBus, unlock};
 })();
 
 /* ---------- sound @ ~20 BPM base ---------- */
@@ -132,6 +181,7 @@ const Sound = (()=>{
     ui = ctx.createGain(); ui.gain.value = Engine.state.settings.audio.ui; ui.connect(master);
   };
   const setLevels = ()=>{ if(!ctx) return; master.gain.value = Engine.state.settings.audio.master; ui.gain.value = Engine.state.settings.audio.ui; };
+  const resume = ()=>{ if(ctx?.state==='suspended') return ctx.resume().catch(()=>{}); };
   const click = ()=>{ ensure(); const t=ctx.currentTime; const o=ctx.createOscillator(); o.type='square';
     o.frequency.setValueAtTime(300,t); o.frequency.exponentialRampToValueAtTime(120,t+.09);
     const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.28,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+.16);
@@ -161,13 +211,13 @@ const Sound = (()=>{
   o1.start(t); o2.start(t); o1.stop(t+3.3); o2.stop(t+3.3);
 };
   const ambOn = ()=>ensure(); // for legacy calls
-  return {click, sfx, gong, ambOn, setLevels, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
+  return {click, sfx, gong, ambOn, setLevels, resume, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
 const Weaver = makeWeaver(store,
   (msg)=>Engine.state.storyBeats.push({text:`[log] ${msg}`}),
-  (tag)=>{ const t=$('#engineTag'); if(t) t.textContent=Engine.state.live.on?'Live':'Local'; }
+  (tag)=>{ const t=$('#engineTag'); if(t) t.textContent=tag; Engine.state.live.on=(tag==='Live'); }
 );
 // --- Global glossary (fallback for .gloss without data-def) ----------
 window.GLOSS = Object.assign({
@@ -178,9 +228,9 @@ window.GLOSS = Object.assign({
   "depths": "Sluice catwalks and vault doors; warden tunnels.",
   "gate of measures": "Ritual aperture—part machinery, part covenant—where the Unfathomer is faced.",
   "keys": "Three canonical Keys: Brass, Echo, Stone; two make the Gate ready, three broaden outcomes.",
-  "brass key": "Weight & hinge; opens mechanical aspects of the Gate.",
-  "echo key": "Pattern & return; opens the tuning lattice.",
-  "stone key": "Foundation & oath; opens the oath seats.",
+  "brass key": "Tone and resonance; opens the Gate's tuned mechanisms.",
+  "echo key": "Pattern and return; opens the tuning lattice.",
+  "stone key": "Weight, foundation, and oath; opens the oath seats.",
   "measures": "Weight/Stone, Tone/Brass, Pattern/Echo, Line/Thread—the city’s primitives.",
   "weight": "Oath, burden, consequence (Stone).",
   "tone": "Resonance and harmony (Brass).",
@@ -189,23 +239,13 @@ window.GLOSS = Object.assign({
 }, window.GLOSS||{});
 
 /* ---------- boot ---------- */
+let booted=false;
 export function boot(){
-  buildUI(); hydrate(); bind(); renderAll(); BGM.attachWidget();
-  attachGlossTips(document.body);
-
-  // Enable tooltips for dynamically injected story content
-  const story = document.getElementById('story');
-  if (story){
-    const obs = new MutationObserver(muts=>{
-      for (const m of muts){
-        if (m.addedNodes && m.addedNodes.length){
-          attachGlossTips(story);
-          break;
-        }
-      }
-    });
-    obs.observe(story, { childList:true, subtree:true });
-  }
+  if(booted) return;
+  booted=true;
+  buildUI(); hydrate(); bind(); renderAll();
+  attachGlossTips();
+  if(Engine.state.storyBeats.length) renderChoices(makeChoiceSet(Engine.state.scene));
 
   insertIntro(); // overlay every load
   tuneIntroLayout();
@@ -214,11 +254,18 @@ export function boot(){
   const seen = store.get('intro_seen', false);
   if (seen){
     if (Engine.el.intro) Engine.el.intro.classList.add('hidden');
+    try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
+    document.getElementById('fxIntro')?.remove();
     if (!Engine.state.storyBeats.length) beginTale();
   }
 
   /* ambience removed */ BGM.updateForState(Engine.state);
-  FX.start('fx');
+  Engine.el.fxMainCtl=FX.start('fx');
+
+  // Browsers require a gesture before a suspended AudioContext may play.
+  const unlockAudio=()=>BGM.unlock();
+  window.addEventListener('pointerdown',unlockAudio,{once:true});
+  window.addEventListener('keydown',unlockAudio,{once:true});
   
   // Dev convenience: Alt+I marks the intro as seen (persisted)
   window.addEventListener('keydown', (e)=>{
@@ -277,7 +324,11 @@ export function boot(){
 
 /* ---------------------------- glossary tooltips --------------------------- */
 /* Single shared tooltip; data-def > title > GLOSS[word] fallback; fade only */
-function attachGlossTips(root=document){
+let glossTipsBound=false;
+function attachGlossTips(){
+  if(glossTipsBound) return;
+  glossTipsBound=true;
+  const root=document;
   // Create a single shared tip if needed
   let tip = document.querySelector('.gloss-tip');
   if (!tip){
@@ -296,7 +347,7 @@ function attachGlossTips(root=document){
     const explicit = el.getAttribute('data-def') || el.dataset?.def || el.getAttribute('title') || el.title;
     if (explicit) return explicit;
     const key = (el.textContent || '').trim().toLowerCase();
-    if (window.GLOSS && GLOSS[key]) return GLOSS[key];
+    if (window.GLOSS && window.GLOSS[key]) return window.GLOSS[key];
     return ''; // nothing found; we’ll just not show a card
   };
 
@@ -370,41 +421,7 @@ function attachGlossTips(root=document){
 function tuneIntroLayout(){
   const intro = document.getElementById('intro');
   if (!intro) return;
-
-  // Two-pane mode for the intro wrapper
   intro.classList.add('two-pane');
-
-  // Right-side container (holds the text block)
-  intro.querySelectorAll('.slide .copy').forEach(copy=>{
-    Object.assign(copy.style, {
-      position: 'relative',
-      display: 'flex',
-      alignItems: 'flex-start',
-      justifyContent: 'flex-end',
-      // push text farther from the center seam
-      padding: '10vh 6vw 4vh 8vw'   // (top right bottom left)
-    });
-  });
-
-  // The scrolling text column itself
-  intro.querySelectorAll('.slide .copy .scroll').forEach(sc=>{
-    Object.assign(sc.style, {
-      width: '34vw',
-      maxWidth: '34vw',
-      textAlign: 'left',      // CSS can override to 'justify' if desired
-      fontSize: '1.32em',
-      lineHeight: '1.85',
-      marginTop: '1.5vh',
-      marginLeft: 'auto',
-      marginRight: '6vw'
-    });
-
-    // Paragraph tweaks (no chevrons)
-    sc.querySelectorAll('p').forEach(p=>{
-      p.style.position = 'relative';
-      p.style.paddingLeft = '0';
-    });
-  });
 }
 
 // Local helper: set the slide's image (safe even if .pic/.img aren't present)
@@ -449,17 +466,12 @@ function insertIntro(){
 
   // Cache refs
   Engine.el.intro    = document.getElementById('intro');
-  if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
-  if(Engine.el.intro) Engine.el.intro.classList.add('two-pane');
   Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
   
-  // Ensure cutout structure on every slide: .pic > (.img, .veil)
-// - If a stray .img exists directly under .slide, move it inside .pic
-// - Always create a .veil overlay
-// - Give .img a visible placeholder if no background is set (so you can see it)
+  // Normalize every baked slide to .pic > .img.
 (function ensureIntroCutout(){
   const slides = Engine.el.slides || Array.from(document.querySelectorAll('#intro .slide'));
   slides.forEach(sl=>{
@@ -489,14 +501,7 @@ function insertIntro(){
       imgInPic = strayImg;
     }
 
-    // 3) veil
-    if(!pic.querySelector('.veil')){
-      const v = document.createElement('div');
-      v.className = 'veil';
-      pic.appendChild(v);
-    }
-
-    // 4) visible placeholder if no image yet
+    // Visible placeholder if no image has been assigned yet.
     const cs = getComputedStyle(imgInPic);
     const hasBG = cs.backgroundImage && cs.backgroundImage !== 'none';
     if(!hasBG){
@@ -516,10 +521,7 @@ if (!Engine.el.intro.querySelector('.intro-title')){
   t.innerHTML = '<span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>';
   Engine.el.intro.appendChild(t);
 }
-  // Glossary tooltips (edge-aware)
-  attachGlossTips(Engine.el.intro);
-
-  // One-at-a-time slides + per-slide typewriter & zoom reset
+  // One-at-a-time slides + per-slide typewriter
   let idx = 0;
   const show = (i)=>{
     idx = Math.max(0, Math.min(Engine.el.slides.length - 1, i));
@@ -528,16 +530,6 @@ if (!Engine.el.intro.querySelector('.intro-title')){
       s.classList.toggle('active', active);
       if (!active) return;
 
-      // restart image motion on the active slide
-      const img = s.querySelector('.img');
-      if (img){
-        // hard reset any previous animations
-        img.style.animation = 'none';
-        img.offsetHeight; // reflow
-        // run zoom-once + continuous micro parallax
-        img.style.animation =
-          'introZoom 28s ease-in-out forwards, introParallax 24s ease-in-out infinite';
-      }
       // trigger typewriter once per slide
       const p = s.querySelector('.scroll p');
       if (p && !p.dataset.typed){
@@ -629,13 +621,12 @@ function buildUI(){
       </div>
       <div class="toolbar cardish frame">
         <div class="controls">
-          <svg id="sealsRing" viewBox="0 0 100 100" aria-label="Seals">
+          <svg id="keysRing" viewBox="0 0 100 100" aria-label="Keys acquired">
             <circle class="bg" cx="50" cy="50" r="40" />
-            <circle id="sealsArc" class="arc" cx="50" cy="50" r="40" />
+            <circle id="keysArc" class="arc" cx="50" cy="50" r="40" />
           </svg>
           <button id="btnEnd" class="btn">End the Story</button>
           <button id="btnSettings" class="btn">Settings</button>
-          <button id="btnSnap" class="btn">Snapshot</button>
           <span class="tag">Engine: <b id="engineTag">Local</b></span>
         </div>
       </div>
@@ -674,13 +665,13 @@ function buildUI(){
           </div>
         </div>
       </aside>
-    
+    </div>
+
     <div id="nowplay" class="nowplay frame">
       <div class="np-inner">
         <span class="np-dot" aria-hidden="true"></span>
         <span class="np-label">Now Playing:</span>
         <span id="npTitle">—</span>
-        <button id="npMute" class="btn mini" style="margin-left:auto;">Mute</button>
       </div>
     </div>
 
@@ -733,8 +724,7 @@ function buildUI(){
           <h4>Audio</h4>
           <label>Master <input type="range" id="aMaster" min="0" max="0.8" step="0.01"></label><br>
           <label>UI <input type="range" id="aUi" min="0" max="0.8" step="0.01"></label><br>
-          <label>Ambience <input type="range" id="aAmb" min="0" max="0.8" step="0.01"></label><br>
-          <label>Drums <input type="range" id="aDrums" min="0" max="0.8" step="0.01"></label><br>
+          <label>Music <input type="range" id="aMusic" min="0" max="0.8" step="0.01"></label><br>
           <label><input type="checkbox" id="sfxSuccess"> Success SFX</label><br>
           <label><input type="checkbox" id="sfxFail"> Fail SFX</label><br>
           <label><input type="checkbox" id="sfxStory"> Story SFX</label>
@@ -776,6 +766,7 @@ function buildUI(){
     <div class="content" id="epiContent"></div>
     <div class="modal-actions"><button id="btnEpiRestart" class="btn gold">New Run</button></div>
   </div>
+  </div>
   `;
 
   // cache
@@ -784,12 +775,12 @@ function buildUI(){
   if(!document.getElementById('storyBottomLine')){ const line=document.createElement('div'); line.id='storyBottomLine'; Object.assign(line.style,{position:'absolute',left:'0',right:'0',bottom:'0',height:'2px',boxShadow:'inset 0 -2px 0 0 rgba(213,168,74,.75)'}); Engine.el.story.appendChild(line);}
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
-  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.btnGloss=$('#btnGloss'); Engine.el.btnSnap=$('#btnSnap'); Engine.el.sealsArc=$('#sealsArc'); Engine.el.pacing=$('#pacing');
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.pacing=$('#pacing');
 
   Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
   Engine.el.btnEdit=$('#btnEdit');
-  Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle'); Engine.el.npMute=$('#npMute');
+  Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle');
 
   // character modal refs
   Engine.el.modalEdit=$('#modalEdit'); Engine.el.xEdit=$('#xEdit');
@@ -798,28 +789,9 @@ function buildUI(){
   Engine.el.edHP=$('#edHP'); Engine.el.edGold=$('#edGold'); Engine.el.edInv=$('#edInv');
   Engine.el.btnAuto=$('#btnAuto'); Engine.el.btnEditSave=$('#btnEditSave'); Engine.el.btnEditCancel=$('#btnEditCancel');
 
-  
-  // settings
-  if(Engine.el.btnGloss){ Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); }; }
-  if(Engine.el.btnSnap){ Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); }; }
-  if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
-  if(Engine.el.btnGloss){
-    Engine.el.btnGloss.onclick=()=>{
-      document.body.classList.add('show-gloss');
-      setTimeout(()=>document.body.classList.remove('show-gloss'), 3200);
-    };
-  }
-  if(Engine.el.btnSnap){
-    Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); };
-  }
-  if(Engine.el.hcMode){
-    Engine.el.hcMode.onchange=()=>{
-      document.body.classList.toggle('hc', Engine.el.hcMode.checked);
-    };
-  }
 Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.twOn=$('#twOn'); Engine.el.twCps=$('#twCps');
-  Engine.el.aMaster=$('#aMaster'); Engine.el.aUi=$('#aUi'); Engine.el.aAmb=$('#aAmb'); Engine.el.aDrums=$('#aDrums'); Engine.el.sfxSuccess=$('#sfxSuccess'); Engine.el.sfxFail=$('#sfxFail'); Engine.el.sfxStory=$('#sfxStory');
+  Engine.el.aMaster=$('#aMaster'); Engine.el.aUi=$('#aUi'); Engine.el.aMusic=$('#aMusic'); Engine.el.sfxSuccess=$('#sfxSuccess'); Engine.el.sfxFail=$('#sfxFail'); Engine.el.sfxStory=$('#sfxStory');
   Engine.el.dmEndpoint=$('#dmEndpoint'); Engine.el.btnLiveToggle=$('#btnLiveToggle');
   Engine.el.btnSave=$('#btnSave'); Engine.el.btnLoad=$('#btnLoad'); Engine.el.btnExport=$('#btnExport'); Engine.el.btnUndo=$('#btnUndo');
   Engine.el.btnRestart=$('#btnRestart'); Engine.el.btnResetAll=$('#btnResetAll'); Engine.el.hcMode=$('#hcMode');
@@ -830,8 +802,6 @@ Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   // epilogue modal
   Engine.el.modalEpi=$('#modalEpi'); Engine.el.xEpi=$('#xEpi'); Engine.el.epiTitle=$('#epiTitle'); Engine.el.epiContent=$('#epiContent'); Engine.el.btnEpiRestart=$('#btnEpiRestart');
 }
-// runtime cleanup: remove deprecated Highlight Terms button
-try{ const g=document.getElementById('btnGloss'); if(g) g.remove(); }catch{};
 
 
 /* ---------- floating Scroll button (SVG) ---------- */
@@ -849,7 +819,6 @@ function mountScrollFab(){
   document.body.appendChild(btn);
   btn.addEventListener('click', ()=>{
     Engine.el.scrollContent.innerHTML = getIntroScrollHTML();
-    attachGlossTips(Engine.el.modalScroll);
     openModal(Engine.el.modalScroll);
   });
 }
@@ -858,14 +827,22 @@ function mountScrollFab(){
 function hydrate(){
   const saved=store.get('dds_state',null); if(!saved) return;
   const d=defaults();
+  const savedFlags={...(saved.flags||{})};
+  if(!Array.isArray(savedFlags.keys) && Array.isArray(savedFlags.seals)) savedFlags.keys=savedFlags.seals;
+  delete savedFlags.seals;
+  const savedAudio={...((saved.settings||{}).audio||{})};
+  if(typeof savedAudio.music!=='number' && typeof savedAudio.amb==='number') savedAudio.music=savedAudio.amb;
+  delete savedAudio.amb;
+  delete savedAudio.drums;
   Engine.state = {
     ...d, ...saved,
     character:{...d.character, ...(saved.character||{})},
-    flags:{...d.flags, ...(saved.flags||{})},
-    settings:{...d.settings, ...(saved.settings||{}), audio:{...d.settings.audio, ...((saved.settings||{}).audio||{})}},
+    flags:{...d.flags, ...savedFlags},
+    settings:{...d.settings, ...(saved.settings||{}), audio:{...d.settings.audio, ...savedAudio}},
     live:{...d.live, ...(saved.live||{})},
     _choiceHistory:Array.isArray(saved._choiceHistory)?saved._choiceHistory:[],
     _lastChoices:Array.isArray(saved._lastChoices)?saved._lastChoices:[],
+    _undoStack:Array.isArray(saved._undoStack)?saved._undoStack:[],
     _arcStep:saved._arcStep||0
   };
 }
@@ -892,13 +869,12 @@ function bind(){
     close(Engine.el.modalEdit); renderAll();
   };
   Engine.el.btnEditCancel.onclick=()=>close(Engine.el.modalEdit);
+  Engine.el.xEdit.onclick=()=>close(Engine.el.modalEdit);
 
   // settings
-  if(Engine.el.btnGloss){ Engine.el.btnGloss.onclick=()=>{ document.body.classList.add('show-gloss'); setTimeout(()=>document.body.classList.remove('show-gloss'), 3200); }; }
-  if(Engine.el.btnSnap){ Engine.el.btnSnap.onclick=()=>{ exportSnapshot(); }; }
   if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
   Engine.el.btnSettings.onclick=()=>{ Engine.el.twOn.checked=S.settings.typewriter; Engine.el.twCps.value=S.settings.cps; if(Engine.el.hcMode) Engine.el.hcMode.checked=document.body.classList.contains('hc');
-    Engine.el.aMaster.value=S.settings.audio.master; Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aAmb.value=S.settings.audio.amb; Engine.el.aDrums.value=S.settings.audio.drums;
+    Engine.el.aMaster.value=S.settings.audio.master; Engine.el.aUi.value=S.settings.audio.ui; Engine.el.aMusic.value=S.settings.audio.music;
     Engine.el.dmEndpoint.value=S.live.endpoint; Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On';
     Engine.el.sfxSuccess.checked = (S.settings.audio.sfx_success!==false);
     Engine.el.sfxFail.checked    = (S.settings.audio.sfx_fail!==false);
@@ -907,21 +883,25 @@ function bind(){
   Engine.el.xSet.onclick=()=>close(Engine.el.modalSet);
   Engine.el.twOn.onchange=()=>{S.settings.typewriter=Engine.el.twOn.checked; store.set('dds_state',S);};
   Engine.el.twCps.onchange=()=>{S.settings.cps=clamp(+Engine.el.twCps.value||40,10,120); store.set('dds_state',S);};
-  [Engine.el.aMaster,Engine.el.aUi,Engine.el.aAmb,Engine.el.aDrums].forEach(sl=>sl.oninput=()=>{S.settings.audio.master=+Engine.el.aMaster.value; S.settings.audio.ui=+Engine.el.aUi.value; S.settings.audio.amb=+Engine.el.aAmb.value; S.settings.audio.drums=+Engine.el.aDrums.value; Sound.setLevels(); store.set('dds_state',S);});
+  [Engine.el.aMaster,Engine.el.aUi,Engine.el.aMusic].forEach(sl=>sl.oninput=()=>{S.settings.audio.master=+Engine.el.aMaster.value; S.settings.audio.ui=+Engine.el.aUi.value; S.settings.audio.music=+Engine.el.aMusic.value; Sound.setLevels(); BGM.setLevel(S.settings.audio.music); store.set('dds_state',S);});
   Engine.el.dmEndpoint.onchange=()=>{S.live.endpoint=Engine.el.dmEndpoint.value.trim()||'/dm-turn'; store.set('dm_ep',S.live.endpoint);};
-  Engine.el.btnLiveToggle.onclick=()=>{ S.live.on=!S.live.on; store.set('dm_on',S.live.on); };
+  Engine.el.btnLiveToggle.onclick=()=>{ S.live.on=!S.live.on; store.set('dm_on',S.live.on); Engine.el.btnLiveToggle.textContent=S.live.on?'Turn Live DM Off':'Turn Live DM On'; const tag=$('#engineTag'); if(tag) tag.textContent=S.live.on?'Live':'Local'; };
   Engine.el.sfxSuccess.onchange=()=>{S.settings.audio.sfx_success=Engine.el.sfxSuccess.checked; store.set('dds_state',S);};
   Engine.el.sfxFail.onchange=()=>{S.settings.audio.sfx_fail=Engine.el.sfxFail.checked; store.set('dds_state',S);};
   Engine.el.sfxStory.onchange=()=>{S.settings.audio.sfx_story=Engine.el.sfxStory.checked; store.set('dds_state',S);};
-  Engine.el.btnRestart.onclick=()=>{ close(Engine.el.modalSet); beginTale(); };
-  Engine.el.btnResetAll.onclick=()=>{ close(Engine.el.modalSet); localStorage.clear(); location.reload(); };
+  Engine.el.btnSave.onclick=()=>{ store.set('dds_state',S); toast('Game saved'); };
+  Engine.el.btnLoad.onclick=()=>{ if(store.get('dds_state',null)) location.reload(); else toast('No saved game'); };
+  Engine.el.btnExport.onclick=exportTranscript;
+  Engine.el.btnUndo.onclick=()=>{ undoTurn(); close(Engine.el.modalSet); };
+  Engine.el.btnRestart.onclick=()=>{ close(Engine.el.modalSet); hardResetRun(); };
+  Engine.el.btnResetAll.onclick=()=>{ close(Engine.el.modalSet); store.clearProject(); location.reload(); };
 
   // scroll modal
   Engine.el.xScroll.onclick=()=>close(Engine.el.modalScroll);
 
   // epilogue modal
   Engine.el.xEpi.onclick=()=>close(Engine.el.modalEpi);
-  Engine.el.btnEpiRestart.onclick=()=>{ close(Engine.el.modalEpi); beginTale(); };
+  Engine.el.btnEpiRestart.onclick=()=>{ close(Engine.el.modalEpi); hardResetRun(); };
 
   // global overlay close
   Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); };
@@ -956,19 +936,19 @@ function renderAll(){
 
   // Ledger — inventory always visible; other lines appear only when relevant
   const lines = [];
-  lines.push(`<div>Inventory: ${C.inventory.join(', ')||'—'}</div>`);
+  lines.push(`<div>Inventory: ${C.inventory.map(esc).join(', ')||'—'}</div>`);
   if (F.rumors) lines.push(`<div>Rumors heard: yes</div>`);
-  if ((F.seals||[]).length) lines.push(`<div>Keys: ${(F.seals||[]).join(', ')}</div>`);
+  if ((F.keys||[]).length) lines.push(`<div>Keys: ${(F.keys||[]).map(esc).join(', ')}</div>`);
   if (F.bossReady) lines.push(`<div>Gate ready: yes</div>`);
   if (F.bossDealtWith) lines.push(`<div>Unfathomer dealt with: yes</div>`);
   Engine.el.ledgerPanel.innerHTML = lines.join('');
 
 
-  // Seals ring arc
+  // Keys ring arc
   try{
-    const sealsCt = (F.seals||[]).length; const circ = 2*Math.PI*40; const frac = Math.min(1, sealsCt/3); 
+    const keysCt = (F.keys||[]).length; const circ = 2*Math.PI*40; const frac = Math.min(1, keysCt/3);
     const dash = Math.max(0.0001, circ*frac);
-    if(Engine.el.sealsArc){ Engine.el.sealsArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
+    if(Engine.el.keysArc){ Engine.el.keysArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
   }catch{}
   // Pacing chips
   try{
@@ -981,7 +961,7 @@ function renderAll(){
   for(const beat of s.storyBeats){
     const p=document.createElement('p');
     p.classList.add('beat');
-    p.innerHTML=beat.html?beat.html:esc(beat.text);
+    p.innerHTML=beat.html?sanitizeRichHTML(beat.html):esc(beat.text);
     if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
     if(beat.kind==='success'){ p.classList.add('glow-success'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#D5A84A'; }
     if(beat.kind==='fail'){ p.classList.add('glow-fail'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#A12525'; }
@@ -992,7 +972,7 @@ function renderAll(){
 
   if (s.settings.typewriter && s._pendingType){
     const p=Engine.el.story.lastElementChild;
-    if (p && !p.dataset.typed){ p.dataset.typed='1'; typewrite(p, p.textContent, s.settings.cps); }
+    if (p && !p.dataset.typed){ p.dataset.typed='1'; typewriteRich(p, s.settings.cps); }
     s._pendingType=false;
   }
 }
@@ -1000,22 +980,37 @@ function renderAll(){
 /* ---------- flow ---------- */
 function beginTale(){
   const S=Engine.state;
-  S.turn=0; S.scene='Halls'; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._arcStep=0;
-  S.flags={rumors:false,seals:[],bossReady:false,bossDealtWith:false};
+  S.turn=0; S.scene='Halls'; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
+  S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false};
   appendBeat("Lanterns throw steady light across carved lintels and iron mosaics. Word passes of a slow, otherworldly tide called the Unfathomer, pooling in the buried cisterns. You wait at the mouth of the Halls, where corridors open like patient books.");
   renderChoices(makeChoiceSet(S.scene));
   S.turn++; renderAll(); BGM.updateForState(Engine.state);
 }
 function endTale(){
   const S=Engine.state, C=S.character;
-  const ep = `Epilogue — You carry ${C.Gold} gold and ${C.inventory.length} keepsakes. Keys gained: ${S.flags.seals.join(', ')||'none'}. ` +
+  const ep = `Epilogue — You carry ${C.Gold} gold and ${C.inventory.length} keepsakes. Keys gained: ${S.flags.keys.join(', ')||'none'}. ` +
     (S.flags.bossDealtWith?'The Unfathomer is quiet; people sleep deeply this week.':'The Unfathomer still turns beneath the streets. Quiet talk in ale-halls carries your name.');
   appendBeat(ep); renderChoices([]); renderAll();
+  Engine.el.epiTitle.textContent='Epilogue';
+  Engine.el.epiContent.textContent=ep;
+  openModal(Engine.el.modalEpi);
 }
 function undoTurn(){
-  const S=Engine.state; if(S.turn<=1) return;
-  S.storyBeats.pop(); S.transcript.pop(); S.turn=Math.max(0,S.turn-1);
-  renderChoices(makeChoiceSet(S.scene)); renderAll();
+  const S=Engine.state, previous=S._undoStack?.pop();
+  if(!previous){ toast('Nothing to undo'); return; }
+  Object.assign(S,previous,{_undoStack:S._undoStack});
+  renderChoices(makeChoiceSet(S.scene)); renderAll(); BGM.updateForState(S);
+}
+
+function hardResetRun(){
+  const S=Engine.state, fresh=defaults();
+  fresh.settings={...fresh.settings,...S.settings,audio:{...fresh.settings.audio,...S.settings.audio}};
+  fresh.live={...fresh.live,...S.live};
+  Object.keys(S).forEach(k=>delete S[k]);
+  Object.assign(S,fresh);
+  beginTale();
+  store.set('dds_state',S);
+  toast('New run started');
 }
 
 /* ---------- choices ---------- */
@@ -1026,6 +1021,8 @@ function renderChoices(choices){
   if (!Array.isArray(Engine.state._lastChoices))   Engine.state._lastChoices=[];
 
   const hist=Engine.state._choiceHistory, pool=[...(choices||[])];
+  list.innerHTML='';
+  if(!pool.length){ Engine.state._lastChoices=[]; return; }
   const fresh=pool.filter(c=>!hist.includes(c.id));
   let picked=[];
   if(fresh.length){ picked.push(pick(fresh)); const rest=pool.filter(c=>c.id!==picked[0].id); if(rest.length) picked.push(pick(rest)); }
@@ -1036,7 +1033,6 @@ function renderChoices(choices){
   if(picked.map(c=>c.sentence).join('|')===prev.join('|')) picked=modulateChoices(picked);
   Engine.state._lastChoices=picked.map(c=>c.sentence);
 
-  list.innerHTML='';
   picked.forEach(ch=>{
     const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=ch.sentence;
     btn.onclick=()=>{ Sound.click(); resolveChoice(ch); };
@@ -1069,15 +1065,24 @@ function resolveChoice(ch){
 }
 function applyTurn(resp,roll){
   const S=Engine.state;
-  if(resp?.flags_patch) Object.assign(S.flags, resp.flags_patch);
+  S._undoStack=S._undoStack||[];
+  S._undoStack.push(captureRunState(S));
+  while(S._undoStack.length>20) S._undoStack.shift();
+  if(resp?.flags_patch){
+    const patch={...resp.flags_patch};
+    if(!Array.isArray(patch.keys) && Array.isArray(patch.seals)) patch.keys=patch.seals;
+    delete patch.seals;
+    Object.assign(S.flags,patch);
+  }
+  if(!Array.isArray(S.flags.keys)) S.flags.keys=[];
   if(resp?.inventory_delta){ const add=resp.inventory_delta.add||[], rem=resp.inventory_delta.remove||[]; S.character.inventory=S.character.inventory.filter(x=>!rem.includes(x)).concat(add); }
   if(typeof resp?.gold_delta==='number'){ S.character.Gold=Math.max(0,S.character.Gold+resp.gold_delta); }
   if(typeof resp?.hp_delta==='number'){ S.character.HP=Math.max(0,S.character.HP+resp.hp_delta); }
   if(resp?.scene) S.scene=resp.scene;
-  if(!S.flags.bossReady && S.flags.seals.length>=2) S.flags.bossReady=true;
+  if(!S.flags.bossReady && S.flags.keys.length>=2) S.flags.bossReady=true;
 
   const kind = roll ? (roll.total>=roll.dc ? 'success':'fail') : 'story';
-  const html = resp?.story_paragraph_html || null;
+  const html = resp?.story_paragraph_html ? sanitizeRichHTML(resp.story_paragraph_html) : null;
   appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, kind, html);
   Sound.sfx(kind);
 
@@ -1099,7 +1104,7 @@ function applyTurn(resp,roll){
 /* ---------- local DM with four-beat spine ---------- */
 function localTurn(payload){
   const {action,passed,stat,source,game_state}=payload; const S=game_state;
-  const seals=S.flags.seals||[]; const have=new Set(seals);
+  const keys=S.flags.keys||[]; const have=new Set(keys);
   let story=''; let flags_patch={}; let inv={add:[],remove:[]}; let gold_delta=0, hp_delta=0; let scene=S.scene;
 
   if(source==='choice'){
@@ -1108,7 +1113,7 @@ function localTurn(payload){
   }
 
   let award=null; if(source==='choice' && passed && have.size<3 && rnd(1,6)===1){ const pool=['Brass','Echo','Stone'].filter(x=>!have.has(x)); if(pool.length) award=pick(pool); }
-  if(award) flags_patch.seals=[...seals, award];
+  if(award) flags_patch.keys=[...keys, award];
 
   if(source==='narrate'){
     const aText = stripHTML(action||'').trim();
@@ -1139,7 +1144,7 @@ function localTurn(payload){
       const seg = steps[Math.min(Engine.state._arcStep-6, steps.length-1)];
       story = aText ? `${aText} ${seg}` : seg;
       Engine.state._arcStep++;
-      if(!S.flags.bossReady && (seals.length>=2)) flags_patch.bossReady=true;
+      if(!S.flags.bossReady && (keys.length>=2)) flags_patch.bossReady=true;
       if(Engine.state._arcStep>=9 && (S.flags.bossReady || (flags_patch.bossReady===true))) story+=" You stand where a choice will count double.";
     }else{
       const seg = "The corridor opens on decisions that won’t wait long.";
@@ -1150,7 +1155,7 @@ function localTurn(payload){
   if(!story){
     const success={STR:"You shoulder through.", DEX:"You move with quiet balance.", INT:"You reason through the pattern.", CHA:"You speak with steady poise."}[stat||'INT'];
     const fail={STR:"The metal creaks but holds.", DEX:"Grit shifts; a lantern notices.", INT:"Two claims cancel; your guess goes wide.", CHA:"Your tone misfires; the window closes for now."}[stat||'INT'];
-    const tail=award?` A sigil warms at your wrist — the Seal of ${award}.`:"";
+    const tail=award?` A sigil warms at your wrist — the ${award} Key.`:"";
     const rumor=" The cisterns answer more clearly than the streets."; flags_patch.rumors = true;
     story=`${stripHTML(action||'')}${action?' ':''}${passed?success:fail}${tail}${rumor}`;
   }
@@ -1183,10 +1188,19 @@ function makeChoiceSet(scene){
 
 /* ---------- helpers ---------- */
 function appendBeat(text, roll, kind=null, html=null){
-  const entry= html?{html,roll,kind}:{text,roll,kind};
+  const entry= html?{html:sanitizeRichHTML(html),roll,kind}:{text,roll,kind};
   Engine.state.storyBeats.push(entry);
   Engine.state.transcript.push(html?strip(html):text);
   Engine.state._pendingType=true;
+}
+function captureRunState(S){
+  return JSON.parse(JSON.stringify({
+    seed:S.seed, turn:S.turn, scene:S.scene,
+    storyBeats:S.storyBeats, transcript:S.transcript,
+    character:S.character, flags:S.flags,
+    _choiceHistory:S._choiceHistory, _lastChoices:S._lastChoices,
+    _arcStep:S._arcStep, _pendingType:false
+  }));
 }
 function snapshotState(){ const S=Engine.state; return {character:S.character, flags:S.flags, scene:S.scene, turn:S.turn}; }
 function recentHistory(){ const T=Engine.state.transcript; return T.slice(Math.max(0,T.length-10)); }
@@ -1194,33 +1208,41 @@ function fmt(n){ return (n>=0?'+':'')+n; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[c])); }
 function strip(html){ const d=document.createElement('div'); d.innerHTML=html; return d.textContent||''; }
 function stripHTML(s){ const d=document.createElement('div'); d.innerHTML=s; return d.textContent||''; }
+function sanitizeRichHTML(html){
+  const source=document.createElement('template');
+  source.innerHTML=String(html||'');
+  const allowed=new Set(['EM','STRONG','B','I','SPAN','BR']);
+
+  const clean=node=>{
+    if(node.nodeType===Node.TEXT_NODE) return document.createTextNode(node.textContent||'');
+    if(node.nodeType!==Node.ELEMENT_NODE) return document.createDocumentFragment();
+
+    const children=document.createDocumentFragment();
+    node.childNodes.forEach(child=>children.appendChild(clean(child)));
+    if(!allowed.has(node.tagName)) return children;
+
+    const el=document.createElement(node.tagName.toLowerCase());
+    if(node.tagName==='SPAN' && node.classList.contains('gloss')){
+      el.className='gloss';
+      const def=node.getAttribute('data-def');
+      if(def) el.setAttribute('data-def',def);
+    }
+    el.appendChild(children);
+    return el;
+  };
+
+  const output=document.createElement('div');
+  source.content.childNodes.forEach(node=>output.appendChild(clean(node)));
+  return output.innerHTML;
+}
 function autoGen(){ const n=['Eldan','Brassa','Keled','Varek','Moriah','Thrain','Ysolda','Kael']; const C=Engine.state.character;
   C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.Gold=rnd(0,25); C.inventory=['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)); renderAll(); }
 function toast(txt){ const t=document.createElement('div'); t.textContent=txt; Object.assign(t.style,{position:'fixed',bottom:'14px',left:'14px',background:'#1e1e28',color:'#fff',padding:'8px 10px',border:'1px solid #3a3a48',borderRadius:'6px',opacity:'0.96',zIndex:9999}); document.body.appendChild(t); setTimeout(()=>t.remove(),1200); }
 function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url); }
 
-/* ---------- typewriter (story) ---------- */
-function typewrite(node, text, cps=40, ondone){
-  node.textContent=''; node.classList.add('reveal');
-  const cursor=document.createElement('span'); cursor.className='cursor'; node.appendChild(cursor);
-  cursor.innerHTML = '<span class="smoke"></span>';
-  let i=0;
-  const tick=()=>{
-    const step=Math.max(1,Math.round(cps/10));
-    for(let k=0;k<step;k++){
-      if(i>=text.length){ cursor.remove(); ondone&&ondone(); return; }
-      const ch=document.createElement('span'); ch.className='ch on'; ch.textContent=text[i++];
-      node.insertBefore(ch, cursor);
-      if(/[\.!\?]/.test(ch.textContent)) break;
-    }
-    cursor.innerHTML='<span class="smoke"></span>';
-    setTimeout(tick, 1000/Math.max(10,cps));
-  };
-  setTimeout(tick, 60);
-}
-
-/* ---------- typewriter (intro, preserves <span class="gloss">) ---------- */
+/* ---------- rich typewriter (preserves glossary and roll markup) ---------- */
 function typewriteRich(p, cps=40){
+  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
   const clone = p.cloneNode(true);
   p.textContent=''; p.classList.add('reveal');
   const cursor=document.createElement('span'); cursor.className='cursor'; p.appendChild(cursor);
@@ -1237,6 +1259,7 @@ function typewriteRich(p, cps=40){
 
   let idx=0;
   const tick=()=>{
+    if(!p.isConnected){ cursor.remove(); return; }
     const step=Math.max(1,Math.round(cps/10));
     for(let k=0;k<step;k++){
       if(idx>=queue.length){ cursor.remove(); return; }
@@ -1271,7 +1294,7 @@ function getIntroSlidesHTML(){
     <section class="slide s2" data-side="img-left" aria-label="Slide 2">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Deep below gathers the <span class="gloss" data-def="A slow, deliberate tide that learns rhythm and pushes where the city is out of tune.">Unfathomer</span>, a standing <span class="gloss" data-def="Many tones sounding as one; where channels agree it stands firm, where they argue it reaches through.">chorus</span> taught by centuries of bells. Once, the <span class="gloss" data-def="The old rule that kept channels, bells, and gates in tune so the chorus rested.">Cadence Law</span> held it calm. Now cheap metal and careless renovations have pulled the city off pitch. Brassreach answers with the <span class="gloss" data-def="Ancient instruments of authority that bind by place, right, and pattern.">Three Seals</span>—<span class="gloss" data-def="Binds by weight and place; makes passages remember resistance.">Stone</span>, <span class="gloss" data-def="Binds by right; enforces oaths on gates and devices.">Brass</span>, and <span class="gloss" data-def="Binds by pattern; holds a spoken cadence after the voice is gone.">Echo</span>. In the stacks, <span class="gloss" data-def="Archivist of the Lower Stacks; believes the chorus can be bargained with using true measures.">Lithen the Wise</span> argues for treaty. In the foundries, <span class="gloss" data-def="Warden of the Brassworks; would retune the city by force and throttle the culverts.">Mullinen the Stout</span> argues for clamps and spikes. Between them stands your line in the dark.</p>
+        <p>Deep below gathers the <span class="gloss" data-def="A slow, deliberate tide that learns rhythm and pushes where the city is out of tune.">Unfathomer</span>, a standing <span class="gloss" data-def="Many tones sounding as one; where channels agree it stands firm, where they argue it reaches through.">chorus</span> taught by centuries of bells. Once, the <span class="gloss" data-def="The old rule that kept channels, bells, and gates in tune so the chorus rested.">Cadence Law</span> held it calm. Now cheap metal and careless renovations have pulled the city off pitch. Brassreach answers with the <span class="gloss" data-def="Three instruments of authority: Stone, Brass, and Echo.">Three Keys</span>—<span class="gloss" data-def="The Stone Key embodies Weight: foundation, oath, burden, and consequence.">Stone</span>, <span class="gloss" data-def="The Brass Key embodies Tone: resonance, harmony, and tuned relation.">Brass</span>, and <span class="gloss" data-def="The Echo Key embodies Pattern: memory, return, law, and recurrence.">Echo</span>. In the stacks, <span class="gloss" data-def="Archivist of the Lower Stacks; believes the chorus can be bargained with using true measures.">Lithen the Wise</span> argues for treaty. In the foundries, <span class="gloss" data-def="Warden of the Brassworks; would retune the city by force and throttle the culverts.">Mullinen the Stout</span> argues for clamps and spikes. Between them stands your line in the dark.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack2">◂ Back</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1280,42 +1303,12 @@ function getIntroSlidesHTML(){
     <section class="slide s3" data-side="img-left" aria-label="Slide 3">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Rumor says the <span class="gloss" data-def="An ancient tuning engine that once set the city’s measures with a single motion.">Gate of Measures</span> still turns in the cistern fields. To reach it you must map the <span class="gloss" data-def="The rumor-rich threshold where first paths are tried.">Halls</span>, steal or earn keys in the <span class="gloss" data-def="The deep library where ledgers, oaths, and tuning charts are kept.">Archives</span>, and descend into the <span class="gloss" data-def="The drowned, resonant galleries where the Unfathomer stands strongest.">Depths</span>. At places of clean <span class="gloss" data-def="A chamber’s agreement of tone where speech carries without drowning.">resonance</span> you may <span class="gloss" data-def="Quiet the chorus with truthful measures and working channels.">bind</span>, or <span class="gloss" data-def="Match cadence and make terms the city can keep.">bargain</span>, or—if all else fails—<span class="gloss" data-def="Drive the chorus back at a cost the city must bear.">banish</span>. Gather Seals, keep the ledger honest, and mark your way. The Unfathomer listens. The city remembers. Your choices decide which one the streets will follow.</p>
+        <p>Rumor says the <span class="gloss" data-def="An ancient tuning engine that once set the city’s measures with a single motion.">Gate of Measures</span> still turns in the cistern fields. To reach it you must map the <span class="gloss" data-def="The rumor-rich threshold where first paths are tried.">Halls</span>, steal or earn keys in the <span class="gloss" data-def="The deep library where ledgers, oaths, and tuning charts are kept.">Archives</span>, and descend into the <span class="gloss" data-def="The drowned, resonant galleries where the Unfathomer stands strongest.">Depths</span>. At places of clean <span class="gloss" data-def="A chamber’s agreement of tone where speech carries without drowning.">resonance</span> you may <span class="gloss" data-def="Quiet the chorus with truthful measures and working channels.">bind</span>, or <span class="gloss" data-def="Match cadence and make terms the city can keep.">bargain</span>, or—if all else fails—<span class="gloss" data-def="Drive the chorus back at a cost the city must bear.">banish</span>. Gather Keys, keep the ledger honest, and mark your way. The Unfathomer listens. The city remembers. Your choices decide which one the streets will follow.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack3">◂ Back</button><button class="btn gold intro-begin">Begin Story</button></div>
       <div class="mist" aria-hidden="true"></div>
     </section>
   </div>`;
-}
-
-function getQuickTablesHTML(){
-  return `
-    <hr class="sep"/>
-    <div class="quick-tables">
-      <h4>Codex: Keys & Measures</h4>
-      <div class="grid2">
-        <div>
-          <h5>Three Seals (Keys)</h5>
-          <ul>
-            <li><b>Stone</b> — Authority of the makers.</li>
-            <li><b>Brass</b> — Trade, craft, and oaths.</li>
-            <li><b>Echo</b> — Memory of the waters.</li>
-          </ul>
-          <p><em>Two</em> Seals wake the Gate; <em>all three</em> open the richest endings.</p>
-        </div>
-        <div>
-          <h5>Four Measures</h5>
-          <ul>
-            <li><b>Tune</b> — Align yourself to a rhythm; listen and adapt.</li>
-            <li><b>Name</b> — Call a thing truly; identify patterns and forces.</li>
-            <li><b>Measure</b> — Quantify and map; compare, test, and verify.</li>
-            <li><b>Decide</b> — Commit and act; accept consequences with resolve.</li>
-          </ul>
-        </div>
-      </div>
-      <h5>Complications (Examples)</h5>
-      <ul><li>Flood pulse forces a detour</li><li>Warden patrol crosses your path</li><li>Old mechanism shifts the floor plates</li></ul>
-    </div>`;
 }
 
 function getIntroScrollHTML(){
@@ -1325,22 +1318,23 @@ function getIntroScrollHTML(){
       <h4>Codex: Keys & Measures</h4>
       <div class="grid2">
         <div>
-          <h5>Three Seals (Keys)</h5>
+          <h5>Three Keys</h5>
           <ul>
-            <li><b>Stone</b> — Authority of the makers.</li>
-            <li><b>Brass</b> — Trade, craft, and oaths.</li>
-            <li><b>Echo</b> — Memory of the waters.</li>
+            <li><b>Stone Key</b> — Weight: foundation, oath, burden, and consequence.</li>
+            <li><b>Brass Key</b> — Tone: resonance, harmony, and tuned relation.</li>
+            <li><b>Echo Key</b> — Pattern: memory, return, law, and recurrence.</li>
           </ul>
-          <p><em>Two</em> Seals wake the Gate; <em>all three</em> open the richest endings.</p>
+          <p><em>Two</em> Keys wake the Gate; <em>all three</em> open the richest endings.</p>
         </div>
         <div>
           <h5>Four Measures</h5>
           <ul>
-            <li><b>Tune</b> — Align yourself to a rhythm; listen and adapt.</li>
-            <li><b>Name</b> — Call a thing truly; identify patterns and forces.</li>
-            <li><b>Measure</b> — Quantify and map; compare, test, and verify.</li>
-            <li><b>Decide</b> — Commit and act; accept consequences with resolve.</li>
+            <li><b>Weight / Stone</b> — Oath, burden, foundation, and consequence.</li>
+            <li><b>Tone / Brass</b> — Resonance, harmony, and tuned relation.</li>
+            <li><b>Pattern / Echo</b> — Memory, return, law, and recurrence.</li>
+            <li><b>Line / Thread</b> — Decision, direction, and the path made binding.</li>
           </ul>
+          <p><b>Story cadence:</b> Tune → Name → Measure → Decide.</p>
         </div>
       </div>
       <h5>Complications (Examples)</h5>
@@ -1367,27 +1361,9 @@ function cinematicFocus(){
   lb.classList.remove('hidden'); lb.style.opacity='1';
   setTimeout(()=>{ lb.style.opacity='0'; setTimeout(()=> lb.classList.add('hidden'), 480); }, 1220);
 }
-/* ---------- snapshot export ---------- */
-function exportSnapshot(){
-  try{
-    const canvas = document.createElement('canvas'); const W=1200,H=675; canvas.width=W; canvas.height=H;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle='#0c0f12'; ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle='#715322'; ctx.globalAlpha=.28; ctx.lineWidth=6;
-    ctx.beginPath(); ctx.arc(W/2, H/2-20, 180, 0, Math.PI*2); ctx.stroke();
-    ctx.globalAlpha=1; ctx.fillStyle='#f1e6bb'; ctx.font='700 42px Cinzel, serif'; ctx.textAlign='center';
-    ctx.fillText('BRASSREACH', W/2, 70);
-    const seals=(Engine.state.flags.seals||[]).join(', ')||'—';
-    ctx.font='18px Josefin Sans, sans-serif'; ctx.fillText('Keys: '+seals, W/2, 105);
-    const lines=Engine.state.transcript.slice(-6); ctx.textAlign='left'; ctx.font='20px Georgia, serif'; let y=170; const x=90;
-    for(const line of lines){ const words=line.split(' '); let cur=''; for(const w of words){ const t=cur+w+' '; if(ctx.measureText(t).width>W-180){ ctx.fillText(cur,x,y); y+=30; cur=w+' '; } else cur=t; } if(cur){ ctx.fillText(cur,x,y); y+=36; } if(y>H-80) break; }
-    ctx.font='16px Josefin Sans, sans-serif'; ctx.textAlign='right'; ctx.fillText(`Turn ${Engine.state.turn} · Scene ${Engine.state.scene}`, W-40, H-30);
-    canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='brassreach_snapshot.png'; a.click(); URL.revokeObjectURL(a.href); }, 'image/png', .92);
-  }catch(e){ console.error(e); }
-}
-
 /* ---------- embers (JS-only; no CSS animations) ---------- */
 (function(){
+  const controllers=new Map();
   function ensureLayer(id){
     let host = document.getElementById(id);
     if(!host){
@@ -1405,7 +1381,8 @@ function exportSnapshot(){
 
   function r(min, max){ return min + Math.random()*(max - min); }
 
-  function spawnOne(host){
+  function spawnOne(host,isActive){
+    if(!isActive()) return;
     // Use the *visual* viewport so mobile chrome/safe areas don’t shift spawn math
     const vv = window.visualViewport;
     const vx = vv?.offsetLeft ?? 0;
@@ -1440,6 +1417,7 @@ function exportSnapshot(){
     const travel = vh + 360;                // clear the top well past the bezel
 
     function tick(t){
+      if(!isActive() || !dot.isConnected){ dot.remove(); return; }
       const s = Math.min(1, (t - born) / dur);
       const eased = s < .12 ? Math.pow(s / 0.12, 1.4) : s;
       const x = startX + Math.sin((t - born) / period) * amp;
@@ -1453,10 +1431,27 @@ function exportSnapshot(){
   }
 
   function start(id='fx', seed=28){
+    if(controllers.has(id)) return controllers.get(id);
     const host = ensureLayer(id);
-    for (let i=0; i<seed; i++) setTimeout(()=>spawnOne(host), i*180);
-    const h = setInterval(()=>spawnOne(host), 650);
-    return { stop(){ clearInterval(h); } };
+    let active=!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const isActive=()=>active;
+    const timers=[];
+    if(active){
+      for(let i=0;i<seed;i++) timers.push(setTimeout(()=>spawnOne(host,isActive),i*180));
+    }
+    const interval=active ? setInterval(()=>spawnOne(host,isActive),650) : null;
+    const controller={
+      stop(){
+        if(!active && !controllers.has(id)) return;
+        active=false;
+        if(interval) clearInterval(interval);
+        timers.forEach(clearTimeout);
+        host.querySelectorAll('.ember').forEach(dot=>dot.remove());
+        controllers.delete(id);
+      }
+    };
+    controllers.set(id,controller);
+    return controller;
   }
 
   window.FX = { start };
@@ -1469,7 +1464,6 @@ window.reportCutout = function(){
     slide: i,
     hasPic: !!sl.querySelector('.pic'),
     hasImg: !!sl.querySelector('.pic .img'),
-    hasVeil: !!sl.querySelector('.pic .veil'),
     imgRect: sl.querySelector('.pic .img')?.getBoundingClientRect()
   }));
 };
@@ -1482,7 +1476,6 @@ window.debugCutout = function(on=true){
     st.textContent = `
       #intro .slide .pic{ outline:2px dashed #0ff !important; min-height:30vh; }
       #intro .slide .pic .img{ outline:2px solid #f0f !important; min-height:28vh; }
-      #intro .slide .pic .veil{ outline:2px solid #f33 !important; }
     `;
     document.head.appendChild(st);
   } else if(!on && st){
