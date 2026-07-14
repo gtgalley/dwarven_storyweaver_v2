@@ -913,6 +913,7 @@ function buildUI(){
       <div class="grid2">
         <div>
           <h4>Live DM</h4>
+          <p class="settings-note">Live narration enriches written free actions. Campaign decisions and rewards remain authored.</p>
           <label>Endpoint <input id="dmEndpoint" placeholder="/dm-turn" /></label><br>
           <button id="btnLiveToggle" class="btn">Toggle Live DM</button>
         </div>
@@ -1740,8 +1741,7 @@ function renderChoices(choices){
 }
 
 function freeText(){ const text=(Engine.el.freeText.value||'').trim(); if(!text) return; Engine.el.freeText.value=''; doNarrate({sentence:text}); }
-function doNarrate(ch){
-  if(Engine.busy) return; setBusy(true); pushUndo();
+function campaignExplorationText(ch){
   const S=Engine.state,scene=currentScene(),count=S.campaign.exploration[scene.id]||0;
   const context={
     halls:['You find fresh boot marks leading toward the lower route, but no safer passage than the one already marked.','The nearby masonry is damp but stable. The next pressure pulse will arrive soon.'],
@@ -1751,7 +1751,19 @@ function doNarrate(ch){
     unfathomer:['The vast presence listens, but the current Measure remains unanswered.']
   };
   const lines=context[scene.chapter]||context.halls,line=lines[count%lines.length]; S.campaign.exploration[scene.id]=count+1;
-  appendBeat(`You ${ch.sentence.replace(/^you\s+/i,'')}. ${line}`,null,'story'); S.turn++; renderAll(); persistState('Exploration stored'); setBusy(false);
+  return `You ${ch.sentence.replace(/^you\s+/i,'')}. ${line}`;
+}
+function commitExploration(text,html=null){ appendBeat(text,null,'story',html); Engine.state.turn++; renderAll(); persistState('Exploration stored'); }
+function doNarrate(ch){
+  if(Engine.busy) return; setBusy(true); pushUndo();
+  const fallbackText=campaignExplorationText(ch);
+  if(!Engine.state.live.on){ commitExploration(fallbackText); setBusy(false); return; }
+  const payload={action:ch.sentence,source:'narrate',stat:null,dc:null,passed:null,game_state:snapshotState(),history:recentHistory()};
+  const fallback=()=>({story_paragraph:fallbackText});
+  Promise.resolve(Weaver.turn(payload,fallback)).then(resp=>{
+    const text=resp?.story_paragraph||fallbackText,html=resp?.story_paragraph_html?sanitizeRichHTML(resp.story_paragraph_html):null;
+    commitExploration(stripHTML(text),html);
+  }).catch(()=>commitExploration(fallbackText)).finally(()=>setBusy(false));
 }
 
 function resolveChoice(ch){
