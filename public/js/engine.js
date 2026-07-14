@@ -278,37 +278,6 @@ export function boot(){
 
 
 
-/* ------------------------- runtime style patches ------------------------- */
-/* Kept outside boot() so they apply once at module load and avoid brace mix-ups */
-(function applyRuntimePatches(){
-  if (document.getElementById('runtime-patches')) return;
-  const st = document.createElement('style');
-  st.id = 'runtime-patches';
-  st.textContent = `
-/* runtime style patches */
-#modalEdit input[type="text"], #modalEdit input[type="number"], #modalEdit select {
-  background:#0d141a !important; color:#D5A84A !important;
-  border:1px solid #8c6b2c !important; outline:1px solid rgba(213,168,74,.18);
-}
-#modalEdit input::placeholder { color: rgba(213,168,74,.66) !important; }
-#nowplay{
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
-  opacity: 0; transition: opacity .35s ease; pointer-events: none;
-}
-#nowplay.show{ opacity: 1; }
-#letterbox{ transition: opacity .45s ease; }
-#letterbox.hidden{ opacity: 0; }
-#story{ overflow-y:auto; overflow-x:hidden; position:relative; }
-.glow-success:hover, .glow-fail:hover {
-  text-shadow: 0 0 10px rgba(213,168,74,.85), 0 0 18px rgba(213,168,74,.45);
-}
-.gloss::after { content: '' !important; } /* suppress ? icon */
-`;
-  document.head.appendChild(st);
-})();
-
-
-
 /* ------------------------------ fonts guard ------------------------------ */
 /* Ensures Cinzel / Josefin Sans are present even if the <head> link is missing */
 (function ensureFonts(){
@@ -615,32 +584,54 @@ function buildUI(){
     <div id="letterbox" class="letterbox hidden">
       <div class="bar top"></div><div class="bar bottom"></div>
     </div>
-    <div class="masthead">
-      <div class="brand-title u-double-underline">
-        <span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>
+    <header class="masthead">
+      <div class="masthead-rivet rail-left" aria-hidden="true"></div>
+      <div class="brand-lockup">
+        <span class="brand-kicker">The Dwarven Storyweaver</span>
+        <div class="brand-title u-double-underline" aria-label="Brassreach">
+          <span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>
+        </div>
+        <span class="brand-motto">Stories are woven into law</span>
       </div>
-      <div class="toolbar cardish frame">
+      <div class="toolbar cardish frame" aria-label="Story controls">
         <div class="controls">
-          <svg id="keysRing" viewBox="0 0 100 100" aria-label="Keys acquired">
-            <circle class="bg" cx="50" cy="50" r="40" />
-            <circle id="keysArc" class="arc" cx="50" cy="50" r="40" />
-          </svg>
-          <button id="btnEnd" class="btn">End the Story</button>
-          <button id="btnSettings" class="btn">Settings</button>
-          <span class="tag">Engine: <b id="engineTag">Local</b></span>
+          <div class="keys-meter" title="Keys acquired">
+            <svg id="keysRing" viewBox="0 0 100 100" aria-label="Keys acquired">
+              <circle class="ticks" cx="50" cy="50" r="46" />
+              <circle class="bg" cx="50" cy="50" r="40" />
+              <circle id="keysArc" class="arc" cx="50" cy="50" r="40" />
+              <circle class="hub" cx="50" cy="50" r="24" />
+            </svg>
+            <span class="keys-copy"><small>Relic circuit</small><strong>Keys</strong></span>
+          </div>
+          <div class="command-actions">
+            <button id="btnEnd" class="btn">End the Story</button>
+            <button id="btnSettings" class="btn">Settings</button>
+          </div>
+          <span class="tag engine-status"><i aria-hidden="true"></i>Engine <b id="engineTag">Local</b></span>
         </div>
       </div>
-    </div>
+      <div class="masthead-rivet rail-right" aria-hidden="true"></div>
+    </header>
 
-    <div class="pacing" id="pacing"><div class="chip" data-i="0">Explore</div><div class="chip" data-i="1">Light Check</div><div class="chip" data-i="2">Explore</div><div class="chip" data-i="3">Risk Choice</div></div>
+    <div class="pacing" id="pacing" aria-label="Story cadence"><div class="chip" data-i="0">Explore</div><div class="chip" data-i="1">Light Check</div><div class="chip" data-i="2">Explore</div><div class="chip" data-i="3">Risk Choice</div></div>
 
     <div class="main">
       <section class="storywrap">
-        <div id="story" class="story-scroll frame"></div>
+        <div class="panel-heading story-heading">
+          <span class="panel-kicker">Active Thread</span>
+          <span class="panel-rule" aria-hidden="true"></span>
+          <span class="panel-mark" aria-hidden="true">◆</span>
+        </div>
+        <div id="story" class="story-scroll frame" role="log" aria-live="polite" aria-label="Story transcript"></div>
         <div class="choices frame">
+          <div class="panel-heading choice-heading">
+            <span class="panel-kicker">Choose Your Measure</span>
+            <span class="panel-rule" aria-hidden="true"></span>
+          </div>
           <div id="choices"></div>
           <div class="free">
-            <input id="freeText" placeholder="Write your own action (e.g., search the alcove, read the tablet)" />
+            <input id="freeText" aria-label="Write your own action" placeholder="Write your own action — search the alcove, read the tablet…" />
             <button id="btnAct" class="btn gold">ACT</button>
             <button id="btnCont" class="btn">Continue story</button>
           </div>
@@ -649,19 +640,19 @@ function buildUI(){
 
       <aside class="side">
         <div class="card deco frame">
-          <h3 style="text-align:center;">Character <button id="btnEdit" class="btn mini">Edit</button></h3>
+          <h3><span>Character</span><button id="btnEdit" class="btn mini">Edit</button></h3>
           <div id="charPanel" class="centered"></div>
         </div>
         <div class="card deco frame">
-          <h3 style="text-align:center;">Ledger</h3>
+          <h3><span>Ledger</span></h3>
           <div id="ledgerPanel" class="centered"></div>
         </div>
         <div class="card deco frame">
-          <h3 style="text-align:center;">Session</h3>
-          <div class="centered" style="line-height:1.6">
-            <div>Seed: <span id="seedVal"></span></div>
-            <div>Turn: <span id="turnVal"></span></div>
-            <div>Scene: <span id="sceneVal"></span></div>
+          <h3><span>Session</span></h3>
+          <div class="centered session-grid">
+            <div><span>Seed</span><strong id="seedVal"></strong></div>
+            <div><span>Turn</span><strong id="turnVal"></strong></div>
+            <div><span>Scene</span><strong id="sceneVal"></strong></div>
           </div>
         </div>
       </aside>
@@ -928,19 +919,22 @@ function renderAll(){
 
   // Character (no Bag here; moved to Ledger)
   Engine.el.charPanel.innerHTML = `
-    <div><b>${esc(C.name)}</b></div>
-    <div>${esc(C.race)}</div>
-    <div>STR ${C.STR} (${fmt(modFrom(C.STR))}) — DEX ${C.DEX} (${fmt(modFrom(C.DEX))})</div>
-    <div>INT ${C.INT} (${fmt(modFrom(C.INT))}) — CHA ${C.CHA} (${fmt(modFrom(C.CHA))})</div>
-    <div>HP ${C.HP} — Gold ${C.Gold}</div>`;
+    <div class="identity"><b>${esc(C.name)}</b><span>${esc(C.race)}</span></div>
+    <div class="stat-grid">
+      <div><span>STR</span><strong>${C.STR}</strong><small>${fmt(modFrom(C.STR))}</small></div>
+      <div><span>DEX</span><strong>${C.DEX}</strong><small>${fmt(modFrom(C.DEX))}</small></div>
+      <div><span>INT</span><strong>${C.INT}</strong><small>${fmt(modFrom(C.INT))}</small></div>
+      <div><span>CHA</span><strong>${C.CHA}</strong><small>${fmt(modFrom(C.CHA))}</small></div>
+    </div>
+    <div class="vitals"><span>HP <b>${C.HP}</b></span><span>Gold <b>${C.Gold}</b></span></div>`;
 
   // Ledger — inventory always visible; other lines appear only when relevant
   const lines = [];
-  lines.push(`<div>Inventory: ${C.inventory.map(esc).join(', ')||'—'}</div>`);
-  if (F.rumors) lines.push(`<div>Rumors heard: yes</div>`);
-  if ((F.keys||[]).length) lines.push(`<div>Keys: ${(F.keys||[]).map(esc).join(', ')}</div>`);
-  if (F.bossReady) lines.push(`<div>Gate ready: yes</div>`);
-  if (F.bossDealtWith) lines.push(`<div>Unfathomer dealt with: yes</div>`);
+  lines.push(`<div class="ledger-line"><span>Inventory</span><b>${C.inventory.map(esc).join(', ')||'—'}</b></div>`);
+  if (F.rumors) lines.push(`<div class="ledger-line"><span>Rumors heard</span><b>Yes</b></div>`);
+  if ((F.keys||[]).length) lines.push(`<div class="ledger-line"><span>Keys</span><b>${(F.keys||[]).map(esc).join(', ')}</b></div>`);
+  if (F.bossReady) lines.push(`<div class="ledger-line"><span>Gate ready</span><b>Yes</b></div>`);
+  if (F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Unfathomer dealt with</span><b>Yes</b></div>`);
   Engine.el.ledgerPanel.innerHTML = lines.join('');
 
 
