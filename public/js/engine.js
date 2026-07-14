@@ -1,14 +1,6 @@
-// public/js/engine.js
-// v13c — intro right-pane + chevrons; animated motes (fX); fixed Scroll modal; removed Highlight Terms;
-// edit modal blue+gold fields; now-playing fade; vignette fade; story box bottom line fixed;
-// glossary '?' suppressed; roll glyphs gold/crimson with hover bloom.
-// Built from your attached engine.js + prior merged foundation. Date: 2025-08-21
-
-// public/js/engine.js
-// v13b — toolbar trimmed (End / Settings), brand "Brassreach", floating SVG Scroll,
-// Ledger panel (Inventory + revealed keys/rumors/gate/boss), scene-based BGM,
-// per-slide intro typewriter, success/fail/story SFX, silent continue, death modal,
-// injected glossary tooltips with edge-aware positioning.
+// Brassreach browser game engine
+// v19 — Visual Overhaul #2: mirrored intro, field harness, equipment persistence,
+// realistic material treatments, and layered foundry-hearth intro music.
 
 import { makeWeaver } from './weaver.js';
 
@@ -46,19 +38,53 @@ const store={
   clearProject(){ PROJECT_STORAGE_KEYS.forEach(k=>this.del(k)); }
 };
 
+/* ---------- inventory & equipment ---------- */
+const EQUIPMENT_SLOTS = [
+  ['head','Head'], ['chest','Chest'], ['hands','Hands'], ['legs','Legs'],
+  ['feet','Feet'], ['mainHand','Main Hand'], ['offHand','Off Hand'], ['accessory','Accessory']
+];
+const ITEM_CATALOG = new Map([
+  ['torch',              {slot:'offHand',   glyph:'\u2736', kind:'Tool'}],
+  ['canteen',            {slot:'accessory', glyph:'\u25d6', kind:'Provision'}],
+  ['oil flask',          {slot:'accessory', glyph:'\u25c7', kind:'Provision'}],
+  ['rope coil',          {slot:'accessory', glyph:'\u221e', kind:'Tool'}],
+  ['lockpin',            {slot:'accessory', glyph:'\u2020', kind:'Tool'}],
+  ['surveyor hood',      {slot:'head',      glyph:'\u2303', kind:'Armor'}],
+  ['riveted workcoat',   {slot:'chest',     glyph:'\u25c8', kind:'Armor'}],
+  ['foundry gloves',     {slot:'hands',     glyph:'\u2726', kind:'Armor'}],
+  ['slateweave trousers',{slot:'legs',      glyph:'\u2161', kind:'Armor'}],
+  ['cistern boots',      {slot:'feet',      glyph:'\u2229', kind:'Armor'}],
+  ['warden pick',        {slot:'mainHand',  glyph:'\u2692', kind:'Weapon'}],
+  ['echo buckler',       {slot:'offHand',   glyph:'\u25c9', kind:'Shield'}],
+  ['measure ring',       {slot:'accessory', glyph:'\u2299', kind:'Relic'}]
+]);
+const blankEquipment=()=>Object.fromEntries(EQUIPMENT_SLOTS.map(([key])=>[key,null]));
+const cleanInventory=list=>[...new Set((Array.isArray(list)?list:[]).map(x=>String(x).trim()).filter(Boolean))];
+function itemMeta(name){ return ITEM_CATALOG.get(String(name||'').toLowerCase()) || {slot:'accessory',glyph:'\u25c7',kind:'Curio'}; }
+function normalizeEquipment(equipment,inventory){
+  const owned=new Set(cleanInventory(inventory));
+  const next=blankEquipment(), used=new Set();
+  for(const [slot] of EQUIPMENT_SLOTS){
+    const item=equipment?.[slot];
+    if(item && owned.has(item) && !used.has(item) && itemMeta(item).slot===slot){ next[slot]=item; used.add(item); }
+  }
+  return next;
+}
+
 /* ---------- state ---------- */
 function defaults(){
   return {
     seed:rnd(1,9_999_999), turn:0, scene:'Halls',
     storyBeats:[], transcript:[],
     character:{ name:'Eldan', race:'Dwarf', STR:12,DEX:14,INT:12,CHA:10, HP:14, Gold:5, inventory:['Torch','Canteen'] },
+    equipment:blankEquipment(),
     flags:{ rumors:false, keys:[], bossReady:false, bossDealtWith:false },
     _choiceHistory:[], _lastChoices:[], _undoStack:[], _arcStep:0, _pendingType:false,
     settings:{ typewriter:true, cps:40, audio:{ master:0.5, ui:0.45, music:0.5, sfx_success:true, sfx_fail:true, sfx_story:true } },
     live:{ on:store.get('dm_on',false), endpoint:store.get('dm_ep','/dm-turn') }
   };
 }
-const Engine={ el:{}, state: defaults() };
+const Engine={ el:{}, state: defaults(), inventoryDraft:[], selectedInventoryItem:null };
 window.Engine=Engine;
 
 // --- Now Playing chip controller (ephemeral) -------------------------
@@ -80,11 +106,11 @@ window.setNowPlaying = (title)=>{
 
 /* ---------- background music manager (file-based, crossfades) ---------- */
 const BGM = (function(){
-  let ctx, bus, cur=null, curGain=null, fadeMs=1400;
+  let ctx, bus, cur=[], curGain=null, fadeMs=1400;
   let currentName=null, targetName=null, requestToken=0;
   let unlocked=false, pendingName=null;
   const tracks = {
-    intro:    { title:"Overture of the Foundry", srcs:["./public/audio/034842c5-ddc2-4b5c-abc3-bff6ab9c455f.mp3"] },
+    intro:    { title:"Lament at the Foundry Hearth", srcs:["./public/audio/intro-hearth-lament.mp3"], layerSrcs:["./public/audio/intro-fire-crackle.ogg"] },
     prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a"] },
     halls:    { title:"Halls of the Brassreach", srcs:["./public/audio/8b264fe3-26f0-4c6c-9356-60a270d2ef21.mp3"] },
     depths2:  { title:"When the Unfathomer Stirs", srcs:["./public/audio/66bf880d-6cea-470f-8dba-7de081c046fa.mp3"] },
@@ -102,7 +128,14 @@ const BGM = (function(){
         const res = await fetch(url, {cache:"force-cache"}); if(!res.ok) continue;
         const arr = await res.arrayBuffer();
         const buf = await C.decodeAudioData(arr.slice(0));
-        const o = {buffer: buf}; cache.set(name,o); return o;
+        const layers=[];
+        for(const layerUrl of (t.layerSrcs||[])){
+          try{
+            const layerRes=await fetch(layerUrl,{cache:"force-cache"});
+            if(layerRes.ok) layers.push(await C.decodeAudioData((await layerRes.arrayBuffer()).slice(0)));
+          }catch{}
+        }
+        const o = {buffers:[buf,...layers]}; cache.set(name,o); return o;
       }catch(e){}
     }
     return null;
@@ -110,17 +143,20 @@ const BGM = (function(){
   function setBus(v){ if(bus) bus.gain.value=v; }
   async function crossTo(name){
     if(!unlocked){ pendingName=name; return; }
-    if(name===targetName || (name===currentName && cur)) return;
+    if(name===targetName || (name===currentName && cur.length)) return;
     targetName=name;
     const token=++requestToken;
     try{
       const data = await load(name);
       if(!data || token!==requestToken){ if(token===requestToken) targetName=currentName; return; }
       const C = ctx || getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.music ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
-      // next source
-      const src = C.createBufferSource(); src.buffer=data.buffer; src.loop=true;
-      const ng = C.createGain(); ng.gain.value=0; src.connect(ng).connect(bus); const now=C.currentTime;
-      src.start(now+0.02);
+      // A track may contain synchronized layers (the intro music and its hearth recording).
+      const ng = C.createGain(); ng.gain.value=0; ng.connect(bus); const now=C.currentTime;
+      const nextSources=data.buffers.map((buffer,index)=>{
+        const src=C.createBufferSource(); src.buffer=buffer; src.loop=true;
+        const layerGain=C.createGain(); layerGain.gain.value=index===0?1:.34;
+        src.connect(layerGain).connect(ng); src.start(now+0.02); return src;
+      });
       const fade = Math.max(0.10, fadeMs/1000);
       ng.gain.cancelScheduledValues(now); ng.gain.setValueAtTime(0, now); ng.gain.linearRampToValueAtTime(1, now+fade);
       if(curGain){
@@ -129,9 +165,9 @@ const BGM = (function(){
         curGain.gain.linearRampToValueAtTime(0, now+fade);
       }
       const prev = cur;
-      cur = src; curGain = ng;
+      cur = nextSources; curGain = ng;
       currentName=name;
-      if(prev){ setTimeout(()=>{ try{ prev.stop(); }catch{} }, fade*1000+120); }
+      if(prev.length){ setTimeout(()=>prev.forEach(source=>{ try{ source.stop(); }catch{} }), fade*1000+120); }
       const t=tracks[name]; if(t) setNowPlaying(t.title);
     }catch(e){
       if(token===requestToken) targetName=currentName;
@@ -140,14 +176,14 @@ const BGM = (function(){
   }
   function stop(){
     try{
-      if(cur){
-        const source=cur, gain=curGain, C=ctx||getCtx(), now=C.currentTime;
+      if(cur.length){
+        const sources=cur, gain=curGain, C=ctx||getCtx(), now=C.currentTime;
         gain.gain.cancelScheduledValues(now);
         gain.gain.linearRampToValueAtTime(0, now+.25);
-        setTimeout(()=>{ try{source.stop()}catch{} }, 360);
+        setTimeout(()=>sources.forEach(source=>{ try{source.stop()}catch{} }), 360);
       }
     }catch{}
-    cur=null; curGain=null; currentName=null; targetName=null; pendingName=null; requestToken++;
+    cur=[]; curGain=null; currentName=null; targetName=null; pendingName=null; requestToken++;
   }
   function updateForState(S){
     const introOpen = !!(Engine.el?.intro && !Engine.el.intro.classList.contains('hidden'));
@@ -174,6 +210,8 @@ const BGM = (function(){
 
 const Sound = (()=>{
   let ctx, master, ui;
+  const inventoryBuffers=new Map();
+  const inventoryUrls={pickup:'./public/audio/inventory-pickup.wav',place:'./public/audio/inventory-place.wav',reject:'./public/audio/inventory-reject.wav'};
   const ensure = ()=>{
     if (ctx) return;
     ctx = new (window.AudioContext||window.webkitAudioContext)();
@@ -210,8 +248,23 @@ const Sound = (()=>{
   o1.connect(g); o2.connect(g); g.connect(ui);
   o1.start(t); o2.start(t); o1.stop(t+3.3); o2.stop(t+3.3);
 };
+  const inventory=async(kind)=>{
+    ensure(); resume();
+    try{
+      let buffer=inventoryBuffers.get(kind);
+      if(!buffer){
+        const response=await fetch(inventoryUrls[kind],{cache:'force-cache'});
+        if(!response.ok) throw new Error('inventory audio unavailable');
+        buffer=await ctx.decodeAudioData((await response.arrayBuffer()).slice(0));
+        inventoryBuffers.set(kind,buffer);
+      }
+      const source=ctx.createBufferSource(), gain=ctx.createGain();
+      source.buffer=buffer; gain.gain.value=kind==='reject'?.42:.58;
+      source.connect(gain).connect(ui); source.start();
+    }catch{ sfx(kind==='reject'?'fail':'story'); }
+  };
   const ambOn = ()=>ensure(); // for legacy calls
-  return {click, sfx, gong, ambOn, setLevels, resume, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
+  return {click, sfx, gong, inventory, ambOn, setLevels, resume, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
@@ -581,9 +634,6 @@ function buildUI(){
     <div class="crest" aria-hidden="true"></div>
     <div id="glow" aria-hidden="true"></div>
     <div id="fx" aria-hidden="true"></div>
-    <div id="letterbox" class="letterbox hidden">
-      <div class="bar top"></div><div class="bar bottom"></div>
-    </div>
     <header class="masthead">
       <div class="masthead-rivet rail-left" aria-hidden="true"></div>
       <div class="brand-lockup">
@@ -608,18 +658,15 @@ function buildUI(){
             <button id="btnEnd" class="btn">End the Story</button>
             <button id="btnSettings" class="btn">Settings</button>
           </div>
-          <span class="tag engine-status"><i aria-hidden="true"></i>Engine <b id="engineTag">Local</b></span>
         </div>
       </div>
       <div class="masthead-rivet rail-right" aria-hidden="true"></div>
     </header>
 
-    <div class="pacing" id="pacing" aria-label="Story cadence"><div class="chip" data-i="0">Explore</div><div class="chip" data-i="1">Light Check</div><div class="chip" data-i="2">Explore</div><div class="chip" data-i="3">Risk Choice</div></div>
-
     <div class="main">
       <section class="storywrap">
         <div class="panel-heading story-heading">
-          <span class="panel-kicker">Active Thread</span>
+          <span id="sceneHeading" class="panel-kicker scene-title">Halls</span>
           <span class="panel-rule" aria-hidden="true"></span>
           <span class="panel-mark" aria-hidden="true">◆</span>
         </div>
@@ -639,9 +686,14 @@ function buildUI(){
       </section>
 
       <aside class="side">
-        <div class="card deco frame">
+        <div class="card deco frame character-card">
           <h3><span>Character</span><button id="btnEdit" class="btn mini">Edit</button></h3>
-          <div id="charPanel" class="centered"></div>
+          <div id="charPanel" class="character-rig"></div>
+        </div>
+        <div class="card deco frame hotbar-card">
+          <h3><span>Field Kit</span><kbd>E</kbd></h3>
+          <div id="hotbarPanel" class="hotbar" aria-label="Owned items"></div>
+          <button id="btnInventory" class="inventory-open">Open full inventory <span>E</span></button>
         </div>
         <div class="card deco frame">
           <h3><span>Ledger</span></h3>
@@ -652,7 +704,7 @@ function buildUI(){
           <div class="centered session-grid">
             <div><span>Seed</span><strong id="seedVal"></strong></div>
             <div><span>Turn</span><strong id="turnVal"></strong></div>
-            <div><span>Scene</span><strong id="sceneVal"></strong></div>
+            <div><span>Keys</span><strong id="keysVal"></strong></div>
           </div>
         </div>
       </aside>
@@ -687,13 +739,43 @@ function buildUI(){
         <label>HP  <input id="edHP"  type="number" min="4" max="30"></label>
         <label>Gold<input id="edGold"type="number" min="0" max="999"></label>
       </div>
-      <label>Inventory (comma separated) <input id="edInv"></label>
-      <div class="modal-actions">
-        <button id="btnAuto" class="btn">Auto-generate</button>
-        <span style="flex:1"></span>
-        <button id="btnEditSave" class="btn gold">Save</button>
-        <button id="btnEditCancel" class="btn">Cancel</button>
+      <div class="inventory-editor">
+        <label for="edInvAdd">Inventory</label>
+        <div class="inventory-add-row"><input id="edInvAdd" placeholder="Add item"><button id="btnInvAdd" class="btn">Add item</button></div>
+        <div id="edInvList" class="inventory-edit-list" aria-live="polite"></div>
       </div>
+      <div class="modal-actions">
+        <button id="btnAuto" class="btn modal-auto">Auto-generate</button>
+        <div class="modal-confirm">
+          <button id="btnEditSave" class="btn gold">Save</button>
+          <button id="btnEditCancel" class="btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Equipment inventory -->
+  <div id="modalInventory" class="modal inventory-modal hidden" role="dialog" aria-modal="true" aria-labelledby="inventoryTitle">
+    <header><div><span class="modal-kicker">Brassreach Field Harness</span><strong id="inventoryTitle">Inventory &amp; Equipment</strong></div><button id="xInventory" class="closeX" aria-label="Close inventory">&#10005;</button></header>
+    <div class="content inventory-layout">
+      <section class="owned-items">
+        <div class="inventory-section-heading"><span>Pack Contents</span><small>Drag an item to a highlighted mount</small></div>
+        <div id="inventoryItems" class="inventory-items"></div>
+        <p class="inventory-help">Select an item, then choose its matching slot. Equipped items remain in your pack.</p>
+      </section>
+      <section class="equipment-board frame" aria-label="Equipment harness">
+        <div class="equipment-figure" aria-hidden="true">
+          <span class="figure-halo"></span><span class="figure-head"></span><span class="figure-body"></span><span class="figure-arm left"></span><span class="figure-arm right"></span><span class="figure-leg left"></span><span class="figure-leg right"></span>
+        </div>
+        <button class="equip-slot slot-head" data-slot="head"></button>
+        <button class="equip-slot slot-chest" data-slot="chest"></button>
+        <button class="equip-slot slot-hands" data-slot="hands"></button>
+        <button class="equip-slot slot-legs" data-slot="legs"></button>
+        <button class="equip-slot slot-feet" data-slot="feet"></button>
+        <button class="equip-slot slot-main" data-slot="mainHand"></button>
+        <button class="equip-slot slot-off" data-slot="offHand"></button>
+        <button class="equip-slot slot-accessory" data-slot="accessory"></button>
+      </section>
     </div>
   </div>
 
@@ -766,19 +848,23 @@ function buildUI(){
   if(!document.getElementById('storyBottomLine')){ const line=document.createElement('div'); line.id='storyBottomLine'; Object.assign(line.style,{position:'absolute',left:'0',right:'0',bottom:'0',height:'2px',boxShadow:'inset 0 -2px 0 0 rgba(213,168,74,.75)'}); Engine.el.story.appendChild(line);}
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
-  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.pacing=$('#pacing');
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.sceneHeading=$('#sceneHeading');
 
-  Engine.el.charPanel=$('#charPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
-  Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.sceneVal=$('#sceneVal');
+  Engine.el.charPanel=$('#charPanel'); Engine.el.hotbarPanel=$('#hotbarPanel'); Engine.el.ledgerPanel=$('#ledgerPanel');
+  Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.keysVal=$('#keysVal');
   Engine.el.btnEdit=$('#btnEdit');
+  Engine.el.btnInventory=$('#btnInventory');
   Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle');
 
   // character modal refs
   Engine.el.modalEdit=$('#modalEdit'); Engine.el.xEdit=$('#xEdit');
   Engine.el.edName=$('#edName'); Engine.el.edRace=$('#edRace');
   Engine.el.edSTR=$('#edSTR'); Engine.el.edDEX=$('#edDEX'); Engine.el.edINT=$('#edINT'); Engine.el.edCHA=$('#edCHA');
-  Engine.el.edHP=$('#edHP'); Engine.el.edGold=$('#edGold'); Engine.el.edInv=$('#edInv');
+  Engine.el.edHP=$('#edHP'); Engine.el.edGold=$('#edGold'); Engine.el.edInvAdd=$('#edInvAdd'); Engine.el.edInvList=$('#edInvList'); Engine.el.btnInvAdd=$('#btnInvAdd');
   Engine.el.btnAuto=$('#btnAuto'); Engine.el.btnEditSave=$('#btnEditSave'); Engine.el.btnEditCancel=$('#btnEditCancel');
+
+  Engine.el.modalInventory=$('#modalInventory'); Engine.el.xInventory=$('#xInventory'); Engine.el.inventoryItems=$('#inventoryItems');
+  Engine.el.equipSlots=$$('.equip-slot');
 
 Engine.el.modalSet=$('#modalSet'); Engine.el.xSet=$('#xSet');
   Engine.el.twOn=$('#twOn'); Engine.el.twCps=$('#twCps');
@@ -827,7 +913,8 @@ function hydrate(){
   delete savedAudio.drums;
   Engine.state = {
     ...d, ...saved,
-    character:{...d.character, ...(saved.character||{})},
+    character:{...d.character, ...(saved.character||{}), inventory:cleanInventory(saved.character?.inventory||d.character.inventory)},
+    equipment:normalizeEquipment(saved.equipment,saved.character?.inventory||d.character.inventory),
     flags:{...d.flags, ...savedFlags},
     settings:{...d.settings, ...(saved.settings||{}), audio:{...d.settings.audio, ...savedAudio}},
     live:{...d.live, ...(saved.live||{})},
@@ -836,6 +923,39 @@ function hydrate(){
     _undoStack:Array.isArray(saved._undoStack)?saved._undoStack:[],
     _arcStep:saved._arcStep||0
   };
+}
+
+function renderEditorInventory(){
+  if(!Engine.el.edInvList) return;
+  Engine.el.edInvList.innerHTML=Engine.inventoryDraft.length
+    ? Engine.inventoryDraft.map((item,index)=>`<span class="inventory-edit-chip"><span>${esc(item)}</span><button type="button" data-remove-item="${index}" aria-label="Remove ${esc(item)}">&#10005;</button></span>`).join('')
+    : '<span class="inventory-empty">No items in the field kit.</span>';
+}
+function addEditorItem(){
+  const value=(Engine.el.edInvAdd.value||'').trim(); if(!value) return;
+  if(!Engine.inventoryDraft.some(item=>item.toLowerCase()===value.toLowerCase())) Engine.inventoryDraft.push(value);
+  Engine.el.edInvAdd.value=''; renderEditorInventory(); Engine.el.edInvAdd.focus();
+}
+function isTypingTarget(target){ return !!target?.closest?.('input, textarea, select, [contenteditable="true"]'); }
+function inventoryOpen(){ return !!Engine.el.modalInventory && !Engine.el.modalInventory.classList.contains('hidden'); }
+function openInventory(){
+  if(!Engine.el.modalInventory || (Engine.el.intro && !Engine.el.intro.classList.contains('hidden'))) return;
+  if($$('.modal:not(.hidden)').some(modal=>modal!==Engine.el.modalInventory)) return;
+  Engine.selectedInventoryItem=null; renderInventory(); openModal(Engine.el.modalInventory);
+  Engine.el.modalInventory.querySelector('.inventory-item, .equip-slot, .closeX')?.focus();
+}
+function closeInventory(){ Engine.selectedInventoryItem=null; closeModal(Engine.el.modalInventory); }
+function equipItem(item,slot){
+  const S=Engine.state, owned=S.character.inventory.includes(item), valid=itemMeta(item).slot===slot;
+  if(!owned || !valid){ Sound.inventory('reject'); toast(`That item does not fit the ${EQUIPMENT_SLOTS.find(([key])=>key===slot)?.[1]||'mount'}.`); return false; }
+  for(const [key] of EQUIPMENT_SLOTS) if(S.equipment[key]===item) S.equipment[key]=null;
+  S.equipment[slot]=item; Engine.selectedInventoryItem=null;
+  store.set('dds_state',S); Sound.inventory('place'); renderAll(); return true;
+}
+function unequipSlot(slot){
+  if(!Engine.state.equipment[slot]) return;
+  Engine.state.equipment[slot]=null; Engine.selectedInventoryItem=null;
+  store.set('dds_state',Engine.state); Sound.inventory('place'); renderAll();
 }
 
 /* ---------- bind ---------- */
@@ -848,19 +968,57 @@ function bind(){
   Engine.el.btnEdit.onclick=()=>{ const C=S.character;
     Engine.el.edName.value=C.name; Engine.el.edRace.value=C.race||'Dwarf';
     Engine.el.edSTR.value=C.STR; Engine.el.edDEX.value=C.DEX; Engine.el.edINT.value=C.INT; Engine.el.edCHA.value=C.CHA;
-    Engine.el.edHP.value=C.HP; Engine.el.edGold.value=C.Gold; Engine.el.edInv.value=C.inventory.join(', ');
+    Engine.el.edHP.value=C.HP; Engine.el.edGold.value=C.Gold;
+    Engine.inventoryDraft=[...C.inventory]; Engine.el.edInvAdd.value=''; renderEditorInventory();
     open(Engine.el.modalEdit);
   };
   Engine.el.btnAuto.onclick=()=>{ autoGen(); Engine.el.btnEdit.onclick(); };
+  Engine.el.btnInvAdd.onclick=addEditorItem;
+  Engine.el.edInvAdd.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addEditorItem(); } });
+  Engine.el.edInvList.addEventListener('click',e=>{ const button=e.target.closest('[data-remove-item]'); if(!button) return; Engine.inventoryDraft.splice(+button.dataset.removeItem,1); renderEditorInventory(); });
   Engine.el.btnEditSave.onclick=()=>{ const C=S.character;
     C.name=Engine.el.edName.value||C.name; C.race=Engine.el.edRace.value||C.race;
     C.STR=+Engine.el.edSTR.value||C.STR; C.DEX=+Engine.el.edDEX.value||C.DEX; C.INT=+Engine.el.edINT.value||C.INT; C.CHA=+Engine.el.edCHA.value||C.CHA;
     C.HP=+Engine.el.edHP.value||C.HP; C.Gold=+Engine.el.edGold.value||C.Gold;
-    C.inventory=Engine.el.edInv.value.split(',').map(x=>x.trim()).filter(Boolean);
+    C.inventory=cleanInventory(Engine.inventoryDraft);
+    S.equipment=normalizeEquipment(S.equipment,C.inventory);
+    store.set('dds_state',S);
     close(Engine.el.modalEdit); renderAll();
   };
   Engine.el.btnEditCancel.onclick=()=>close(Engine.el.modalEdit);
   Engine.el.xEdit.onclick=()=>close(Engine.el.modalEdit);
+
+  // field kit and equipment harness
+  Engine.el.btnInventory.onclick=openInventory;
+  Engine.el.hotbarPanel.addEventListener('click',openInventory);
+  Engine.el.xInventory.onclick=closeInventory;
+  Engine.el.inventoryItems.addEventListener('click',e=>{
+    const item=e.target.closest('[data-item]'); if(!item) return;
+    Engine.selectedInventoryItem=item.dataset.item; Sound.inventory('pickup'); renderInventory();
+  });
+  Engine.el.inventoryItems.addEventListener('dragstart',e=>{
+    const item=e.target.closest('[data-item]'); if(!item) return;
+    Engine.selectedInventoryItem=item.dataset.item; e.dataTransfer.setData('text/plain',item.dataset.item); e.dataTransfer.effectAllowed='move'; Sound.inventory('pickup');
+    Engine.el.equipSlots.forEach(slot=>{
+      const compatible=itemMeta(Engine.selectedInventoryItem).slot===slot.dataset.slot;
+      slot.classList.toggle('compatible',compatible); slot.classList.toggle('incompatible',!compatible);
+    });
+  });
+  Engine.el.inventoryItems.addEventListener('dragend',()=>renderInventory());
+  Engine.el.equipSlots.forEach(slot=>{
+    slot.addEventListener('click',()=>{
+      const key=slot.dataset.slot;
+      if(Engine.selectedInventoryItem) equipItem(Engine.selectedInventoryItem,key); else unequipSlot(key);
+    });
+    slot.addEventListener('dragover',e=>{
+      const item=Engine.selectedInventoryItem; if(!item) return;
+      e.preventDefault();
+      const compatible=itemMeta(item).slot===slot.dataset.slot;
+      e.dataTransfer.dropEffect=compatible?'move':'none'; slot.classList.toggle('drag-ready',compatible);
+    });
+    slot.addEventListener('dragleave',()=>slot.classList.remove('drag-ready'));
+    slot.addEventListener('drop',e=>{ e.preventDefault(); slot.classList.remove('drag-ready'); equipItem(e.dataTransfer.getData('text/plain')||Engine.selectedInventoryItem,slot.dataset.slot); });
+  });
 
   // settings
   if(Engine.el.hcMode){ Engine.el.hcMode.onchange=()=>{ document.body.classList.toggle('hc', Engine.el.hcMode.checked); }; }
@@ -895,8 +1053,13 @@ function bind(){
   Engine.el.btnEpiRestart.onclick=()=>{ close(Engine.el.modalEpi); hardResetRun(); };
 
   // global overlay close
-  Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); };
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape') Engine.el.shade.onclick(); });
+  Engine.el.shade.onclick=()=>{ [Engine.el.modalEdit,Engine.el.modalInventory,Engine.el.modalSet,Engine.el.modalScroll,Engine.el.modalEpi].forEach(m=>m.classList.add('hidden')); Engine.el.shade.classList.add('hidden'); Engine.selectedInventoryItem=null; };
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ Engine.el.shade.onclick(); return; }
+    if(e.key.toLowerCase()==='e' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target)){
+      e.preventDefault(); inventoryOpen()?closeInventory():openInventory();
+    }
+  });
 
   // main actions
   Engine.el.btnCont.onclick=()=>{ if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(); return; } doNarrate({ sentence:'' }); }; // silent advance
@@ -913,13 +1076,42 @@ function bind(){
 }
 
 /* ---------- render ---------- */
+function renderInventory(){
+  const S=Engine.state, items=cleanInventory(S.character.inventory), E=S.equipment||blankEquipment();
+  const equipped=new Set(Object.values(E).filter(Boolean));
+  if(Engine.el.hotbarPanel){
+    Engine.el.hotbarPanel.classList.toggle('has-overflow',items.length>6);
+    Engine.el.hotbarPanel.innerHTML=items.length
+      ? items.map((item,index)=>{ const meta=itemMeta(item); return `<button class="hotbar-slot${equipped.has(item)?' equipped':''}" title="${esc(item)}"><span class="hotbar-index">${index+1}</span><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><span>${esc(item)}</span></button>`; }).join('')
+      : '<div class="inventory-empty">Your field kit is empty.</div>';
+  }
+  if(!Engine.el.inventoryItems) return;
+  Engine.el.inventoryItems.innerHTML=items.length
+    ? items.map(item=>{ const meta=itemMeta(item), selected=Engine.selectedInventoryItem===item; return `<button class="inventory-item${selected?' selected':''}${equipped.has(item)?' equipped':''}" draggable="true" data-item="${esc(item)}" aria-pressed="${selected}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><span class="item-copy"><strong>${esc(item)}</strong><small>${meta.kind} \u00b7 ${EQUIPMENT_SLOTS.find(([key])=>key===meta.slot)?.[1]||'Accessory'}</small></span>${equipped.has(item)?'<span class="equipped-mark">Mounted</span>':''}</button>`; }).join('')
+      : '<div class="inventory-empty">Nothing has been packed yet.</div>';
+  Engine.el.equipSlots.forEach(slot=>{
+    const key=slot.dataset.slot, label=EQUIPMENT_SLOTS.find(([name])=>name===key)?.[1]||key, item=E[key];
+    const selected=Engine.selectedInventoryItem, compatible=selected && itemMeta(selected).slot===key;
+    slot.classList.toggle('compatible',!!compatible); slot.classList.toggle('incompatible',!!selected&&!compatible);
+    slot.classList.toggle('occupied',!!item);
+    slot.innerHTML=`<span class="slot-label">${label}</span><strong>${item?esc(item):'Empty mount'}</strong>`;
+    slot.title=item?'Select to unequip':compatible?`Equip ${selected}`:`${label} equipment slot`;
+  });
+}
+
 function renderAll(){
   const s=Engine.state, C=s.character, F=s.flags;
-  $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn; $('#sceneVal').textContent=s.scene;
+  $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn;
+  Engine.el.keysVal.textContent=`${(F.keys||[]).length} / 3`;
+  Engine.el.sceneHeading.textContent=s.scene;
 
-  // Character (no Bag here; moved to Ledger)
+  const mounted=EQUIPMENT_SLOTS.filter(([key])=>s.equipment?.[key]).slice(0,4);
   Engine.el.charPanel.innerHTML = `
     <div class="identity"><b>${esc(C.name)}</b><span>${esc(C.race)}</span></div>
+    <div class="rig-stage" aria-label="Live equipment view">
+      <div class="rig-silhouette" aria-hidden="true"><span class="rig-head"></span><span class="rig-torso"></span><span class="rig-arm left"></span><span class="rig-arm right"></span><span class="rig-leg left"></span><span class="rig-leg right"></span></div>
+      <div class="rig-readout">${mounted.length?mounted.map(([key,label])=>`<span><small>${label}</small>${esc(s.equipment[key])}</span>`).join(''):'<span class="unmounted"><small>Harness</small>No equipment mounted</span>'}</div>
+    </div>
     <div class="stat-grid">
       <div><span>STR</span><strong>${C.STR}</strong><small>${fmt(modFrom(C.STR))}</small></div>
       <div><span>DEX</span><strong>${C.DEX}</strong><small>${fmt(modFrom(C.DEX))}</small></div>
@@ -928,14 +1120,15 @@ function renderAll(){
     </div>
     <div class="vitals"><span>HP <b>${C.HP}</b></span><span>Gold <b>${C.Gold}</b></span></div>`;
 
-  // Ledger — inventory always visible; other lines appear only when relevant
+  renderInventory();
+
+  // The ledger records discoveries; possessions live in the field kit.
   const lines = [];
-  lines.push(`<div class="ledger-line"><span>Inventory</span><b>${C.inventory.map(esc).join(', ')||'—'}</b></div>`);
   if (F.rumors) lines.push(`<div class="ledger-line"><span>Rumors heard</span><b>Yes</b></div>`);
   if ((F.keys||[]).length) lines.push(`<div class="ledger-line"><span>Keys</span><b>${(F.keys||[]).map(esc).join(', ')}</b></div>`);
   if (F.bossReady) lines.push(`<div class="ledger-line"><span>Gate ready</span><b>Yes</b></div>`);
   if (F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Unfathomer dealt with</span><b>Yes</b></div>`);
-  Engine.el.ledgerPanel.innerHTML = lines.join('');
+  Engine.el.ledgerPanel.innerHTML = lines.join('') || '<div class="ledger-empty">No discoveries inscribed.</div>';
 
 
   // Keys ring arc
@@ -944,11 +1137,6 @@ function renderAll(){
     const dash = Math.max(0.0001, circ*frac);
     if(Engine.el.keysArc){ Engine.el.keysArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
   }catch{}
-  // Pacing chips
-  try{
-    if(Engine.el.pacing){ const k = s.turn % 4; Array.from(Engine.el.pacing.children).forEach((c,i)=>c.classList.toggle('on', i===k)); }
-  }catch{}
-
   // Story
 
   Engine.el.story.innerHTML='';
@@ -1069,7 +1257,11 @@ function applyTurn(resp,roll){
     Object.assign(S.flags,patch);
   }
   if(!Array.isArray(S.flags.keys)) S.flags.keys=[];
-  if(resp?.inventory_delta){ const add=resp.inventory_delta.add||[], rem=resp.inventory_delta.remove||[]; S.character.inventory=S.character.inventory.filter(x=>!rem.includes(x)).concat(add); }
+  if(resp?.inventory_delta){
+    const add=resp.inventory_delta.add||[], rem=resp.inventory_delta.remove||[];
+    S.character.inventory=cleanInventory(S.character.inventory.filter(x=>!rem.includes(x)).concat(add));
+    S.equipment=normalizeEquipment(S.equipment,S.character.inventory);
+  }
   if(typeof resp?.gold_delta==='number'){ S.character.Gold=Math.max(0,S.character.Gold+resp.gold_delta); }
   if(typeof resp?.hp_delta==='number'){ S.character.HP=Math.max(0,S.character.HP+resp.hp_delta); }
   if(resp?.scene) S.scene=resp.scene;
@@ -1090,7 +1282,6 @@ function applyTurn(resp,roll){
     S.turn++; renderAll(); BGM.updateForState(Engine.state); return;
   }
 
-  if(kind==='story'){ cinematicFocus(); }
   const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
   renderChoices(next); S.turn++; renderAll(); BGM.updateForState(Engine.state);
 }
@@ -1191,12 +1382,12 @@ function captureRunState(S){
   return JSON.parse(JSON.stringify({
     seed:S.seed, turn:S.turn, scene:S.scene,
     storyBeats:S.storyBeats, transcript:S.transcript,
-    character:S.character, flags:S.flags,
+    character:S.character, equipment:S.equipment, flags:S.flags,
     _choiceHistory:S._choiceHistory, _lastChoices:S._lastChoices,
     _arcStep:S._arcStep, _pendingType:false
   }));
 }
-function snapshotState(){ const S=Engine.state; return {character:S.character, flags:S.flags, scene:S.scene, turn:S.turn}; }
+function snapshotState(){ const S=Engine.state; return {character:S.character, equipment:S.equipment, flags:S.flags, scene:S.scene, turn:S.turn}; }
 function recentHistory(){ const T=Engine.state.transcript; return T.slice(Math.max(0,T.length-10)); }
 function fmt(n){ return (n>=0?'+':'')+n; }
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[c])); }
@@ -1230,7 +1421,7 @@ function sanitizeRichHTML(html){
   return output.innerHTML;
 }
 function autoGen(){ const n=['Eldan','Brassa','Keled','Varek','Moriah','Thrain','Ysolda','Kael']; const C=Engine.state.character;
-  C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.Gold=rnd(0,25); C.inventory=['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)); renderAll(); }
+  C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.Gold=rnd(0,25); C.inventory=['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)); Engine.state.equipment=blankEquipment(); renderAll(); }
 function toast(txt){ const t=document.createElement('div'); t.textContent=txt; Object.assign(t.style,{position:'fixed',bottom:'14px',left:'14px',background:'#1e1e28',color:'#fff',padding:'8px 10px',border:'1px solid #3a3a48',borderRadius:'6px',opacity:'0.96',zIndex:9999}); document.body.appendChild(t); setTimeout(()=>t.remove(),1200); }
 function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url); }
 
@@ -1328,7 +1519,7 @@ function getIntroScrollHTML(){
             <li><b>Pattern / Echo</b> — Memory, return, law, and recurrence.</li>
             <li><b>Line / Thread</b> — Decision, direction, and the path made binding.</li>
           </ul>
-          <p><b>Story cadence:</b> Tune → Name → Measure → Decide.</p>
+          <p>The city answers to four old Measures, but no path through them is predetermined.</p>
         </div>
       </div>
       <h5>Complications (Examples)</h5>
@@ -1349,12 +1540,6 @@ function closeModal(m){ if(!m) return; m.classList.add('hidden'); Engine.el.shad
   document.documentElement.style.setProperty('--ASSET', base + 'public/img/');
 })();
 
-/* ---------- cinematic focus (letterbox) ---------- */
-function cinematicFocus(){
-  const lb = document.getElementById('letterbox'); if(!lb) return;
-  lb.classList.remove('hidden'); lb.style.opacity='1';
-  setTimeout(()=>{ lb.style.opacity='0'; setTimeout(()=> lb.classList.add('hidden'), 480); }, 1220);
-}
 /* ---------- embers (JS-only; no CSS animations) ---------- */
 (function(){
   const controllers=new Map();
