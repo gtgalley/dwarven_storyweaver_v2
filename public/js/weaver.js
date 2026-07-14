@@ -20,7 +20,7 @@ export function makeWeaver(store, log, setTag){
       const data = await res.json();
       return data;
     }catch(err){
-      log(`Live DM failed (${err?.message||'error'}) — falling back to local.`);
+      log(`Live DM connection failed (${err?.message||'error'}). The local story engine will continue this turn.`);
       return local(payload);
     }
   }

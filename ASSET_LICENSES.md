@@ -46,3 +46,10 @@ attribution requirement. Credits are retained here for provenance.
     feedback; played through the existing UI/master audio controls.
 
 Source and license information was verified on 2026-07-14.
+
+## Visual & RPG Overhaul #3
+
+No new external runtime dependency, texture, artwork, font, music, or sound file
+was added in Overhaul #3. The inventory and equipment presentation is original
+HTML/CSS artwork informed only by classic action-RPG layout principles. It
+reuses the documented CC0 material textures and inventory sounds above.
