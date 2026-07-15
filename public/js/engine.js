@@ -1,6 +1,6 @@
 // Brassreach browser game engine
-// v20 — Visual & RPG Overhaul #3: fixed backpack, quality and relic data,
-// equipment comparison, clearer prose, and expanded accessibility feedback.
+// v21 — Master Lore Story Overhaul: canonical campaign, civic progression,
+// deterministic living Choice, and save-v5 migration.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -40,7 +40,7 @@ const store={
 };
 
 /* ---------- inventory & equipment ---------- */
-const SAVE_VERSION=4;
+const SAVE_VERSION=5;
 const BACKPACK_CAPACITY=40;
 const EQUIPMENT_SLOTS = [
   ['head','Head'], ['chest','Chest'], ['hands','Hands'], ['legs','Legs'],
@@ -62,10 +62,21 @@ const ITEM_CATALOG = new Map([
   ['cistern boots',defineItem('armor-cistern-boots','Cistern Boots','feet','\u2229','Armor','flawless',{power:0,armor:2,resilience:2},{DEX:11},58,'Keeps steady footing on flooded stone.','Deep-cut soles grip wet channels without scraping loud enough to carry.')],
   ['warden pick',defineItem('weapon-warden-pick','Warden Pick','mainHand','\u2692','Weapon','rare',{power:3,armor:0,resilience:0},{STR:11},48,'A compact war pick suited to armor and cracked masonry.','Wardens carry this balanced tool when repairs may become a fight.')],
   ['echo buckler',defineItem('shield-echo-buckler','Echo Buckler','offHand','\u25c9','Shield','flawless',{power:0,armor:3,resilience:1},{DEX:11},64,'Deflects blows and rings sharply when danger is near.','Concentric channels spread impact into a clear warning note.')],
-  ['measure ring',defineItem('relic-measure-ring','Measure Ring','accessory','\u2299','Relic','legendary',{power:1,armor:1,resilience:3},{INT:12},120,'Strengthens the wearer while they carry an unresolved oath.','Its four marks answer to Weight, Tone, Pattern, and Line.',true)],
+  ['measure ring',defineItem('relic-measure-ring','Measure Ring','accessory','\u2299','Relic','legendary',{power:1,armor:1,resilience:3},{INT:12},120,'Strengthens the wearer while they carry an unresolved civic duty.','Its three old marks preserve Weight, Tone, and Pattern; the unmarked center is left for living choice.',true)],
   ['archive lens',defineItem('tool-archive-lens','Archive Lens','accessory','\u25c9','Tool','rare',{power:0,armor:0,resilience:1},{INT:11},34,'Reveals altered ink, hairline cracks, and worn inscriptions.','Lithen keeps this silver-rimmed lens beside the restricted ledgers.')],
   ['resonance fork',defineItem('tool-resonance-fork','Resonance Fork','mainHand','\u03a8','Tool','flawless',{power:1,armor:0,resilience:2},{INT:11},56,'Tests pressure channels and isolates a clean mechanical tone.','Its twin prongs were tuned for the Gate crews before the lower works closed.')],
   ['saltglass salve',defineItem('provision-saltglass-salve','Saltglass Salve','accessory','\u2725','Provision','fine',{power:0,armor:0,resilience:1},{},16,'A field medicine that seals cuts and cools minor burns.','Pale mineral gel glows briefly when pressed into a wound.')],
+  ['surveyor’s chalk',defineItem('tool-surveyors-chalk','Surveyor’s Chalk','accessory','\u25eb','Tool','common',{power:0,armor:0,resilience:1},{INT:8},5,'Marks tested masonry, load paths, and a safe return route.','Dorrin issues each stick against a written public purpose.')],
+  ['thread ledger',defineItem('quest-thread-ledger','Thread Ledger','accessory','\u2261','Quest','rare',{power:0,armor:0,resilience:2},{INT:9},0,'Preserves witnessed findings and makes later alterations visible.','Thin brass leaves bind testimony, physical evidence, decisions, and consequences into one public record.',true)],
+  ['deep writ seal',defineItem('quest-deep-writ-seal','Deep Writ Seal','accessory','\u25c8','Quest','flawless',{power:0,armor:1,resilience:2},{},0,'Proves lawful access to restricted public works without granting command over their people.','Captain Brunna fixed the seal beside your probationary mark after your first joined account.',true)],
+  ['piera’s route map',defineItem('tool-pieras-route-map','Piera’s Route Map','accessory','\u2318','Tool','fine',{power:0,armor:0,resilience:1},{INT:9},14,'Reveals lived routes omitted from modern civic plans.','Stitched delivery scraps turn official blanks into useful, almost-true geography.')],
+  ['mender’s clamp',defineItem('tool-menders-clamp','Mender’s Clamp','accessory','\u2293','Tool','fine',{power:1,armor:0,resilience:1},{STR:9},18,'Holds a brace, gate, or housing at a controlled temporary setting.','Tangles repair crews favor this plain clamp over ornamental emergency gear.')],
+  ['salt-hound whistle',defineItem('tool-salt-hound-whistle','Salt-Hound Whistle','accessory','\u223f','Tool','fine',{power:0,armor:0,resilience:1},{CHA:9},12,'Carries a low handler call through drainage passages.','Its note is quiet to dwarven ears and clear to animals raised near resonant stone.')],
+  ['first register rubbing',defineItem('quest-first-register-rubbing','First Register Rubbing','accessory','\u25a4','Quest','legendary',{power:0,armor:0,resilience:2},{INT:10},0,'Carries the recovered founder calibration without risking the original record.','The pressure rubbing preserves the relationship among Stone, Brass, Echo, and living choice.',true)],
+  ['echo key',defineItem('quest-echo-key','Echo Key','accessory','\u25ce','Quest','legendary',{power:0,armor:0,resilience:3},{INT:11},0,'Provides a stable reference for Pattern, memory, and trustworthy return.','Archive custody keeps citywide history beyond the reach of any single office.',true)],
+  ['stone key',defineItem('quest-stone-key','Stone Key','accessory','\u25c6','Quest','legendary',{power:0,armor:2,resilience:2},{STR:10},0,'Makes load, burden, and structural consequence legible.','Mullinen custody binds the instrument to the public purpose of the works.',true)],
+  ['brass key',defineItem('quest-brass-key','Brass Key','accessory','\u25c7','Quest','legendary',{power:1,armor:0,resilience:2},{INT:10},0,'Carries a coherent tonal relationship through connected systems.','Choir and Works witness prevent the instrument from becoming one expert’s private command.',true)],
+  ['bent lockpin',defineItem('curio-bent-lockpin','Bent Lockpin','accessory','\u2020','Curio','common',{power:0,armor:0,resilience:0},{},2,'Documents the force required to stop the fused Brassworks flywheel.','The bent teeth are more useful as evidence than as a tool.')],
   ['stoneback plate',defineItem('armor-stoneback-plate','Stoneback Plate','chest','\u25a3','Armor','legendary',{power:1,armor:4,resilience:2},{STR:12},78,'Heavy natural armor shaped to turn crushing impacts.','The plate still carries the slow mineral warmth of the Depths.')]
 ]);
 const blankEquipment=()=>Object.fromEntries(EQUIPMENT_SLOTS.map(([key])=>[key,null]));
@@ -119,12 +130,15 @@ function normalizeEquipment(equipment,inventory){
 /* ---------- state ---------- */
 function defaultCampaign(){
   return {
-    version:CAMPAIGN_VERSION, sceneId:'halls-briefing', chapter:'halls', objective:CAMPAIGN_SCENES['halls-briefing'].objective,
-    completedScenes:[], completedEncounters:[], enteredScenes:[], discoveries:[], consequences:[], optionalCompleted:[],
-    alliances:{wardens:0,lithen:0,mullinen:0}, flags:{}, rerollsUsed:{}, exploration:{}, ending:null, bossPhase:0
+    version:CAMPAIGN_VERSION, sceneId:'tutorial-commission', chapter:'tutorial', objective:CAMPAIGN_SCENES['tutorial-commission'].objective,
+    completedScenes:[], completedEncounters:[], enteredScenes:[], discoveries:[], evidence:[], testimony:[], repairs:[], consequences:[], optionalCompleted:[], routes:[],
+    alliances:{wardens:0,worksfolk:0,piera:0,lithen:0,orra:0,choir:0,sella:0},
+    reputation:{accuracy:0,compassion:0,courage:0,humility:0},
+    authority:'Uncommissioned',writ:'none',flags:{},rerollsUsed:{},exploration:{},ending:null,bossPhase:0
   };
 }
-function defaultJournal(){ return {milestones:[], discoveries:[], consequences:[], optional:[]}; }
+function isProtectedInventoryItem(name){ const meta=itemMeta(name); return !!meta.relic||['Key','Quest'].includes(meta.category); }
+function defaultJournal(){ return {milestones:[],discoveries:[],evidence:[],testimony:[],repairs:[],consequences:[],optional:[]}; }
 function defaults(){
   return {
     saveVersion:SAVE_VERSION, seed:rnd(1,9_999_999), turn:0, scene:'Halls',
@@ -246,7 +260,11 @@ const BGM = (function(){
     if(S.turn < 2) return crossTo('prelude');
     const chapter=S.campaign?.chapter;
     if(chapter==='archives'||S.scene==='Archives') return crossTo('archives');
-    if(['depths','gate','unfathomer','epilogue'].includes(chapter)||S.scene==='Depths'){ if(S.flags?.bossDealtWith || S.flags?.bossReady || chapter==='gate' || chapter==='unfathomer') return crossTo('depths2'); return crossTo('depths'); }
+    if(chapter==='brassworks') return crossTo('depths');
+    if(['depths','gate','choice','epilogue'].includes(chapter)||S.scene==='Depths'){
+      if(S.flags?.bossDealtWith || chapter==='gate' || chapter==='choice') return crossTo('depths2');
+      return crossTo('depths');
+    }
     return crossTo('halls');
   }
   function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
@@ -331,21 +349,25 @@ const Weaver = makeWeaver(store,
 );
 // --- Global glossary (fallback for .gloss without data-def) ----------
 window.GLOSS = Object.assign({
-  "brassreach": "A dwarven city built in terraces above tuned caverns. Public deeds become part of its law.",
-  "unfathomer": "A deliberate underground tide that learns rhythms and presses against weak parts of the city.",
-  "halls": "Brassreach's upper civic tunnels and the first district you explore.",
-  "archives": "The city's record halls, where ledgers, oaths, and engineering charts are guarded.",
-  "depths": "Flooded galleries, sluice walks, and sealed Warden tunnels beneath the city.",
-  "gate of measures": "An ancient machine and covenant chamber where the Unfathomer can be confronted.",
-  "keys": "Stone, Brass, and Echo. Two awaken the Gate; all three unlock more possible outcomes.",
-  "brass key": "The Key of Tone and resonance. It activates the Gate's tuned mechanisms.",
-  "echo key": "The Key of Pattern and return. It activates the Gate's memory lattice.",
-  "stone key": "The Key of Weight, foundation, and oath. It activates the Gate's oath seats.",
-  "measures": "Four principles used to understand the city: Weight, Tone, Pattern, and Line.",
-  "weight": "Stone's Measure: oath, burden, foundation, and consequence.",
-  "tone": "Brass's Measure: resonance, harmony, and relationships between sounds.",
-  "pattern": "Echo's Measure: memory, return, law, and recurrence.",
-  "line": "Thread's Measure: a decision that fixes the direction of a path."
+  "brassreach": "A terraced dwarven city whose oldest works join water, stone, brass, and public stewardship.",
+  "threadbearers": "Civic investigators and witnesses who connect testimony, physical evidence, decisions, and consequences in a public record.",
+  "thread-bearers": "Civic investigators and witnesses who connect testimony, physical evidence, decisions, and consequences in a public record.",
+  "thread ledger": "A tamper-evident public record carried by Threadbearers. Later changes remain visible.",
+  "deep writ": "Authority to inspect restricted public works and compel records without granting command over workers or residents.",
+  "unfathomer": "Lithen’s name for a continuous living resonance distributed through water, stone, brass, and the oldest works below Brassreach.",
+  "halls": "Upper civic corridors and inspection works forming the threshold to the old city below.",
+  "archives": "The repository of civic law, testimony, engineering history, Threadbearer records, and the Echo Key.",
+  "depths": "Flooded foundations, pressure stairs, and cistern galleries beneath the public works.",
+  "gate of measures": "A founder-era calibration mechanism, constitutional safeguard, teaching instrument, and passage into the deepest network.",
+  "keys": "Stone, Brass, and Echo are institutional calibration instruments. Divided custody prevents one office from making a citywide change alone.",
+  "brass key": "The calibration instrument for Tone: active resonance and relationships among systems.",
+  "echo key": "The calibration instrument for Pattern: memory, change, and trustworthy return.",
+  "stone key": "The calibration instrument for Weight: load, burden, foundation, and consequence.",
+  "measures": "Weight, Tone, and Pattern make the old works legible; living Choice supplies a responsible direction.",
+  "weight": "What a structure, institution, or decision must carry, and who bears the consequence.",
+  "tone": "The working relationship among voices, materials, mechanisms, and resonant systems.",
+  "pattern": "What returns across time, including memory, maintenance, precedent, and change.",
+  "founding covenant": "Brassreach’s early civic constitution. It is not a pact with the Unfathomer."
 }, window.GLOSS||{});
 
 /* ---------- boot ---------- */
@@ -385,19 +407,6 @@ export function boot(){
     }
   });
 } // <-- end boot()
-
-
-
-/* ------------------------------ fonts guard ------------------------------ */
-/* Ensures Cinzel / Josefin Sans are present even if the <head> link is missing */
-(function ensureFonts(){
-  if (document.querySelector('link[href*="fonts.googleapis.com"]')) return;
-  const p1 = document.createElement('link'); p1.rel='preconnect'; p1.href='https://fonts.googleapis.com';
-  const p2 = document.createElement('link'); p2.rel='preconnect'; p2.href='https://fonts.gstatic.com'; p2.crossOrigin='';
-  const lf = document.createElement('link'); lf.rel='stylesheet';
-  lf.href='https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Josefin+Sans:wght@400;600;700&display=swap';
-  document.head.append(p1, p2, lf);
-})();
 
 
 
@@ -666,8 +675,8 @@ Engine.el.fxIntroCtl = FX.start('fxIntro');
   // IMPORTANT: use relative paths so GH Pages serves from the project root
   const ART = {
     0: 'public/img/intro/intro_city_baked.png',
-    1: 'public/img/intro/intro_unfathomer_baked.png',
-    2: 'public/img/intro/intro_gate_baked.png'
+    1: 'public/img/materials/stone-scuffed.jpg',
+    2: 'public/img/materials/brass-scratched.jpg'
   };
 
   Object.entries(ART).forEach(([i, url])=>{
@@ -714,14 +723,14 @@ function buildUI(){
       </div>
       <div class="toolbar cardish frame" aria-label="Story controls">
         <div class="controls">
-          <div class="keys-meter" title="Keys acquired">
-            <svg id="keysRing" viewBox="0 0 100 100" aria-label="Keys acquired">
+          <div class="keys-meter" title="Field authority">
+            <svg id="keysRing" viewBox="0 0 100 100" aria-label="Field authority progress">
               <circle class="ticks" cx="50" cy="50" r="46" />
               <circle class="bg" cx="50" cy="50" r="40" />
               <circle id="keysArc" class="arc" cx="50" cy="50" r="40" />
               <circle class="hub" cx="50" cy="50" r="24" />
             </svg>
-            <span class="keys-copy"><small>Relic circuit</small><strong>Keys</strong></span>
+            <span class="keys-copy"><small id="meterKicker">Field authority</small><strong id="meterLabel">Writ</strong></span>
           </div>
           <div class="command-actions">
             <button id="btnEnd" class="btn">End the Story</button>
@@ -742,7 +751,7 @@ function buildUI(){
         <div id="story" class="story-scroll frame" role="log" aria-live="polite" aria-label="Story transcript"></div>
         <div class="choices frame">
           <div class="panel-heading choice-heading">
-            <span class="panel-kicker">Choose Your Measure</span>
+            <span class="panel-kicker">Choose Your Course</span>
             <span class="panel-rule" aria-hidden="true"></span>
             <span id="weaveStatus" class="weave-status" role="status">Ready</span>
           </div>
@@ -771,7 +780,7 @@ function buildUI(){
           <button id="btnInventory" class="inventory-open">Open full inventory <span>E</span></button>
         </div>
         <div class="card deco frame">
-          <h3><span>Ledger</span></h3>
+          <h3><span>Thread Ledger</span></h3>
           <div id="ledgerPanel" class="centered"></div>
         </div>
         <div class="card deco frame">
@@ -779,7 +788,7 @@ function buildUI(){
           <div class="centered session-grid">
             <div><span>Seed</span><strong id="seedVal"></strong></div>
             <div><span>Turn</span><strong id="turnVal"></strong></div>
-            <div><span>Keys</span><strong id="keysVal"></strong></div>
+            <div><span id="sessionProgressLabel">Writ</span><strong id="keysVal"></strong></div>
           </div>
           <div id="saveStatus" class="save-status" role="status"><span aria-hidden="true"></span> Stored locally</div>
         </div>
@@ -953,10 +962,10 @@ function buildUI(){
   Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
   Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
-  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.sceneHeading=$('#sceneHeading');
+  Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.meterKicker=$('#meterKicker'); Engine.el.meterLabel=$('#meterLabel'); Engine.el.sceneHeading=$('#sceneHeading');
 
   Engine.el.charPanel=$('#charPanel'); Engine.el.charHeaderName=$('#charHeaderName'); Engine.el.charHeaderRace=$('#charHeaderRace'); Engine.el.hotbarPanel=$('#hotbarPanel'); Engine.el.ledgerPanel=$('#ledgerPanel'); Engine.el.objectivePanel=$('#objectivePanel'); Engine.el.btnJournal=$('#btnJournal');
-  Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.keysVal=$('#keysVal');
+  Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.keysVal=$('#keysVal'); Engine.el.sessionProgressLabel=$('#sessionProgressLabel');
   Engine.el.saveStatus=$('#saveStatus'); Engine.el.weaveStatus=$('#weaveStatus'); Engine.el.toastRegion=$('#toastRegion');
   Engine.el.btnEdit=$('#btnEdit');
   Engine.el.btnInventory=$('#btnInventory');
@@ -1014,19 +1023,37 @@ function mountScrollFab(){
 /* ---------- storage ---------- */
 const uniqueText=list=>[...new Set((Array.isArray(list)?list:[]).filter(value=>typeof value==='string'&&value.trim()).map(value=>value.trim()))];
 function inferCampaignScene(saved){
-  if(saved?.flags?.bossDealtWith) return 'unfathomer-decision';
+  const legacyScene=saved?.campaign?.sceneId||'';
+  const migrated={
+    'halls-briefing':'tutorial-commission','halls-quartermaster':'tutorial-quartermaster','halls-floodgate':'tutorial-floodgate','halls-culvert':'halls-omitted-route',
+    'archives-entry':'archives-entry','archives-lithen':'archives-lithen','archives-ledgers':'archives-first-register','archives-guardian':'archives-restoration','archives-vault':'archives-echo-key',
+    'depths-descent':'depths-descent','depths-mullinen':'depths-lower-watch','depths-crossing':'depths-cistern-crossing','depths-salvager':'brassworks-sella','depths-crawler':'brassworks-crawler','depths-shrine':'depths-foundation','depths-brassworks':'brassworks-anchor',
+    'gate-approach':'gate-approach','gate-alignment':'gate-weight','unfathomer-weight':'gate-weight','unfathomer-tone':'gate-tone','unfathomer-pattern':'gate-pattern','unfathomer-decision':'choice-decision'
+  };
+  if(migrated[legacyScene]) return migrated[legacyScene];
+  if(saved?.flags?.bossDealtWith) return 'choice-decision';
   if(saved?.flags?.bossReady) return 'gate-approach';
-  if(saved?.scene==='Depths') return 'depths-mullinen';
-  if(saved?.scene==='Archives') return 'archives-lithen';
-  return 'halls-briefing';
+  if(saved?.scene==='Depths') return 'depths-descent';
+  if(saved?.scene==='Archives') return 'archives-entry';
+  return 'tutorial-commission';
 }
 function normalizeCampaign(savedCampaign,saved){
-  const d=defaultCampaign(), raw=savedCampaign||{}, sceneId=CAMPAIGN_SCENES[raw.sceneId]?raw.sceneId:inferCampaignScene(saved);
+  const d=defaultCampaign(), raw=savedCampaign||{}, currentVersion=raw.version===CAMPAIGN_VERSION;
+  const sceneId=currentVersion&&CAMPAIGN_SCENES[raw.sceneId]?raw.sceneId:inferCampaignScene({...saved,campaign:raw});
+  const oldEnding=raw.ending;
+  const migratedEnding=oldEnding&&oldEnding.id==='bargain'?{...oldEnding,id:'channel',title:'Channel — Migrated Resolution'}:oldEnding;
+  const chapter=CAMPAIGN_SCENES[sceneId].chapter,legacyFlags={...d.flags,...(raw.flags||{})};
+  const inferredDeep=!['tutorial'].includes(chapter),migratedWrit=raw.writ||(inferredDeep?'deep':'probationary'),migratedAuthority=raw.authority||(inferredDeep?'Threadbearer under Deep Writ':'Probationary Threadbearer');
+  if(['depths','brassworks','gate','choice'].includes(chapter)){ legacyFlags.unfathomerNamed=true; legacyFlags.keysKnown=true; }
+  if(chapter==='archives'&&(sceneId==='archives-lithen'||sceneId==='archives-first-register'||sceneId==='archives-restoration'||sceneId==='archives-echo-key')){ legacyFlags.unfathomerNamed=true; legacyFlags.keysKnown=true; }
   return {
-    ...d,...raw,version:CAMPAIGN_VERSION,sceneId,chapter:CAMPAIGN_SCENES[sceneId].chapter,objective:raw.objective||CAMPAIGN_SCENES[sceneId].objective,
+    ...d,...raw,version:CAMPAIGN_VERSION,sceneId,chapter,objective:currentVersion&&raw.objective?raw.objective:CAMPAIGN_SCENES[sceneId].objective,
     completedScenes:uniqueText(raw.completedScenes),completedEncounters:uniqueText(raw.completedEncounters),enteredScenes:uniqueText(raw.enteredScenes),
-    discoveries:uniqueText(raw.discoveries),consequences:uniqueText(raw.consequences),optionalCompleted:uniqueText(raw.optionalCompleted),
-    alliances:{...d.alliances,...(raw.alliances||{})},flags:{...d.flags,...(raw.flags||{})},rerollsUsed:{...(raw.rerollsUsed||{})},exploration:{...(raw.exploration||{})}
+    discoveries:uniqueText(raw.discoveries),evidence:uniqueText(raw.evidence),testimony:uniqueText(raw.testimony),repairs:uniqueText(raw.repairs),
+    consequences:uniqueText(raw.consequences),optionalCompleted:uniqueText(raw.optionalCompleted),routes:uniqueText(raw.routes),
+    alliances:{...d.alliances,...(raw.alliances||{})},reputation:{...d.reputation,...(raw.reputation||{})},
+    authority:migratedAuthority,writ:migratedWrit,flags:legacyFlags,
+    rerollsUsed:{...(raw.rerollsUsed||{})},exploration:{...(raw.exploration||{})},ending:migratedEnding||null
   };
 }
 function normalizeJournal(savedJournal,campaign){
@@ -1034,6 +1061,9 @@ function normalizeJournal(savedJournal,campaign){
   return {
     milestones:uniqueText(raw.milestones),
     discoveries:uniqueText([...(raw.discoveries||[]),...(campaign.discoveries||[])]),
+    evidence:uniqueText([...(raw.evidence||[]),...(campaign.evidence||[])]),
+    testimony:uniqueText([...(raw.testimony||[]),...(campaign.testimony||[])]),
+    repairs:uniqueText([...(raw.repairs||[]),...(campaign.repairs||[])]),
     consequences:uniqueText([...(raw.consequences||[]),...(campaign.consequences||[])]),
     optional:uniqueText([...(raw.optional||[]),...(campaign.optionalCompleted||[])])
   };
@@ -1094,7 +1124,7 @@ function setBusy(busy){
 function renderEditorInventory(){
   if(!Engine.el.edInvList) return;
   Engine.el.edInvList.innerHTML=Engine.inventoryDraft.length
-    ? Engine.inventoryDraft.map((item,index)=>`<span class="inventory-edit-chip"><span>${esc(item)}</span><button type="button" data-remove-item="${index}" aria-label="Remove ${esc(item)}">&#10005;</button></span>`).join('')
+    ? Engine.inventoryDraft.map((item,index)=>`<span class="inventory-edit-chip${isProtectedInventoryItem(item)?' protected':''}"><span>${esc(item)}</span>${isProtectedInventoryItem(item)?'<i>Recorded</i>':`<button type="button" data-remove-item="${index}" aria-label="Remove ${esc(item)}">&#10005;</button>`}</span>`).join('')
     : '<span class="inventory-empty">No items in the field kit.</span>';
 }
 function addEditorItem(){
@@ -1144,12 +1174,12 @@ function bind(){
   Engine.el.btnAuto.onclick=()=>{ autoGen(); Engine.el.btnEdit.onclick(); };
   Engine.el.btnInvAdd.onclick=addEditorItem;
   Engine.el.edInvAdd.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addEditorItem(); } });
-  Engine.el.edInvList.addEventListener('click',e=>{ const button=e.target.closest('[data-remove-item]'); if(!button) return; Engine.inventoryDraft.splice(+button.dataset.removeItem,1); renderEditorInventory(); });
+  Engine.el.edInvList.addEventListener('click',e=>{ const button=e.target.closest('[data-remove-item]'); if(!button) return; const index=+button.dataset.removeItem; if(isProtectedInventoryItem(Engine.inventoryDraft[index])) return; Engine.inventoryDraft.splice(index,1); renderEditorInventory(); });
   Engine.el.btnEditSave.onclick=()=>{ const C=S.character;
     C.name=Engine.el.edName.value||C.name; C.race=Engine.el.edRace.value||C.race;
     C.STR=+Engine.el.edSTR.value||C.STR; C.DEX=+Engine.el.edDEX.value||C.DEX; C.INT=+Engine.el.edINT.value||C.INT; C.CHA=+Engine.el.edCHA.value||C.CHA;
     C.HP=+Engine.el.edHP.value||C.HP; C.MaxHP=Math.max(C.HP,+C.MaxHP||C.HP); C.Gold=+Engine.el.edGold.value||C.Gold;
-    C.inventory=cleanInventory(Engine.inventoryDraft);
+    C.inventory=cleanInventory([...Engine.inventoryDraft,...C.inventory.filter(isProtectedInventoryItem)]);
     syncInventoryState(S);
     persistState('Character updated');
     close(Engine.el.modalEdit); renderAll();
@@ -1271,7 +1301,7 @@ function bind(){
   });
 
   // main actions
-  Engine.el.btnCont.onclick=()=>{ if(Engine.busy) return; if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(Engine.loadedSave); return; } const recommended=makeChoiceSet().find(choice=>choice.type!=='merchant')||makeChoiceSet()[0]; if(recommended) resolveChoice(recommended); };
+  Engine.el.btnCont.onclick=()=>{ if(Engine.busy) return; if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(Engine.loadedSave); return; } const recommended=makeChoiceSet().find(choice=>choice.type!=='merchant'&&(choice.type!=='ending'||requirementStatus(choice).ok))||makeChoiceSet()[0]; if(recommended) resolveChoice(recommended); };
   Engine.el.btnAct.onclick=()=>{ if(!Engine.busy) freeText(); };
   Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
 
@@ -1359,12 +1389,19 @@ function renderInventory(){
 function renderAll(){
   const s=Engine.state, C=s.character, F=s.flags;
   $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn;
-  Engine.el.keysVal.textContent=`${(F.keys||[]).length} / 3`;
+  const keysKnown=!!s.campaign?.flags?.keysKnown;
+  Engine.el.keysVal.textContent=keysKnown?`${(F.keys||[]).length} / 3`:(s.campaign?.writ==='deep'?'Deep Writ':'Probationary');
+  if(Engine.el.sessionProgressLabel) Engine.el.sessionProgressLabel.textContent=keysKnown?'Keys':'Writ';
+  if(Engine.el.meterKicker) Engine.el.meterKicker.textContent=keysKnown?'Calibration':'Field authority';
+  if(Engine.el.meterLabel) Engine.el.meterLabel.textContent=keysKnown?'Keys':(s.campaign?.writ==='deep'?'Deep Writ':'Writ');
+  const meter=Engine.el.keysArc?.closest('.keys-meter'),ring=Engine.el.keysArc?.closest('svg');
+  if(meter) meter.title=keysKnown?'Calibration Keys recovered':'Field authority';
+  if(ring) ring.setAttribute('aria-label',keysKnown?'Calibration Keys recovered':'Field authority progress');
   Engine.el.sceneHeading.textContent=s.scene;
   Engine.el.charHeaderName.textContent=C.name;
   Engine.el.charHeaderRace.textContent=C.race;
   if(Engine.el.objectivePanel){
-    const chapter=CAMPAIGN_CHAPTERS[s.campaign?.chapter]||CAMPAIGN_CHAPTERS.halls;
+    const chapter=CAMPAIGN_CHAPTERS[s.campaign?.chapter]||CAMPAIGN_CHAPTERS.tutorial;
     Engine.el.objectivePanel.innerHTML=`<span>${chapter.act} · ${chapter.label}</span><strong>${esc(s.campaign?.objective||'Awaiting a new commission.')}</strong>`;
   }
 
@@ -1391,17 +1428,19 @@ function renderAll(){
 
   // The ledger records discoveries; possessions live in the field kit.
   const lines = [];
-  if (F.rumors) lines.push(`<div class="ledger-line"><span>Rumors heard</span><b>Yes</b></div>`);
-  if ((F.keys||[]).length) lines.push(`<div class="ledger-line"><span>Keys</span><b>${(F.keys||[]).map(esc).join(', ')}</b></div>`);
-  if (F.bossReady) lines.push(`<div class="ledger-line"><span>Gate ready</span><b>Yes</b></div>`);
-  if (F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Unfathomer resolved</span><b>${esc(s.campaign?.ending?.title||'Yes')}</b></div>`);
-  (s.campaign?.discoveries||[]).slice(-2).forEach(discovery=>lines.push(`<div class="ledger-line"><span>Discovery</span><b>${esc(discovery)}</b></div>`));
+  lines.push(`<div class="ledger-line"><span>Authority</span><b>${esc(s.campaign?.authority||'Uncommissioned')}</b></div>`);
+  if((s.campaign?.evidence||[]).length) lines.push(`<div class="ledger-line"><span>Evidence</span><b>${s.campaign.evidence.length} joined entries</b></div>`);
+  if((s.campaign?.repairs||[]).length) lines.push(`<div class="ledger-line"><span>Repairs</span><b>${s.campaign.repairs.length} completed</b></div>`);
+  if(keysKnown&&(F.keys||[]).length) lines.push(`<div class="ledger-line"><span>Keys</span><b>${(F.keys||[]).map(esc).join(', ')}</b></div>`);
+  if(F.bossDealtWith) lines.push(`<div class="ledger-line"><span>Resolution</span><b>${esc(s.campaign?.ending?.title||'Recorded')}</b></div>`);
+  (s.campaign?.discoveries||[]).slice(-1).forEach(discovery=>lines.push(`<div class="ledger-line"><span>Finding</span><b>${esc(discovery)}</b></div>`));
   Engine.el.ledgerPanel.innerHTML = lines.join('') || '<div class="ledger-empty">No discoveries inscribed.</div>';
 
 
   // Keys ring arc
   try{
-    const keysCt = (F.keys||[]).length; const circ = 2*Math.PI*40; const frac = Math.min(1, keysCt/3);
+    const keysCt=(F.keys||[]).length,writProgress=s.campaign?.writ==='deep'?1:s.campaign?.writ==='probationary'?.45:0;
+    const circ = 2*Math.PI*40; const frac = keysKnown?Math.min(1,keysCt/3):writProgress;
     const dash = Math.max(0.0001, circ*frac);
     if(Engine.el.keysArc){ Engine.el.keysArc.setAttribute('stroke-dasharray', `${dash} ${circ-dash}`); }
   }catch{}
@@ -1427,223 +1466,8 @@ function renderAll(){
   }
 }
 
-/* ---------- legacy prototype flow retained for save archaeology ---------- */
-function legacyBeginTale(preserveProgress=false){
-  const S=Engine.state;
-  S.turn=0; S.scene='Halls'; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
-  if(!preserveProgress) S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false};
-  else S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false,...S.flags};
-  appendBeat("Lanterns cast steady light across carved lintels and iron mosaics. Wardens report that the Unfathomer is rising through the buried cisterns. You stand at the entrance to the Halls, where three marked corridors lead deeper into Brassreach.");
-  renderChoices(makeChoiceSet(S.scene));
-  S.turn++; renderAll(); persistState('Journey begun'); BGM.updateForState(Engine.state);
-}
-function legacyEndTale(){
-  const S=Engine.state, C=S.character;
-  const ep = `Epilogue — You leave with ${C.Gold} gold and ${C.inventory.length} items. Keys recovered: ${S.flags.keys.join(', ')||'none'}. ` +
-    (S.flags.bossDealtWith?'The Unfathomer has fallen silent. For the first time in weeks, Brassreach sleeps without tremors.':'The Unfathomer still moves below the streets. In the ale halls, people speak of your descent and wonder whether you will return.');
-  appendBeat(ep); renderChoices([]); renderAll();
-  Engine.el.epiTitle.textContent='Epilogue';
-  Engine.el.epiContent.textContent=ep;
-  openModal(Engine.el.modalEpi);
-}
-function legacyUndoTurn(){
-  const S=Engine.state, previous=S._undoStack?.pop();
-  if(!previous){ toast('Nothing to undo'); return; }
-  Object.assign(S,previous,{_undoStack:S._undoStack});
-  renderChoices(makeChoiceSet(S.scene)); renderAll(); BGM.updateForState(S);
-}
-
-function legacyHardResetRun(){
-  const S=Engine.state, fresh=defaults();
-  fresh.settings={...fresh.settings,...S.settings,audio:{...fresh.settings.audio,...S.settings.audio}};
-  fresh.live={...fresh.live,...S.live};
-  Object.keys(S).forEach(k=>delete S[k]);
-  Object.assign(S,fresh);
-  beginTale();
-  store.set('dds_state',S);
-  toast('New run started');
-}
-
-/* ---------- choices ---------- */
-function legacyRenderChoices(choices){
-  const list=Engine.el.choiceList; if(!list) return;
-
-  if (!Array.isArray(Engine.state._choiceHistory)) Engine.state._choiceHistory=[];
-  if (!Array.isArray(Engine.state._lastChoices))   Engine.state._lastChoices=[];
-
-  const hist=Engine.state._choiceHistory, pool=[...(choices||[])];
-  list.innerHTML='';
-  if(!pool.length){ Engine.state._lastChoices=[]; return; }
-  const fresh=pool.filter(c=>!hist.includes(c.id));
-  let picked=[];
-  if(fresh.length){ picked.push(pick(fresh)); const rest=pool.filter(c=>c.id!==picked[0].id); if(rest.length) picked.push(pick(rest)); }
-  else{ picked=[pick(pool)]; const second=pool.filter(c=>c.id!==picked[0]?.id); if(second.length) picked.push(pick(second)); }
-  hist.push(...picked.map(c=>c.id)); while(hist.length>10) hist.shift();
-
-  const prev=Engine.state._lastChoices;
-  if(picked.map(c=>c.sentence).join('|')===prev.join('|')) picked=modulateChoices(picked);
-  Engine.state._lastChoices=picked.map(c=>c.sentence);
-
-  picked.forEach(ch=>{
-    const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=ch.sentence;
-    btn.onclick=()=>{ Sound.click(); resolveChoice(ch); };
-    list.appendChild(btn);
-  });
-}
-function modulateChoices(arr){
-  const suffix=[' — carefully',' — quickly',' — without drawing attention',' — by a safer route'];
-  return arr.map(c=>({ ...c, sentence: c.sentence.replace(/\s+—.*$/,'') + suffix[rnd(0,suffix.length-1)] }));
-}
-
-/* ---------- narration ---------- */
-function legacyFreeText(){
-  const text=(Engine.el.freeText.value||'').trim(); if(!text) return;
-  Engine.el.freeText.value='';
-  const italic=`<em>${esc(text)}</em>`;
-  doNarrate({ sentence:`You attempt this action: ${italic}.` });
-}
-function legacyDoNarrate(ch){
-  if(Engine.busy) return; setBusy(true);
-  const payload={ action:ch.sentence, source:'narrate', stat:null, dc:null, passed:null, game_state:snapshotState(), history:recentHistory() };
-  Promise.resolve(Weaver.turn(payload, localTurn)).then(resp=>applyTurn(resp,null)).catch(()=>applyTurn(localTurn(payload),null)).finally(()=>setBusy(false));
-}
-
-/* ---------- resolve ---------- */
-function legacyResolveChoice(ch){
-  if(Engine.busy) return; setBusy(true);
-  const S=Engine.state, C=S.character;
-  const stat=ch.stat||'INT', mod=modFrom(C[stat]||10); const dc=clamp(11+rnd(-1,3),8,18); const r=rnd(1,20); const total=r+mod; const passed=(total>=dc);
-  const payload={ action:ch.sentence, source:'choice', stat, dc, passed, game_state:snapshotState(), history:recentHistory() };
-  Promise.resolve(Weaver.turn(payload, localTurn)).then(resp=>applyTurn(resp,{r,mod,dc,total})).catch(()=>applyTurn(localTurn(payload),{r,mod,dc,total})).finally(()=>setBusy(false));
-}
-function applyTurn(resp,roll){
-  const S=Engine.state;
-  S._undoStack=S._undoStack||[];
-  S._undoStack.push(captureRunState(S));
-  while(S._undoStack.length>20) S._undoStack.shift();
-  if(resp?.flags_patch){
-    const patch={...resp.flags_patch};
-    if(!Array.isArray(patch.keys) && Array.isArray(patch.seals)) patch.keys=patch.seals;
-    delete patch.seals;
-    Object.assign(S.flags,patch);
-  }
-  if(!Array.isArray(S.flags.keys)) S.flags.keys=[];
-  if(resp?.inventory_delta){
-    const add=resp.inventory_delta.add||[], rem=resp.inventory_delta.remove||[];
-    S.character.inventory=cleanInventory(S.character.inventory.filter(x=>!rem.includes(x)).concat(add));
-    syncInventoryState(S);
-  }
-  if(typeof resp?.gold_delta==='number'){ S.character.Gold=Math.max(0,S.character.Gold+resp.gold_delta); }
-  if(typeof resp?.hp_delta==='number'){ S.character.HP=clamp(S.character.HP+resp.hp_delta,0,S.character.MaxHP||S.character.HP); }
-  if(resp?.scene) S.scene=resp.scene;
-  if(!S.flags.bossReady && S.flags.keys.length>=2) S.flags.bossReady=true;
-
-  const kind = roll ? (roll.total>=roll.dc ? 'success':'fail') : 'story';
-  const html = resp?.story_paragraph_html ? sanitizeRichHTML(resp.story_paragraph_html) : null;
-  appendBeat(resp?.story_paragraph || '(silence)', roll?`d20 ${roll.r} ${fmt(roll.mod)} vs DC ${roll.dc} ⇒ ${roll.total}`:null, kind, html);
-  Sound.sfx(kind);
-
-  if (S.character.HP<=0){
-    // modal epilogue
-    const dead = "Your strength fails, and your lantern falls dark. Word of your last stand reaches the upper city, but the Unfathomer continues to move below.";
-    Engine.el.epiTitle.textContent = 'Fallen in the Depths';
-    Engine.el.epiContent.textContent = dead;
-    openModal(Engine.el.modalEpi);
-    renderChoices([]);
-    S.turn++; renderAll(); persistState('Turn stored'); BGM.updateForState(Engine.state); return;
-  }
-
-  const next=(resp?.next_choices && resp.next_choices.length)?resp.next_choices:makeChoiceSet(S.scene);
-  renderChoices(next); S.turn++; renderAll(); persistState('Turn stored'); BGM.updateForState(Engine.state);
-}
-
-/* ---------- local DM with four-beat spine ---------- */
-function localTurn(payload){
-  const {action,passed,stat,source,game_state}=payload; const S=game_state;
-  const keys=S.flags.keys||[]; const have=new Set(keys);
-  let story=''; let flags_patch={}; let inv={add:[],remove:[]}; let gold_delta=0, hp_delta=0; let scene=S.scene;
-
-  if(source==='choice'){
-    if(passed){ if(rnd(1,10)<=4) gold_delta+=rnd(1,3); if(rnd(1,10)===1) hp_delta+=1; if(rnd(1,10)<=2) inv.add.push(pick(['Oil Flask','Lockpin','Rope Coil','Canteen'])); }
-    else{ hp_delta-= (rnd(1,10)<=7?1:2); if(rnd(1,10)<=2) gold_delta-=rnd(0,2); }
-  }
-
-  let award=null; if(source==='choice' && passed && have.size<3 && rnd(1,6)===1){ const pool=['Brass','Echo','Stone'].filter(x=>!have.has(x)); if(pool.length) award=pick(pool); }
-  if(award) flags_patch.keys=[...keys, award];
-
-  if(source==='narrate'){
-    const aText = stripHTML(action||'').trim();
-    if(scene==='Halls'){
-      const steps=[
-        "You examine the oldest chisel marks and find unused survey anchors. A clear echo confirms that the wall ahead is hollow, so you mark it with chalk.",
-        "You compare local rumors and draw a usable route: take the salt-covered stair, then follow the culvert where lantern smoke pulls sideways. A maintenance ledger should be waiting below.",
-        "A Warden's chalk note matches an Archivist's correction. Both records point to a cold iron door at the end of the lower passage."
-      ];
-      const seg = steps[Math.min(Engine.state._arcStep, steps.length-1)];
-      story = aText ? `${aText} ${seg}` : seg;
-      Engine.state._arcStep++; if(Engine.state._arcStep>=3){ scene='Archives'; }
-    }else if(scene==='Archives'){
-      const steps=[
-        "Air moves through the tall shelves with a low whistle. You copy a cadence chart that marks three safe chambers and one dangerous ventilation shaft.",
-        "Lithen's notes describe a trial in the cistern fields. Her warning is clear: enter with a working channel map and never answer a voice you cannot locate.",
-        "A technical drawing shows three collars on the Gate of Measures. Each is labeled for one Key: Stone, Brass, or Echo."
-      ];
-      const seg = steps[Math.min(Engine.state._arcStep-3, steps.length-1)];
-      story = aText ? `${aText} ${seg}` : seg;
-      Engine.state._arcStep++; if(Engine.state._arcStep>=6){ scene='Depths'; }
-    }else if(scene==='Depths'){
-      const steps=[
-        "The air grows cold, and water strikes the channel walls in steady pulses. You test the stone ahead and confirm that it can bear your weight.",
-        "Two water channels meet here, but silt blocks the left branch. You clear the obstruction, and the machinery below resumes a steady hum.",
-        "The Gate of Measures stands in the next gallery. Its three collars are dark, and its iron handwheel has not moved in years."
-      ];
-      const seg = steps[Math.min(Engine.state._arcStep-6, steps.length-1)];
-      story = aText ? `${aText} ${seg}` : seg;
-      Engine.state._arcStep++;
-      if(!S.flags.bossReady && (keys.length>=2)) flags_patch.bossReady=true;
-      if(Engine.state._arcStep>=9 && (S.flags.bossReady || (flags_patch.bossReady===true))) story+=" The Gate is ready. Your next decision may determine the fate of the city.";
-    }else{
-      const seg = "The corridor ends at a junction. Water is rising, so you must choose a route quickly.";
-      story = aText ? `${aText} ${seg}` : seg;
-    }
-  }
-
-  if(!story){
-    const success={STR:"You force the obstacle aside and clear the route.", DEX:"You cross without making enough noise to draw attention.", INT:"You identify the pattern and choose the correct mechanism.", CHA:"Your direct argument wins cooperation."}[stat||'INT'];
-    const fail={STR:"The mechanism holds, and the effort leaves you exposed.", DEX:"Loose grit slides under your boot and alerts a nearby patrol.", INT:"You follow the wrong sequence and trigger a warning bell.", CHA:"Your argument fails, and the other party ends the discussion."}[stat||'INT'];
-    const tail=award?` The ${award} Key unlocks and warms in your hand.`:"";
-    const rumor=" You also learn that the strongest disturbances come from the eastern cisterns."; flags_patch.rumors = true;
-    story=`${stripHTML(action||'')}${action?' ':''}${passed?success:fail}${tail}${rumor}`;
-  }
-
-  const next_choices=makeChoiceSet(scene);
-  return { story_paragraph:story, flags_patch, inventory_delta:inv, gold_delta, hp_delta, scene, next_choices };
-}
-
-/* ---------- choice pools ---------- */
-function legacyMakeChoiceSet(scene){
-  const sets={
-    Halls:[
-      {id:'h-int', sentence:'Study the water pulses and find a safe crossing (INT)', stat:'INT'},
-      {id:'h-str', sentence:'Brace the flood gate while the water rises (STR)', stat:'STR'},
-      {id:'h-cha', sentence:'Persuade the clerk to release restricted maps (CHA)', stat:'CHA'},
-      {id:'h-dex', sentence:'Slip past the patrol and reach the culvert maps (DEX)', stat:'DEX'}
-    ],
-    Depths:[
-      {id:'d-str', sentence:'Force the gate open far enough to pass (STR)', stat:'STR'},
-      {id:'d-int', sentence:'Set the correct Measure on the gate controls (INT)', stat:'INT'},
-      {id:'d-cha', sentence:'Address the Unfathomer and offer clear terms (CHA)', stat:'CHA'}
-    ],
-    Archives:[
-      {id:'a-int', sentence:'Compare the ledgers and trace the missing shipment (INT)', stat:'INT'},
-      {id:'a-dex', sentence:'Climb quietly to the sealed upper shelves (DEX)', stat:'DEX'}
-    ]
-  };
-  return (sets[scene]||sets.Halls).slice(0);
-}
-
-/* ---------- authored campaign flow (overrides the legacy prototype above) ---------- */
-function currentScene(){ return CAMPAIGN_SCENES[Engine.state.campaign?.sceneId]||CAMPAIGN_SCENES['halls-briefing']; }
+/* ---------- authored campaign flow ---------- */
+function currentScene(){ return CAMPAIGN_SCENES[Engine.state.campaign?.sceneId]||CAMPAIGN_SCENES['tutorial-commission']; }
 function addJournal(kind,text){
   if(!text) return;
   const C=Engine.state.campaign,J=Engine.state.journal,campaignKey=kind==='optional'?'optionalCompleted':kind;
@@ -1667,12 +1491,18 @@ function applyEffects(effect={}){
   if(effect.key){
     S.flags.keys=uniqueText([...(S.flags.keys||[]),effect.key]);
     if(effect.keyReason) appendBeat(`${effect.keyReason} Key acquired: ${effect.key}.`,null,'story');
+    grantItem(`${effect.key} Key`,`The ${effect.key} calibration instrument is secured in your field case.`);
     toast(`${effect.key} Key recovered`);
   }
+  if(effect.authority) C.authority=effect.authority;
+  if(effect.writ) C.writ=effect.writ;
   if(effect.flag) C.flags[effect.flag]=true;
   Object.entries(effect.flags||{}).forEach(([key,value])=>{ C.flags[key]=value; });
   Object.entries(effect.alliance||{}).forEach(([key,value])=>{ C.alliances[key]=(C.alliances[key]||0)+value; });
-  addJournal('discoveries',effect.discovery); addJournal('consequences',effect.consequence); addJournal('optional',effect.optional); addJournal('milestones',effect.milestone);
+  Object.entries(effect.reputation||{}).forEach(([key,value])=>{ C.reputation[key]=(C.reputation[key]||0)+value; });
+  if(effect.route&&!C.routes.includes(effect.route)) C.routes.push(effect.route);
+  addJournal('discoveries',effect.discovery); addJournal('evidence',effect.evidence); addJournal('testimony',effect.testimony); addJournal('repairs',effect.repair);
+  addJournal('consequences',effect.consequence); addJournal('optional',effect.optional); addJournal('milestones',effect.milestone);
   S.flags.bossReady=(S.flags.keys||[]).length>=2;
 }
 function pushUndo(){
@@ -1694,11 +1524,12 @@ function beginTale(preserveProgress=false){
   S.turn=0; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
   if(!preserveProgress){ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false}; S.campaign=defaultCampaign(); S.journal=defaultJournal(); }
   else{ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false,...S.flags}; S.campaign=normalizeCampaign(S.campaign,S); S.journal=normalizeJournal(S.journal,S.campaign); }
-  enterScene(S.campaign.sceneId||'halls-briefing');
+  enterScene(S.campaign.sceneId||'tutorial-commission');
 }
 function endTale(){
   const S=Engine.state,C=S.character,ending=S.campaign.ending;
-  const ep=ending?.text||`You return from ${currentScene().title} with ${C.Gold} gold, ${C.inventory.length} carried items, and ${(S.flags.keys||[]).length} recovered Keys. The expedition remains unfinished, and the Unfathomer still waits below Brassreach.`;
+  const unresolved=S.campaign.flags?.unfathomerNamed?'The Unfathomer’s rise remains unresolved below Brassreach.':'The connected failures below Brassreach remain unexplained.';
+  const ep=ending?.text||`You retire the expedition at ${currentScene().title} with ${C.Gold} gold and ${C.inventory.length} carried items. ${unresolved}`;
   if(!ending) appendBeat(ep,null,'story'); renderChoices([]); renderAll();
   Engine.el.epiTitle.textContent=ending?.title||'Expedition Retired'; Engine.el.epiContent.textContent=ep; openModal(Engine.el.modalEpi);
 }
@@ -1721,22 +1552,48 @@ function choiceBonusBreakdown(ch){
     if(bonus.derived&&derivedStats(S)[bonus.derived]>=bonus.threshold) active=true;
     if(bonus.flag&&campaign.flags?.[bonus.flag]) active=true;
     if(bonus.alliance&&(campaign.alliances?.[bonus.alliance]||0)>0) active=true;
+    if(bonus.reputation&&(campaign.reputation?.[bonus.reputation]||0)>=(bonus.threshold||1)) active=true;
+    if(bonus.evidence&&campaign.evidence?.includes(bonus.evidence)) active=true;
+    if(bonus.testimony&&campaign.testimony?.includes(bonus.testimony)) active=true;
+    if(bonus.repair&&campaign.repairs?.includes(bonus.repair)) active=true;
     if(bonus.keys&&(S.flags.keys||[]).length>=bonus.keys) active=true;
     if(active){ total+=value; parts.push({label,value}); }
   }
   return {total,parts};
 }
+function campaignMetrics(){
+  const C=Engine.state.campaign;
+  return {
+    keys:(Engine.state.flags.keys||[]).length,
+    evidence:C.evidence?.length||0,
+    testimony:C.testimony?.length||0,
+    repairs:C.repairs?.length||0,
+    alliances:Object.values(C.alliances||{}).filter(value=>value>0).length,
+    reputation:Object.values(C.reputation||{}).reduce((sum,value)=>sum+(+value||0),0)
+  };
+}
+function requirementStatus(ch){
+  const metrics=campaignMetrics(),requirements=ch.requirements||{};
+  const missing=Object.entries(requirements).filter(([key,value])=>(metrics[key]||0)<value).map(([key,value])=>`${key} ${metrics[key]||0}/${value}`);
+  return {ok:missing.length===0,missing,metrics};
+}
 function modifierText(ch){
-  if(ch.type!=='check'&&ch.type!=='ending') return ch.type==='merchant'?'Merchant · buy and sell':'No roll';
+  if(ch.type==='ending'){
+    const requirement=requirementStatus(ch);
+    return requirement.ok?'Living Choice · outcome reflects your preparation':(ch.requirementText||`Missing: ${requirement.missing.join(', ')}`);
+  }
+  if(ch.type!=='check') return ch.type==='merchant'?'Merchant · buy and sell':'No roll';
   const active=choiceBonusBreakdown(ch).parts.map(part=>`${part.label} ${fmt(part.value)}`); return `DC ${ch.dc} · ${active.join(' · ')}`;
 }
 function renderChoices(choices){
   const list=Engine.el.choiceList; if(!list) return; list.innerHTML='';
   const pool=Array.isArray(choices)?choices:[]; Engine.state._lastChoices=pool.map(ch=>ch.id);
   pool.forEach((ch,index)=>{
+    const requirement=ch.type==='ending'?requirementStatus(ch):{ok:true};
     const btn=document.createElement('button'); btn.className=`choice-btn choice-${ch.type||'check'}${index===0?' recommended':''}`;
     btn.innerHTML=`<span class="choice-label">${esc(ch.label||ch.sentence)}</span><small>${esc(modifierText(ch))}</small>`;
-    btn.dataset.choiceId=ch.id; btn.onclick=()=>{ Sound.click(); resolveChoice(ch); }; list.appendChild(btn);
+    btn.dataset.choiceId=ch.id; btn.disabled=!requirement.ok; btn.setAttribute('aria-disabled',String(!requirement.ok));
+    btn.onclick=()=>{ Sound.click(); resolveChoice(ch); }; list.appendChild(btn);
   });
 }
 
@@ -1744,24 +1601,47 @@ function freeText(){ const text=(Engine.el.freeText.value||'').trim(); if(!text)
 function campaignExplorationText(ch){
   const S=Engine.state,scene=currentScene(),count=S.campaign.exploration[scene.id]||0;
   const context={
-    halls:['You find fresh boot marks leading toward the lower route, but no safer passage than the one already marked.','The nearby masonry is damp but stable. The next pressure pulse will arrive soon.'],
-    archives:['The shelves confirm the same transfer route recorded in the active objective. Nothing here changes the immediate danger.','A marginal note supports Lithen’s account and warns against delaying near the open shaft.'],
-    depths:['Cold water carries the Gate’s four-beat pulse through the floor. Your chosen route remains the only usable way forward.','You secure a loose strap and mark the return path. The hazard ahead has not moved.'],
-    gate:['The Gate answers with a low mechanical note. Its controls still await the decision named in your objective.'],
-    unfathomer:['The vast presence listens, but the current Measure remains unanswered.']
+    tutorial:['Your inspection confirms the immediate hazard but adds no new cause. You mark the safe route and return to the task in your ledger.','You hear the same low overtone through nearby stone. Its source remains unknown, and you record that limit.'],
+    halls:['A maintenance mark confirms that the route once continued below the modern plan. Your current objective remains the strongest lead.','The masonry is damp but stable for now. You add the observation without claiming it explains the wider failures.'],
+    archives:['A dated margin supports the sequence already in your ledger but does not change the next comparison Lithen requires.','The shelves preserve several competing explanations. You record the disagreement and keep the current task in view.'],
+    depths:['Cold water carries pressure through the floor in one broad movement. You secure the return path before continuing.','A Warden mark confirms the next safe brace. The larger rise remains unchanged by this brief inspection.'],
+    brassworks:['The silent machinery reveals another careful worker patch beneath a newer housing. It supports the existing repair plan without replacing it.','A faint interference beat remains in the floor. You mark its timing and return to the shared tuning sequence.'],
+    gate:['The Gate exposes another layer of load and repair history. Its current instrument still awaits the concrete calibration named in your objective.'],
+    choice:['The surrounding pressure changes with the stable interval but forms no words. The living Choice still depends on the preparation recorded by the Counter.']
   };
-  const lines=context[scene.chapter]||context.halls,line=lines[count%lines.length]; S.campaign.exploration[scene.id]=count+1;
+  const lines=context[scene.chapter]||context.tutorial,line=lines[count%lines.length]; S.campaign.exploration[scene.id]=count+1;
   return `You ${ch.sentence.replace(/^you\s+/i,'')}. ${line}`;
 }
 function commitExploration(text,html=null){ appendBeat(text,null,'story',html); Engine.state.turn++; renderAll(); persistState('Exploration stored'); }
+function liveCanonContext(){
+  const C=Engine.state.campaign,named=!!C.flags?.unfathomerNamed;
+  return {
+    canon_version:'master-lore-v1',scene_id:C.sceneId,chapter:C.chapter,unfathomer_name_known:named,
+    known_evidence:(C.evidence||[]).slice(-6),completed_repairs:(C.repairs||[]).slice(-6),current_objective:C.objective,
+    rules:[
+      'Narrate only the submitted exploratory action; do not advance the authored scene, award items, change stats, or resolve the objective.',
+      named?'The Unfathomer is continuous living resonance and cannot speak complex language.':'Do not use the name Unfathomer or reveal a hidden entity; the player knows only connected failures and a low overtone.',
+      'Do not introduce a Fourth Measure, Line Measure, stolen constitutional record, magical command, or speaking boss.',
+      'Use concrete action, visible consequence, and plain dramatic prose. Preserve uncertainty where the record is incomplete.'
+    ]
+  };
+}
+function liveNarrationIsCanonical(text){
+  const value=String(text||'');
+  const alwaysForbidden=[/Fourth Measure/i,/Line Measure/i,/stolen (?:register|record|covenant)/i,/command(?:ed|ing)? the Unfathomer/i,/Gate (?:was|is) built to (?:bind|imprison|control)/i,/Orra.{0,40}(?:badge|stole|theft)/i,/Unfathomer.{0,45}(?:says|said|asks|asked|speaks|spoke|whispers|replies)/i];
+  if(alwaysForbidden.some(pattern=>pattern.test(value))) return false;
+  if(!Engine.state.campaign.flags?.unfathomerNamed&&/\bUnfathomer\b/i.test(value)) return false;
+  return true;
+}
 function doNarrate(ch){
   if(Engine.busy) return; setBusy(true); pushUndo();
   const fallbackText=campaignExplorationText(ch);
   if(!Engine.state.live.on){ commitExploration(fallbackText); setBusy(false); return; }
-  const payload={action:ch.sentence,source:'narrate',stat:null,dc:null,passed:null,game_state:snapshotState(),history:recentHistory()};
+  const payload={action:ch.sentence,source:'narrate',stat:null,dc:null,passed:null,game_state:snapshotState(),history:recentHistory(),canon_context:liveCanonContext()};
   const fallback=()=>({story_paragraph:fallbackText});
   Promise.resolve(Weaver.turn(payload,fallback)).then(resp=>{
     const text=resp?.story_paragraph||fallbackText,html=resp?.story_paragraph_html?sanitizeRichHTML(resp.story_paragraph_html):null;
+    if(!liveNarrationIsCanonical(`${text} ${stripHTML(html||'')}`)){ toast('Live narration conflicted with the established record; the local account was used.','warning'); commitExploration(fallbackText); return; }
     commitExploration(stripHTML(text),html);
   }).catch(()=>commitExploration(fallbackText)).finally(()=>setBusy(false));
 }
@@ -1769,6 +1649,11 @@ function doNarrate(ch){
 function resolveChoice(ch){
   if(Engine.busy||!ch) return;
   if(ch.type==='merchant'){ openMerchant(ch.merchant); return; }
+  if(ch.type==='ending'){
+    const requirement=requirementStatus(ch);
+    if(!requirement.ok){ toast(`That course is not yet supported: ${requirement.missing.join(', ')}.`,'warning'); return; }
+    pushUndo(); finalizeEnding(ch.ending); return;
+  }
   pushUndo();
   if(ch.type==='advance'){ appendBeat(ch.outcome||'You move on.',null,'story'); applyEffects(ch.effects||{}); enterScene(ch.next); return; }
   setBusy(true);
@@ -1788,14 +1673,13 @@ function rollLabel(result){
 function completeCheckedChoice(ch,result,passed){
   markEncounter(ch); appendBeat(passed?(ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.'),rollLabel(result),passed?'success':'fail');
   const effects=ch.effects?(ch.effects[passed?'success':'failure']||{}):{}; applyEffects(effects); Sound.sfx(passed?'success':'fail');
-  if(ch.type==='ending'){ finalizeEnding(ch.ending,passed,result); return; }
   enterScene(passed?(ch.nextSuccess||ch.next):(ch.nextFail||ch.next));
 }
 function eligibleSacrifices(){
   const equipped=new Set(Object.values(Engine.state.equipment||{}).filter(Boolean));
-  return Engine.state.character.inventory.filter(name=>{ const meta=itemMeta(name); return !equipped.has(name)&&!meta.relic&&!['Key','Quest'].includes(meta.category); });
+  return Engine.state.character.inventory.filter(name=>!equipped.has(name)&&!isProtectedInventoryItem(name));
 }
-function failureCost(){ const order=['halls','archives','depths','gate','unfathomer'],index=Math.max(0,order.indexOf(Engine.state.campaign.chapter)); return 4+(index*2); }
+function failureCost(){ const order=['tutorial','halls','archives','depths','brassworks','gate','choice'],index=Math.max(0,order.indexOf(Engine.state.campaign.chapter)); return 4+(index*2); }
 function openLostEncounter(ch,result){
   const id=ch.encounter||ch.id,used=!!Engine.state.campaign.rerollsUsed[id],cost=failureCost(),items=eligibleSacrifices(); Engine.pendingFailure={ch,result,id,cost};
   Engine.el.lostContent.innerHTML=`<p id="lostSummary">${esc(ch.failure||'The attempt fails, but the expedition can continue.')}</p><div class="lost-roll"><span>Result</span><strong>${esc(rollLabel(result))}</strong></div><p class="lost-copy">Accept the consequence, or pay once to make a new attempt. Keys, relics, quest items, and equipped gear are protected.</p><div class="lost-options"><button class="btn gold" data-lost-action="gold" ${used||Engine.state.character.Gold<cost?'disabled':''}>Spend ${cost} gold<br><small>${used?'Reroll already used':`${Engine.state.character.Gold} available`}</small></button><button class="btn" data-lost-action="item" ${used||!items.length?'disabled':''}>Risk a random item<br><small>${items.length} eligible</small></button><button class="btn red" data-lost-action="accept">Accept consequence<br><small>The story moves forward</small></button></div>`;
@@ -1811,18 +1695,27 @@ function rerollFailure(method){
   const bonus=choiceBonusBreakdown(pending.ch),roll=rnd(1,20),total=roll+bonus.total+1,result={roll,total,dc:pending.ch.dc,bonus:{...bonus,parts:[...bonus.parts,{label:'resolve',value:1}]},passed:total>=pending.ch.dc},ch=pending.ch;
   closeLost(); completeCheckedChoice(ch,result,result.passed);
 }
-function finalizeEnding(id,passed,result){
-  const S=Engine.state,ending=ENDINGS[id]||ENDINGS.bind,keys=(S.flags.keys||[]).length; let text=passed?ending.success:ending.failure;
-  text+=keys===3?' With all three Keys intact, the Gate records the decision clearly and leaves no hidden clause.':' Two Keys were enough to decide the crisis, but the missing Tone circuit leaves part of the old mechanism unreadable.';
-  S.campaign.ending={id,title:ending.title,text,passed,roll:rollLabel(result)}; S.flags.bossDealtWith=true; S.campaign.objective='The expedition is complete.';
-  addJournal('milestones',ending.title); appendBeat(text,rollLabel(result),passed?'success':'fail'); renderChoices([]); S.turn++; renderAll(); persistState('Epilogue stored');
+function finalizeEnding(id){
+  const S=Engine.state,ending=ENDINGS[id]||ENDINGS.hold,metrics=campaignMetrics();
+  const strongByEnding={
+    concord:metrics.keys===3&&metrics.evidence>=9&&metrics.repairs>=7&&metrics.alliances>=4&&S.campaign.flags.fullRecord&&S.campaign.flags.networkImproved,
+    channel:metrics.keys===3&&metrics.evidence>=6&&metrics.repairs>=5,
+    bind:metrics.repairs>=5&&metrics.evidence>=5,
+    banish:metrics.evidence>=5&&metrics.testimony>=3,
+    hold:metrics.repairs>=4&&metrics.alliances>=3
+  };
+  const quality=strongByEnding[id]?'strong':'strained';
+  const counter=`Counter record: ${metrics.keys} Keys, ${metrics.evidence} evidence entries, ${metrics.testimony} witnessed accounts, ${metrics.repairs} completed repairs, and ${metrics.alliances} allied groups.`;
+  const text=`${ending[quality]} ${counter}`;
+  S.campaign.ending={id,title:ending.title,text,quality,metrics}; S.flags.bossDealtWith=true; S.campaign.objective='The expedition is complete.';
+  addJournal('milestones',ending.title); appendBeat(text,null,'story'); renderChoices([]); S.turn++; renderAll(); persistState('Epilogue stored');
   Engine.el.epiTitle.textContent=ending.title; Engine.el.epiContent.textContent=text; openModal(Engine.el.modalEpi); BGM.updateForState(S);
 }
 
 function openMerchant(id){ Engine.activeMerchant=MERCHANTS[id]; if(!Engine.activeMerchant) return; renderMerchant(); openModal(Engine.el.modalMerchant); }
 function merchantBuyPrice(name){ return Math.max(1,Math.ceil(itemMeta(name).value*.65)); }
 function merchantSellPrice(name){ return Math.max(1,Math.floor(itemMeta(name).value*.45)); }
-function canSell(name){ const meta=itemMeta(name); return !Object.values(Engine.state.equipment||{}).includes(name)&&!meta.relic&&!['Key','Quest'].includes(meta.category); }
+function canSell(name){ return !Object.values(Engine.state.equipment||{}).includes(name)&&!isProtectedInventoryItem(name); }
 function renderMerchant(){
   const merchant=Engine.activeMerchant;if(!merchant) return; const S=Engine.state; Engine.el.merchantTitle.textContent=merchant.name; Engine.el.merchantKicker.textContent=merchant.title;
   const stock=merchant.stock.map(name=>{ const meta=itemMeta(name),price=merchantBuyPrice(name),owned=S.character.inventory.includes(name); return `<article class="trade-item ${qualityClass(meta)}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><div><strong>${esc(name)}</strong><small>${QUALITY_LABEL[meta.quality]} ${esc(meta.category)} · ${price} gold</small><p>${esc(meta.mechanic)}</p></div><button class="btn mini" data-buy="${esc(name)}" ${owned||S.character.Gold<price?'disabled':''}>${owned?'Owned':'Buy'}</button></article>`; }).join('');
@@ -1832,9 +1725,10 @@ function renderMerchant(){
 function buyMerchantItem(name){ const price=merchantBuyPrice(name),S=Engine.state;if(S.character.Gold<price||S.character.inventory.includes(name)) return; S.character.Gold-=price; grantItem(name,`${Engine.activeMerchant.name} sells it to you for ${price} gold.`); persistState('Purchase stored'); renderAll(); renderMerchant(); Sound.inventory('place'); }
 function sellMerchantItem(name){ if(!canSell(name)) return; const S=Engine.state,price=merchantSellPrice(name); S.character.inventory=S.character.inventory.filter(item=>item!==name); S.character.Gold+=price; syncInventoryState(S); appendBeat(`${Engine.activeMerchant.name} buys ${name} for ${price} gold.`,null,'story'); persistState('Sale stored'); renderAll(); renderMerchant(); Sound.inventory('pickup'); }
 function renderJournal(){
-  const C=Engine.state.campaign,J=Engine.state.journal,scene=currentScene(),chapter=CAMPAIGN_CHAPTERS[C.chapter]||CAMPAIGN_CHAPTERS.halls;
+  const C=Engine.state.campaign,J=Engine.state.journal,scene=currentScene(),chapter=CAMPAIGN_CHAPTERS[C.chapter]||CAMPAIGN_CHAPTERS.tutorial,metrics=campaignMetrics();
   const section=(title,items,empty)=>`<section><h4>${title}</h4>${items.length?`<ol>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ol>`:`<p class="journal-empty">${empty}</p>`}</section>`;
-  Engine.el.journalContent.innerHTML=`<div class="journal-current"><span>${chapter.act} · ${chapter.label}</span><h3>${esc(scene.title)}</h3><p>${esc(C.objective)}</p></div><div class="journal-grid">${section('Milestones',J.milestones,'No milestones recorded yet.')}${section('Discoveries',J.discoveries,'No discoveries recorded yet.')}${section('Consequences',J.consequences,'No lasting consequences yet.')}${section('Optional Work',J.optional,'No optional work recorded yet.')}</div>`;
+  const standing=Object.entries(C.reputation||{}).map(([name,value])=>`<span><small>${esc(name)}</small><b>${value}</b></span>`).join('');
+  Engine.el.journalContent.innerHTML=`<div class="journal-current"><span>${chapter.act} · ${chapter.label}</span><h3>${esc(scene.title)}</h3><p>${esc(C.objective)}</p><div class="journal-summary"><span><small>Authority</small><b>${esc(C.authority)}</b></span><span><small>Evidence</small><b>${metrics.evidence}</b></span><span><small>Repairs</small><b>${metrics.repairs}</b></span><span><small>Allies</small><b>${metrics.alliances}</b></span></div><div class="journal-standing">${standing}</div></div><div class="journal-grid">${section('Milestones',J.milestones,'No milestones recorded yet.')}${section('Evidence',J.evidence,'No evidence joined yet.')}${section('Witnessed Accounts',J.testimony,'No testimony recorded yet.')}${section('Completed Repairs',J.repairs,'No repairs completed yet.')}${section('Discoveries',J.discoveries,'No discoveries recorded yet.')}${section('Consequences',J.consequences,'No lasting consequences yet.')}</div>`;
 }
 function openJournal(){ renderJournal(); openModal(Engine.el.modalJournal); }
 function makeChoiceSet(){ return currentScene().choices||[]; }
@@ -1889,7 +1783,8 @@ function sanitizeRichHTML(html){
   return output.innerHTML;
 }
 function autoGen(){ const n=['Eldan','Brassa','Keled','Varek','Moriah','Thrain','Ysolda','Kael']; const C=Engine.state.character;
-  C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.MaxHP=C.HP; C.Gold=rnd(0,25); C.inventory=['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)); Engine.state.equipment=blankEquipment(); syncInventoryState(Engine.state); renderAll(); }
+  const protectedItems=C.inventory.filter(isProtectedInventoryItem);
+  C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.MaxHP=C.HP; C.Gold=rnd(0,25); C.inventory=cleanInventory([...['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)),...protectedItems]); Engine.state.equipment=blankEquipment(); syncInventoryState(Engine.state); renderAll(); }
 function toast(txt,tone='info'){ const region=Engine.el.toastRegion||document.body; while(region.children.length>=4) region.firstElementChild?.remove(); const t=document.createElement('div'); t.className=`toast ${tone}`; t.textContent=txt; region.appendChild(t); requestAnimationFrame(()=>t.classList.add('show')); setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),240); },2400); }
 function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url); }
 
@@ -1938,7 +1833,7 @@ function getIntroSlidesHTML(){
     <section class="slide s1 active" data-side="img-left" aria-label="Slide 1">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Lanterns burn across the terraces of <span class="gloss" data-def="A tiered dwarven city built above reservoirs and service vaults.">Brassreach</span>. Beneath the streets lies the <span class="gloss" data-def="Service tunnels and machines beneath Brassreach.">under-works</span>, a network of tuned caverns built by the city's founders. Dwarves record important deeds as law, and the delvers who carry those records are called <span class="gloss" data-def="Delvers who record important deeds for the city.">thread-bearers</span>. You enter the <span class="gloss" data-def="The upper civic tunnels where new expeditions begin.">Halls</span>. Water moves beneath the floor, and old survey marks lead toward the <span class="gloss" data-def="Underground reservoirs that supply Brassreach.">cisterns</span>. Wardens test the walls for faults while Archivists record every warning. Brassreach needs someone willing to descend.</p>
+        <p>Lanterns burn across the terraces of <span class="gloss" data-def="A dwarven city whose oldest works join water, stone, brass, and shared stewardship.">Brassreach</span>. Its founders shaped natural caverns into reservoirs, foundations, and tuned public works. The city above depends on those systems, though many citizens rarely see them. Important failures are investigated by <span class="gloss" data-def="Civic investigators and witnesses who connect testimony, evidence, decisions, and consequences.">Threadbearers</span>. They carry a <span class="gloss" data-def="A public, tamper-evident record in which later changes remain visible.">Thread Ledger</span>, hear the people affected, test the physical cause, and preserve who chose what came next. Their work can guide civic law because it makes consequences difficult to hide.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introSkip1">Skip</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1947,7 +1842,7 @@ function getIntroSlidesHTML(){
     <section class="slide s2" data-side="img-left" aria-label="Slide 2">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Far below, the <span class="gloss" data-def="A powerful presence moving through the water and stone below the city.">Unfathomer</span> gathers in the dark. It behaves like a <span class="gloss" data-def="Many tones acting together as one force.">chorus</span> trained by centuries of bells. The <span class="gloss" data-def="The old law that kept the city’s channels and gates in tune.">Cadence Law</span> once kept it quiet, but poor repairs have broken the city's harmony. Three ancient instruments may restore control: the <span class="gloss" data-def="Stone, Brass, and Echo activate different parts of the Gate.">Three Keys</span>—<span class="gloss" data-def="Stone governs Weight, burden, and consequence.">Stone</span>, <span class="gloss" data-def="Brass governs Tone and harmony.">Brass</span>, and <span class="gloss" data-def="Echo governs Pattern, memory, and return.">Echo</span>. <span class="gloss" data-def="A Lower Stacks Archivist who believes honest terms can prevent conflict.">Lithen the Wise</span> wants a treaty. <span class="gloss" data-def="A Brassworks Warden who favors strong repairs and sealed channels.">Mullinen the Stout</span> wants iron clamps and decisive force. You must choose which counsel to trust.</p>
+        <p>Brassreach has endured years of rising water and failing repairs. Now three ordinary incidents share one strange detail: a cracked bell-stair, flooded homes in the <span class="gloss" data-def="A dense craft and residential district built from workshops, ropewalks, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den all carry the same low overtone. No official map connects the sites. The problem may be one mechanism, several failures acting together, or something the city has forgotten how to measure. At the start, nobody gives you a monster’s name or a prophecy. You have observations, people in danger, and a question that must remain honestly unanswered until the evidence supports more.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack2">◂ Back</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1956,7 +1851,7 @@ function getIntroSlidesHTML(){
     <section class="slide s3" data-side="img-left" aria-label="Slide 3">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Rumor places the <span class="gloss" data-def="An ancient engine and covenant chamber in the cistern fields.">Gate of Measures</span> in the cistern fields. Your route leads through the <span class="gloss" data-def="The upper tunnels where expeditions begin.">Halls</span>, into the <span class="gloss" data-def="A guarded library of records, oaths, and engineering charts.">Archives</span>, and down to the <span class="gloss" data-def="Flooded galleries where the Unfathomer is strongest.">Depths</span>. At chambers with clear <span class="gloss" data-def="A stable harmony between voices or machines.">resonance</span>, you may <span class="gloss" data-def="Restrain the Unfathomer with a repaired covenant.">bind</span> the Unfathomer, <span class="gloss" data-def="Make terms that both sides agree to honor.">bargain</span> with it, or <span class="gloss" data-def="Drive it away and accept the damage left behind.">banish</span> it. Gather the Keys, record what you learn, and watch your footing. Your decisions will determine what survives below Brassreach.</p>
+        <p>You begin under a <span class="gloss" data-def="Limited authority for a new Threadbearer to investigate public hazards under supervision.">probationary writ</span>. Captain Brunna will judge whether your account is accurate enough to earn deeper authority. Your attributes, equipment, testimony, repairs, and alliances can change later checks. Failure redirects the scene and leaves a real consequence; it does not erase the campaign. You may spend gold or risk an ordinary item for one renewed attempt. Use the journal to review the current objective and the inventory to prepare for concrete tasks. Most of all, distinguish what you saw from what you suspect. Brassreach has spent generations turning neglected warnings into separate problems. Your first work is to join them without inventing an answer.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack3">◂ Back</button><button class="btn gold intro-begin">Begin Story</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1968,30 +1863,30 @@ function getIntroScrollHTML(){
   return `
     <hr class="sep"/>
     <div class="quick-tables">
-      <h4>Field Codex: Keys and Measures</h4>
+      <h4>Threadbearer Field Brief</h4>
       <div class="grid2">
         <div>
-          <h5>Three Keys</h5>
+          <h5>The Office</h5>
           <ul>
-            <li><b>Stone Key</b> — Controls Weight: foundations, burdens, oaths, and consequences.</li>
-            <li><b>Brass Key</b> — Controls Tone: resonance and harmony between mechanisms.</li>
-            <li><b>Echo Key</b> — Controls Pattern: memory, repetition, law, and return.</li>
+            <li><b>Investigate</b> — Test the physical site and preserve uncertainty.</li>
+            <li><b>Witness</b> — Record who was affected and what they observed.</li>
+            <li><b>Connect</b> — Show how decisions, repairs, and consequences form one chain.</li>
           </ul>
-          <p><em>Two</em> Keys wake the Gate; <em>all three</em> open the richest endings.</p>
+          <p>A Threadbearer records civic truth. The office does not grant unchecked command.</p>
         </div>
         <div>
-          <h5>Four Measures</h5>
+          <h5>Your Record</h5>
           <ul>
-            <li><b>Weight / Stone</b> — What a structure, oath, or decision must carry.</li>
-            <li><b>Tone / Brass</b> — How voices and mechanisms work together.</li>
-            <li><b>Pattern / Echo</b> — What repeats, returns, or becomes law.</li>
-            <li><b>Line / Thread</b> — The direction fixed by a binding decision.</li>
+            <li><b>Evidence</b> — Tested facts that support a conclusion.</li>
+            <li><b>Testimony</b> — Lived accounts kept in their proper context.</li>
+            <li><b>Repairs</b> — Concrete improvements completed along the route.</li>
+            <li><b>Consequences</b> — Costs that remain even when the story moves forward.</li>
           </ul>
-          <p>The city answers to four old Measures, but no path through them is predetermined.</p>
+          <p>The journal keeps these strands visible as the investigation grows.</p>
         </div>
       </div>
-      <h5>Known Hazards</h5>
-      <ul><li>A flood pulse can block a route without warning.</li><li>Warden patrols may challenge unauthorized delvers.</li><li>Old mechanisms can shift floors and open sealed channels.</li></ul>
+      <h5>First Commission</h5>
+      <ul><li>Inspect the cracked bell-stair.</li><li>Compare official plans with lived routes in the Tangles.</li><li>Protect displaced animals and residents.</li><li>Report what the evidence proves—and what it does not.</li></ul>
     </div>`;
 }
 

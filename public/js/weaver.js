@@ -11,10 +11,15 @@ export function makeWeaver(store, log, setTag){
 
     try{
       const ep = store.get('dm_ep', '/dm-turn');
+      const canon=payload?.canon_context;
+      const requestBody=canon?{
+        ...payload,
+        narration_constraints:`Brassreach canon ${canon.canon_version}. ${canon.rules.join(' ')}`
+      }:payload;
       const res = await fetch(ep, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
+        body: JSON.stringify(requestBody)
       });
       if(!res.ok) throw new Error('bad status');
       const data = await res.json();
