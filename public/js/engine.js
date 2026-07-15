@@ -1,6 +1,6 @@
 // Brassreach browser game engine
-// v21 — Master Lore Story Overhaul: canonical campaign, civic progression,
-// deterministic living Choice, and save-v5 migration.
+// v22 — Narrative Clarity & RPG Integration: direct prose, reactive arrivals,
+// source-labelled bonuses, consequence feedback, and save-v5 compatibility.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -888,7 +888,7 @@ function buildUI(){
 
   <!-- Failure recovery -->
   <div id="modalLost" class="modal lost-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="lostTitle" aria-describedby="lostSummary">
-    <header><div><span class="modal-kicker">Encounter Lost</span><strong id="lostTitle">The Measure Turns</strong></div></header>
+    <header><div><span class="modal-kicker">Attempt Failed</span><strong id="lostTitle">Choose the Cost</strong></div></header>
     <div id="lostContent" class="content lost-content"></div>
   </div>
 
@@ -943,7 +943,7 @@ function buildUI(){
 
   <!-- Lore scroll modal -->
   <div id="modalScroll" class="modal hidden">
-    <header><div>The Weaver’s Scroll</div><div id="xScroll" class="closeX">✕</div></header>
+    <header><div>Threadbearer Field Brief</div><div id="xScroll" class="closeX">✕</div></header>
     <div class="content" id="scrollContent"></div>
   </div>
 
@@ -1118,7 +1118,7 @@ function persistState(message='Progress stored'){
 function setBusy(busy){
   Engine.busy=busy;
   [Engine.el.btnAct,Engine.el.btnCont].forEach(button=>{ if(button) button.disabled=busy; });
-  if(Engine.el.weaveStatus){ Engine.el.weaveStatus.textContent=busy?'Weaving…':'Ready'; Engine.el.weaveStatus.classList.toggle('active',busy); }
+  if(Engine.el.weaveStatus){ Engine.el.weaveStatus.textContent=busy?'Recording…':'Ready'; Engine.el.weaveStatus.classList.toggle('active',busy); }
 }
 
 function renderEditorInventory(){
@@ -1448,6 +1448,11 @@ function renderAll(){
 
   Engine.el.story.innerHTML='';
   for(const beat of s.storyBeats){
+    if(beat.kind==='effects'){
+      const panel=document.createElement('div'); panel.className='effect-summary'; panel.setAttribute('role','status');
+      panel.innerHTML=(beat.effects||[]).map(effect=>`<span class="effect-entry ${esc(effect.tone||'info')}"><b>${esc(effect.label)}</b>${effect.detail?`<small>${esc(effect.detail)}</small>`:''}</span>`).join('');
+      Engine.el.story.appendChild(panel); continue;
+    }
     const p=document.createElement('p');
     p.classList.add('beat');
     p.innerHTML=beat.html?sanitizeRichHTML(beat.html):esc(beat.text);
@@ -1468,55 +1473,94 @@ function renderAll(){
 
 /* ---------- authored campaign flow ---------- */
 function currentScene(){ return CAMPAIGN_SCENES[Engine.state.campaign?.sceneId]||CAMPAIGN_SCENES['tutorial-commission']; }
+function appendPassage(text,kind='story'){
+  String(text||'').split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean).forEach(part=>appendBeat(part,null,kind));
+}
+function appendEffectSummary(effects){
+  const clean=(effects||[]).filter(effect=>effect?.label);
+  if(!clean.length) return;
+  Engine.state.storyBeats.push({kind:'effects',effects:clean});
+  Engine.state.transcript.push(clean.map(effect=>`${effect.label}${effect.detail?` — ${effect.detail}`:''}`).join(' | '));
+  Engine.state._pendingType=false;
+}
 function addJournal(kind,text){
   if(!text) return;
   const C=Engine.state.campaign,J=Engine.state.journal,campaignKey=kind==='optional'?'optionalCompleted':kind;
   if(Array.isArray(C[campaignKey])&&!C[campaignKey].includes(text)) C[campaignKey].push(text);
   if(Array.isArray(J[kind])&&!J[kind].includes(text)) J[kind].push(text);
 }
-function grantItem(name,reason){
+function grantItem(name,reason,{narrate=true}={}){
   if(!name) return false;
   const S=Engine.state;
   if(S.character.inventory.some(item=>item.toLowerCase()===name.toLowerCase())) return false;
   S.character.inventory=cleanInventory([...S.character.inventory,name]); syncInventoryState(S);
-  appendBeat(`${reason||'You add it to your field case'} Item acquired: ${name}.`,null,'story');
+  if(narrate) appendPassage(reason||`You add ${name} to your field case.`);
   toast(`${name} added to the field case`); return true;
 }
-function applyEffects(effect={}){
-  const S=Engine.state,C=S.campaign;
-  if(typeof effect.gold==='number'){ S.character.Gold=Math.max(0,S.character.Gold+effect.gold); if(effect.gold) toast(`${effect.gold>0?'+':''}${effect.gold} gold`); }
-  if(typeof effect.hp==='number'){ S.character.HP=clamp(S.character.HP+effect.hp,1,S.character.MaxHP||S.character.HP); if(effect.hp<0) toast(`${Math.abs(effect.hp)} HP lost`,'warning'); }
-  if(effect.item) grantItem(effect.item.name||effect.item,effect.item.reason);
-  (effect.items||[]).forEach(item=>grantItem(item.name||item,item.reason));
+function applyEffects(effect={},context={}){
+  const S=Engine.state,C=S.campaign,feedback=[];
+  const source=context.source||effect.reason||'';
+  const add=(tone,label,detail='')=>feedback.push({tone,label,detail});
+  if(typeof effect.gold==='number'&&effect.gold){
+    const before=S.character.Gold; S.character.Gold=Math.max(0,before+effect.gold); const delta=S.character.Gold-before;
+    if(delta){ toast(`${delta>0?'+':''}${delta} gold`); add(delta>0?'gain':'loss',`Gold ${delta>0?'+':''}${delta}`,effect.goldReason||source); }
+  }
+  if(typeof effect.hp==='number'&&effect.hp){
+    const before=S.character.HP; S.character.HP=clamp(before+effect.hp,1,S.character.MaxHP||before); const delta=S.character.HP-before;
+    if(delta){ if(delta<0) toast(`${Math.abs(delta)} HP lost`,'warning'); add(delta>0?'gain':'loss',`Health ${delta>0?'+':''}${delta}`,effect.hpReason||source); }
+  }
+  const attributeChanges=[];
+  Object.entries(effect.attributes||{}).forEach(([stat,value])=>{
+    if(!['STR','DEX','INT','CHA'].includes(stat)||!value) return;
+    const before=+S.character[stat]||10; S.character[stat]=clamp(before+value,6,18); const delta=S.character[stat]-before;
+    if(delta) attributeChanges.push(`${stat} ${delta>0?'+':''}${delta}`);
+  });
+  if(attributeChanges.length) add('gain','Attribute improved',attributeChanges.join(' · '));
+  const gained=[];
+  if(effect.item&&grantItem(effect.item.name||effect.item,effect.item.reason,{narrate:!context.suppressItemNarrative})) gained.push(effect.item.name||effect.item);
+  (effect.items||[]).forEach(item=>{ if(grantItem(item.name||item,item.reason,{narrate:!context.suppressItemNarrative})) gained.push(item.name||item); });
   if(effect.key){
     S.flags.keys=uniqueText([...(S.flags.keys||[]),effect.key]);
-    if(effect.keyReason) appendBeat(`${effect.keyReason} Key acquired: ${effect.key}.`,null,'story');
-    grantItem(`${effect.key} Key`,`The ${effect.key} calibration instrument is secured in your field case.`);
+    if(grantItem(`${effect.key} Key`,effect.keyReason||`You secure the ${effect.key} Key in its travel cradle.`)) gained.push(`${effect.key} Key`);
     toast(`${effect.key} Key recovered`);
   }
-  if(effect.authority) C.authority=effect.authority;
+  if(gained.length) add('gain','Item gained',gained.join(' · '));
+  if(effect.authority&&effect.authority!==C.authority){ C.authority=effect.authority; add('gain','Authority updated',effect.authority); }
   if(effect.writ) C.writ=effect.writ;
   if(effect.flag) C.flags[effect.flag]=true;
   Object.entries(effect.flags||{}).forEach(([key,value])=>{ C.flags[key]=value; });
-  Object.entries(effect.alliance||{}).forEach(([key,value])=>{ C.alliances[key]=(C.alliances[key]||0)+value; });
-  Object.entries(effect.reputation||{}).forEach(([key,value])=>{ C.reputation[key]=(C.reputation[key]||0)+value; });
+  const allied=[],standing=[];
+  Object.entries(effect.alliance||{}).forEach(([key,value])=>{ C.alliances[key]=(C.alliances[key]||0)+value; if(value) allied.push(`${key} ${value>0?'+':''}${value}`); });
+  Object.entries(effect.reputation||{}).forEach(([key,value])=>{ C.reputation[key]=(C.reputation[key]||0)+value; if(value) standing.push(`${key} ${value>0?'+':''}${value}`); });
+  if(allied.length) add('support','Support changed',allied.join(' · '));
+  if(standing.length) add('standing','Standing changed',standing.join(' · '));
   if(effect.route&&!C.routes.includes(effect.route)) C.routes.push(effect.route);
   addJournal('discoveries',effect.discovery); addJournal('evidence',effect.evidence); addJournal('testimony',effect.testimony); addJournal('repairs',effect.repair);
   addJournal('consequences',effect.consequence); addJournal('optional',effect.optional); addJournal('milestones',effect.milestone);
+  if(effect.evidence) add('record','Evidence recorded',effect.evidence);
+  if(effect.testimony) add('record','Testimony recorded',effect.testimony);
+  if(effect.repair) add('repair','Repair completed',effect.repair);
+  if(effect.consequence) add('loss','Consequence recorded',effect.consequence);
+  if(effect.discovery) add('record','Discovery recorded',effect.discovery);
+  appendEffectSummary(feedback);
   S.flags.bossReady=(S.flags.keys||[]).length>=2;
 }
 function pushUndo(){
   const S=Engine.state; S._undoStack=S._undoStack||[]; S._undoStack.push(captureRunState(S));
   while(S._undoStack.length>24) S._undoStack.shift();
 }
-function enterScene(sceneId,{appendStory=true}={}){
+function enterScene(sceneId,{appendStory=true,arrivalKey=null}={}){
   const S=Engine.state,C=S.campaign,next=CAMPAIGN_SCENES[sceneId]; if(!next) return;
   const previous=C.sceneId;
   if(previous&&previous!==sceneId&&!C.completedScenes.includes(previous)) C.completedScenes.push(previous);
   C.sceneId=sceneId; C.chapter=next.chapter; C.objective=next.objective; S.scene=next.title;
   const firstEntry=!C.enteredScenes.includes(sceneId);
-  if(appendStory) appendBeat(next.story,null,'story');
-  if(firstEntry){ C.enteredScenes.push(sceneId); applyEffects(next.enter||{}); }
+  if(appendStory){
+    const arrival=arrivalKey&&next.arrivals?.[arrivalKey];
+    if(arrival) appendPassage(arrival);
+    appendPassage(next.story);
+  }
+  if(firstEntry){ C.enteredScenes.push(sceneId); applyEffects(next.enter||{},{source:`Entered ${next.title}`}); }
   renderChoices(next.choices); S.turn++; renderAll(); persistState('Objective updated'); BGM.updateForState(S);
 }
 function beginTale(preserveProgress=false){
@@ -1545,19 +1589,23 @@ function hardResetRun(){
 function choiceBonusBreakdown(ch){
   const S=Engine.state,C=S.character,campaign=S.campaign,owned=new Set(C.inventory),equipped=new Set(Object.values(S.equipment||{}).filter(Boolean));
   const parts=[]; let total=ch.stat?modFrom(C[ch.stat]||10):0;
-  if(ch.stat) parts.push({label:ch.stat,value:total,base:true});
+  if(ch.stat) parts.push({label:`Attribute: ${ch.stat}`,value:total,base:true,source:'attribute'});
   for(const bonus of (ch.bonuses||[])){
-    let active=false,value=bonus.bonus||0,label=bonus.label||bonus.item||'advantage';
-    if(bonus.item&&owned.has(bonus.item)){ active=true; if(equipped.has(bonus.item)){ value+=1; label+=', equipped'; } }
-    if(bonus.derived&&derivedStats(S)[bonus.derived]>=bonus.threshold) active=true;
-    if(bonus.flag&&campaign.flags?.[bonus.flag]) active=true;
-    if(bonus.alliance&&(campaign.alliances?.[bonus.alliance]||0)>0) active=true;
-    if(bonus.reputation&&(campaign.reputation?.[bonus.reputation]||0)>=(bonus.threshold||1)) active=true;
-    if(bonus.evidence&&campaign.evidence?.includes(bonus.evidence)) active=true;
-    if(bonus.testimony&&campaign.testimony?.includes(bonus.testimony)) active=true;
-    if(bonus.repair&&campaign.repairs?.includes(bonus.repair)) active=true;
-    if(bonus.keys&&(S.flags.keys||[]).length>=bonus.keys) active=true;
-    if(active){ total+=value; parts.push({label,value}); }
+    let active=false,value=bonus.bonus||0,label=bonus.label||'situational advantage',source='situation',matchedItem=null;
+    const ownedItem=bonus.owned||bonus.item;
+    if(ownedItem&&owned.has(ownedItem)){ active=true; matchedItem=ownedItem; source='owned'; label=`Owned: ${ownedItem}`; }
+    if(bonus.ownedAny){ matchedItem=bonus.ownedAny.find(item=>owned.has(item))||null; if(matchedItem){ active=true; source='owned'; label=`Owned: ${matchedItem}`; } }
+    if(bonus.equipped&&equipped.has(bonus.equipped)){ active=true; matchedItem=bonus.equipped; source='equipped'; label=`Equipped: ${bonus.equipped}`; }
+    if(bonus.equippedAny){ matchedItem=bonus.equippedAny.find(item=>equipped.has(item))||null; if(matchedItem){ active=true; source='equipped'; label=`Equipped: ${matchedItem}`; } }
+    if(bonus.derived&&derivedStats(S)[bonus.derived]>=bonus.threshold){ active=true; source='rating'; label=`${bonus.derived[0].toUpperCase()+bonus.derived.slice(1)} rating`; }
+    if(bonus.flag&&campaign.flags?.[bonus.flag]){ active=true; source='preparation'; label=bonus.label||'Prepared route'; }
+    if(bonus.alliance&&(campaign.alliances?.[bonus.alliance]||0)>0){ active=true; source='support'; label=bonus.label||`Support: ${bonus.alliance}`; }
+    if(bonus.reputation&&(campaign.reputation?.[bonus.reputation]||0)>=(bonus.threshold||1)){ active=true; source='standing'; label=bonus.label||`Standing: ${bonus.reputation}`; }
+    if(bonus.evidence&&campaign.evidence?.includes(bonus.evidence)){ active=true; source='evidence'; label=bonus.label||'Relevant evidence'; }
+    if(bonus.testimony&&campaign.testimony?.includes(bonus.testimony)){ active=true; source='testimony'; label=bonus.label||'Witnessed account'; }
+    if(bonus.repair&&campaign.repairs?.includes(bonus.repair)){ active=true; source='repair'; label=bonus.label||'Earlier repair'; }
+    if(bonus.keys&&(S.flags.keys||[]).length>=bonus.keys){ active=true; source='key'; label=bonus.label||`${bonus.keys} Keys`; }
+    if(active){ total+=value; parts.push({label,value,source,item:matchedItem}); }
   }
   return {total,parts};
 }
@@ -1583,7 +1631,7 @@ function modifierText(ch){
     return requirement.ok?'Living Choice · outcome reflects your preparation':(ch.requirementText||`Missing: ${requirement.missing.join(', ')}`);
   }
   if(ch.type!=='check') return ch.type==='merchant'?'Merchant · buy and sell':'No roll';
-  const active=choiceBonusBreakdown(ch).parts.map(part=>`${part.label} ${fmt(part.value)}`); return `DC ${ch.dc} · ${active.join(' · ')}`;
+  const active=choiceBonusBreakdown(ch).parts.map(part=>`${part.label} ${fmt(part.value)}`); return `DC ${ch.dc}${active.length?` · ${active.join(' · ')}`:''}`;
 }
 function renderChoices(choices){
   const list=Engine.el.choiceList; if(!list) return; list.innerHTML='';
@@ -1622,7 +1670,11 @@ function liveCanonContext(){
       'Narrate only the submitted exploratory action; do not advance the authored scene, award items, change stats, or resolve the objective.',
       named?'The Unfathomer is continuous living resonance and cannot speak complex language.':'Do not use the name Unfathomer or reveal a hidden entity; the player knows only connected failures and a low overtone.',
       'Do not introduce a Fourth Measure, Line Measure, stolen constitutional record, magical command, or speaking boss.',
-      'Use concrete action, visible consequence, and plain dramatic prose. Preserve uncertainty where the record is incomplete.'
+      'Use present-tense, concrete action with a clear actor, object, and visible result. Do not personify a mechanism when a literal verb is clearer.',
+      'Historical facts must come from a named speaker, document, inscription, or other source available in the current scene.',
+      'Preserve each character voice: Brunna is concise, Dorrin practical, Lithen learned but explicit about uncertainty, Orra direct, and Sella dry and technically observant.',
+      'Never invent item ownership, equipment, bonuses, injuries, gold changes, reputation changes, or other game-state changes.',
+      'Keep the prose dramatic but plain enough to understand on one reading. Preserve uncertainty where the record is incomplete.'
     ]
   };
 }
@@ -1655,7 +1707,7 @@ function resolveChoice(ch){
     pushUndo(); finalizeEnding(ch.ending); return;
   }
   pushUndo();
-  if(ch.type==='advance'){ appendBeat(ch.outcome||'You move on.',null,'story'); applyEffects(ch.effects||{}); enterScene(ch.next); return; }
+  if(ch.type==='advance'){ appendPassage(ch.outcome||'You move on.'); applyEffects(ch.effects||{},{source:ch.label}); enterScene(ch.next,{arrivalKey:ch.id}); return; }
   setBusy(true);
   const bonus=choiceBonusBreakdown(ch),roll=rnd(1,20),total=roll+bonus.total,result={roll,total,dc:ch.dc,bonus,passed:total>=ch.dc};
   if(!result.passed){ openLostEncounter(ch,result); setBusy(false); return; }
@@ -1671,9 +1723,12 @@ function rollLabel(result){
   return `d20 ${result.roll} ${fmt(result.bonus.parts[0]?.value||0)}${extras?` + ${extras}`:''} vs DC ${result.dc} = ${result.total}`;
 }
 function completeCheckedChoice(ch,result,passed){
-  markEncounter(ch); appendBeat(passed?(ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.'),rollLabel(result),passed?'success':'fail');
-  const effects=ch.effects?(ch.effects[passed?'success':'failure']||{}):{}; applyEffects(effects); Sound.sfx(passed?'success':'fail');
-  enterScene(passed?(ch.nextSuccess||ch.next):(ch.nextFail||ch.next));
+  markEncounter(ch);
+  const resultText=passed?(ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.');
+  const paragraphs=String(resultText).split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean);
+  paragraphs.forEach((paragraph,index)=>appendBeat(paragraph,index===paragraphs.length-1?rollLabel(result):null,index===paragraphs.length-1?(passed?'success':'fail'):'story'));
+  const effects=ch.effects?(ch.effects[passed?'success':'failure']||{}):{}; applyEffects(effects,{source:ch.label}); Sound.sfx(passed?'success':'fail');
+  enterScene(passed?(ch.nextSuccess||ch.next):(ch.nextFail||ch.next),{arrivalKey:`${ch.id}:${passed?'success':'failure'}`});
 }
 function eligibleSacrifices(){
   const equipped=new Set(Object.values(Engine.state.equipment||{}).filter(Boolean));
@@ -1689,9 +1744,16 @@ function closeLost(){ Engine.pendingFailure=null; closeModal(Engine.el.modalLost
 function acceptFailure(){ const pending=Engine.pendingFailure; if(!pending) return; closeLost(); completeCheckedChoice(pending.ch,pending.result,false); }
 function rerollFailure(method){
   const pending=Engine.pendingFailure; if(!pending) return; const S=Engine.state; if(S.campaign.rerollsUsed[pending.id]) return; let payment='';
-  if(method==='gold'){ if(S.character.Gold<pending.cost) return; S.character.Gold-=pending.cost; payment=`You pay ${pending.cost} gold for another attempt.`; }
-  else{ const eligible=eligibleSacrifices(); if(!eligible.length) return; const lost=pick(eligible); S.character.inventory=S.character.inventory.filter(item=>item!==lost); syncInventoryState(S); payment=`You abandon ${lost} to recover your position and try again.`; }
-  S.campaign.rerollsUsed[pending.id]=true; appendBeat(payment,null,'story');
+  if(method==='gold'){
+    if(S.character.Gold<pending.cost) return;
+    payment=`You pay ${pending.cost} gold for emergency help, replacement material, and one more attempt.`;
+    appendPassage(payment); applyEffects({gold:-pending.cost,goldReason:'funded a second attempt'},{source:'Encounter recovery'});
+  }else{
+    const eligible=eligibleSacrifices(); if(!eligible.length) return; const lost=pick(eligible);
+    S.character.inventory=S.character.inventory.filter(item=>item!==lost); syncInventoryState(S);
+    payment=`You leave the ${lost} behind to recover your position and try again.`; appendPassage(payment); appendEffectSummary([{tone:'loss',label:'Item lost',detail:lost}]);
+  }
+  S.campaign.rerollsUsed[pending.id]=true;
   const bonus=choiceBonusBreakdown(pending.ch),roll=rnd(1,20),total=roll+bonus.total+1,result={roll,total,dc:pending.ch.dc,bonus:{...bonus,parts:[...bonus.parts,{label:'resolve',value:1}]},passed:total>=pending.ch.dc},ch=pending.ch;
   closeLost(); completeCheckedChoice(ch,result,result.passed);
 }
@@ -1722,8 +1784,19 @@ function renderMerchant(){
   const sellable=S.character.inventory.map(name=>{ const meta=itemMeta(name),allowed=canSell(name); return `<article class="trade-item ${qualityClass(meta)}"><span class="item-glyph" aria-hidden="true">${meta.glyph}</span><div><strong>${esc(name)}</strong><small>${merchantSellPrice(name)} gold</small></div><button class="btn mini" data-sell="${esc(name)}" ${allowed?'':'disabled'}>${allowed?'Sell':'Protected'}</button></article>`; }).join('')||'<p class="merchant-empty">Your field case is empty.</p>';
   Engine.el.merchantContent.innerHTML=`<div class="merchant-intro"><p>${esc(merchant.greeting)}</p><strong>${S.character.Gold} gold</strong></div><div class="trade-columns"><section><h4>For Sale</h4>${stock}</section><section><h4>Your Field Case</h4>${sellable}</section></div>`;
 }
-function buyMerchantItem(name){ const price=merchantBuyPrice(name),S=Engine.state;if(S.character.Gold<price||S.character.inventory.includes(name)) return; S.character.Gold-=price; grantItem(name,`${Engine.activeMerchant.name} sells it to you for ${price} gold.`); persistState('Purchase stored'); renderAll(); renderMerchant(); Sound.inventory('place'); }
-function sellMerchantItem(name){ if(!canSell(name)) return; const S=Engine.state,price=merchantSellPrice(name); S.character.inventory=S.character.inventory.filter(item=>item!==name); S.character.Gold+=price; syncInventoryState(S); appendBeat(`${Engine.activeMerchant.name} buys ${name} for ${price} gold.`,null,'story'); persistState('Sale stored'); renderAll(); renderMerchant(); Sound.inventory('pickup'); }
+function buyMerchantItem(name){
+  const price=merchantBuyPrice(name),S=Engine.state;if(S.character.Gold<price||S.character.inventory.includes(name)) return;
+  appendPassage(`You bought the ${name} from ${Engine.activeMerchant.name} for ${price} gold.`);
+  applyEffects({gold:-price,goldReason:`bought ${name}`,item:{name}},{source:`Purchase from ${Engine.activeMerchant.name}`,suppressItemNarrative:true});
+  persistState('Purchase stored'); renderAll(); renderMerchant(); Sound.inventory('place');
+}
+function sellMerchantItem(name){
+  if(!canSell(name)) return; const S=Engine.state,price=merchantSellPrice(name);
+  S.character.inventory=S.character.inventory.filter(item=>item!==name); S.character.Gold+=price; syncInventoryState(S);
+  appendPassage(`You sold the ${name} to ${Engine.activeMerchant.name} for ${price} gold.`);
+  appendEffectSummary([{tone:'gain',label:`Gold +${price}`,detail:`sold ${name}`},{tone:'loss',label:'Item sold',detail:name}]);
+  persistState('Sale stored'); renderAll(); renderMerchant(); Sound.inventory('pickup');
+}
 function renderJournal(){
   const C=Engine.state.campaign,J=Engine.state.journal,scene=currentScene(),chapter=CAMPAIGN_CHAPTERS[C.chapter]||CAMPAIGN_CHAPTERS.tutorial,metrics=campaignMetrics();
   const section=(title,items,empty)=>`<section><h4>${title}</h4>${items.length?`<ol>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ol>`:`<p class="journal-empty">${empty}</p>`}</section>`;
