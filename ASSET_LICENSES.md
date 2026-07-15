@@ -53,3 +53,10 @@ No new external runtime dependency, texture, artwork, font, music, or sound file
 was added in Overhaul #3. The inventory and equipment presentation is original
 HTML/CSS artwork informed only by classic action-RPG layout principles. It
 reuses the documented CC0 material textures and inventory sounds above.
+
+## Master Lore Story Overhaul #5
+
+No new external asset or runtime dependency was added. The intro reuses the
+documented CC0 stone and brass textures in place of late-game spoiler art.
+Remote Google Fonts requests were removed so the game loads without external
+network access; typography now uses the existing local system-font fallbacks.
