@@ -108,7 +108,8 @@ assert(await page.evaluate(name=>Object.values(Engine.state.equipment).includes(
 await page.keyboard.press('Escape'); await page.locator('#modalInventory').waitFor({state:'hidden'});
 
 await page.keyboard.press('j'); await page.locator('#modalJournal:not(.hidden)').waitFor();
-assert((await page.locator('#journalContent').innerText()).includes('Report to Quartermaster'),'Journal did not show the current objective');
+const currentObjective=await page.evaluate(()=>Engine.state.campaign.objective);
+assert((await page.locator('#journalContent').innerText()).includes(currentObjective),'Journal did not show the current objective');
 await page.keyboard.press('j'); await page.locator('#modalJournal').waitFor({state:'hidden'});
 
 await page.locator('#freeText').focus(); await page.keyboard.press('e'); assert(await page.locator('#modalInventory.hidden').count()===1,'E opened inventory while typing');
@@ -117,13 +118,9 @@ await page.locator('#freeText').fill('inspect the nearest survey marks'); await 
 const afterExplore=await page.evaluate(()=>({scene:Engine.state.campaign.sceneId,beats:Engine.state.storyBeats.length}));
 assert(afterExplore.scene===beforeExplore.scene&&afterExplore.beats===beforeExplore.beats+1,'Free action did not add contextual story without skipping the objective');
 
-await page.evaluate(()=>{ window.__brassreachRandom=Math.random; Math.random=()=>0; });
-await page.locator('#choices .choice-btn:not(.choice-merchant)').first().click(); await page.locator('#modalLost:not(.hidden)').waitFor();
-await page.screenshot({path:path.join(output,'07-lost-encounter.png'),fullPage:true}); results.lostCaptured=true;
-const goldBeforeReroll=await page.evaluate(()=>Engine.state.character.Gold); await page.evaluate(()=>{ Math.random=()=>.999999; }); await page.locator('[data-lost-action="gold"]').click();
-await page.waitForFunction(()=>Engine.state.campaign.sceneId==='halls-quartermaster');
-assert(await page.evaluate(()=>Engine.state.character.Gold)<goldBeforeReroll,'Gold reroll did not charge the player');
-await page.evaluate(()=>{ Math.random=window.__brassreachRandom; });
+await page.evaluate(()=>{ window.__brassreachRandom=Math.random; });
+await page.locator('#choices .choice-btn:not(.choice-merchant)').first().click();
+await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-quartermaster');
 await page.locator('#choices .choice-merchant').click(); await page.locator('#modalMerchant:not(.hidden)').waitFor();
 await page.screenshot({path:path.join(output,'06-merchant.png'),fullPage:true});
 const sell=page.locator('[data-sell="Canteen"]:not([disabled])'); assert(await sell.count()===1,'Ordinary item was not sellable'); await sell.click();
@@ -133,21 +130,30 @@ const buyName=await buy.getAttribute('data-buy'),goldBeforeBuy=await page.evalua
 assert(await page.evaluate(name=>Engine.state.character.inventory.includes(name),buyName),'Purchase did not add the item');
 assert(await page.evaluate(()=>Engine.state.character.Gold)<goldBeforeBuy,'Purchase did not spend gold');
 await page.locator('#xMerchant').click();
-await page.locator('#btnCont').click(); await page.waitForFunction(()=>Engine.state.campaign.sceneId==='halls-floodgate');
+await page.locator('#choices .choice-btn:not(.choice-merchant)').first().click();
+await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-bell-stair');
+
+await page.evaluate(()=>{ Engine.state.character.Gold=100; Math.random=()=>0; });
+await page.locator('#choices .choice-btn:not(.choice-merchant)').first().click(); await page.locator('#modalLost:not(.hidden)').waitFor();
+await page.screenshot({path:path.join(output,'07-lost-encounter.png'),fullPage:true}); results.lostCaptured=true;
+const goldBeforeReroll=await page.evaluate(()=>Engine.state.character.Gold); await page.evaluate(()=>{ Math.random=()=>.999999; }); await page.locator('[data-lost-action="gold"]').click();
+await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-tangles');
+assert(await page.evaluate(()=>Engine.state.character.Gold)<goldBeforeReroll,'Gold reroll did not charge the player');
+
 const itemsBeforeSacrifice=await page.evaluate(()=>[...Engine.state.character.inventory]); await page.evaluate(()=>{ Math.random=()=>0; });
 await page.locator('#choices .choice-btn:not(.choice-merchant)').first().click(); await page.locator('#modalLost:not(.hidden)').waitFor(); await page.evaluate(()=>{ Math.random=()=>.999999; }); await page.locator('[data-lost-action="item"]').click();
-await page.waitForFunction(()=>Engine.state.campaign.sceneId==='halls-culvert');
+await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-salt-hounds');
 const itemsAfterSacrifice=await page.evaluate(()=>[...Engine.state.character.inventory]); assert(itemsBeforeSacrifice.some(item=>!itemsAfterSacrifice.includes(item)),'Item reroll did not sacrifice an eligible item'); await page.evaluate(()=>{ Math.random=window.__brassreachRandom; });
 
-let steps=2,failures=2;
-while(steps<30){
+let steps=4,failures=2;
+while(steps<55){
   const state=await page.evaluate(()=>({scene:Engine.state.campaign.sceneId,ending:Engine.state.campaign.ending}));
   if(state.ending) break;
   const action=page.locator('#choices .choice-btn:not(.choice-merchant)').first(); assert(await action.count()===1,`No campaign action at ${state.scene}`);
   await action.click(); await page.waitForTimeout(90); if(await acceptFailureIfShown(page)) failures++; steps++;
 }
 const campaign=await page.evaluate(()=>({scene:Engine.state.campaign.sceneId,ending:Engine.state.campaign.ending,keys:Engine.state.flags.keys,completedScenes:Engine.state.campaign.completedScenes.length,completedEncounters:Engine.state.campaign.completedEncounters.length,items:Engine.state.character.inventory,journal:Engine.state.journal}));
-assert(campaign.ending,'Campaign did not reach an ending'); assert(campaign.keys.length>=2,'Campaign reached the Gate without two Keys'); assert(campaign.completedScenes>=18,'Too few campaign scenes completed');
+assert(campaign.ending,'Campaign did not reach an ending'); assert(campaign.keys.length>=2,'Campaign reached the Gate without two Keys'); assert(campaign.completedScenes>=30,'Too few campaign scenes completed');
 results.campaign={...campaign,steps,failures};
 await page.screenshot({path:path.join(output,'07-epilogue.png'),fullPage:true});
 if(await page.locator('#modalEpi:not(.hidden)').count()) await page.locator('#xEpi').click();
@@ -162,16 +168,16 @@ await migrationPage.evaluate(()=>{
   const legacy={saveVersion:3,turn:9,scene:'Archives',storyBeats:[{text:'Legacy progress remains.'}],transcript:['Legacy progress remains.'],character:{name:'Migration Test',race:'Dwarf',STR:12,DEX:12,INT:12,CHA:12,HP:10,MaxHP:14,Gold:7,inventory},equipment:{head:'Legacy Item 1',mainHand:'Missing Item'},flags:{keys:['Echo']},settings:{typewriter:false,audio:{master:.5,ui:.4,music:.4}}};
   localStorage.setItem('brassreach:dds_state',JSON.stringify(legacy)); localStorage.setItem('brassreach:intro_seen','true');
 });
-await migrationPage.reload({waitUntil:'networkidle'}); await migrationPage.waitForFunction(()=>Engine.state.saveVersion===4);
+await migrationPage.reload({waitUntil:'networkidle'}); await migrationPage.waitForFunction(()=>Engine.state.saveVersion===5);
 const migration=await migrationPage.evaluate(()=>({version:Engine.state.saveVersion,name:Engine.state.character.name,inventory:Engine.state.character.inventory.length,slots:Engine.state.backpack.slots.filter(Boolean).length,overflow:Engine.state.backpack.overflow.length,head:Engine.state.equipment.head,mainHand:Engine.state.equipment.mainHand,scene:Engine.state.campaign.sceneId,keys:Engine.state.flags.keys,story:Engine.state.storyBeats[0]?.text}));
-assert(migration.name==='Migration Test','Character did not migrate'); assert(migration.inventory===45,'Legacy or unknown items were lost or duplicated'); assert(migration.slots===40&&migration.overflow===5,'Overflow migration failed'); assert(migration.head===null&&migration.mainHand===null,'Invalid equipment was not normalized'); assert(migration.scene==='archives-lithen','Legacy scene did not map to the authored campaign'); assert(migration.keys.includes('Echo'),'Legacy key was lost'); assert(migration.story==='Legacy progress remains.','Story progress was lost'); results.migration=migration;
+assert(migration.name==='Migration Test','Character did not migrate'); assert(migration.inventory===45,'Legacy or unknown items were lost or duplicated'); assert(migration.slots===40&&migration.overflow===5,'Overflow migration failed'); assert(migration.head===null&&migration.mainHand===null,'Invalid equipment was not normalized'); assert(migration.scene==='archives-entry','Legacy scene did not map to the authored campaign'); assert(migration.keys.includes('Echo'),'Legacy key was lost'); assert(migration.story==='Legacy progress remains.','Story progress was lost'); results.migration=migration;
 await migrationPage.evaluate(()=>{
   const preEquipment={saveVersion:1,turn:2,scene:'Halls',storyBeats:[{text:'An older expedition.'}],transcript:['An older expedition.'],character:{name:'Old Save',race:'Dwarf',STR:11,DEX:10,INT:13,CHA:9,HP:8,Gold:3,inventory:['Torch','Oil Flask']},flags:{seals:['Stone']},settings:{typewriter:false,audio:{master:.4,ui:.3,amb:.2}}};
   localStorage.setItem('brassreach:dds_state',JSON.stringify(preEquipment));
 });
 await migrationPage.reload({waitUntil:'networkidle'}); await migrationPage.waitForFunction(()=>Engine.state.character.name==='Old Save');
 const preEquipment=await migrationPage.evaluate(()=>({version:Engine.state.saveVersion,items:Engine.state.character.inventory,equipment:Object.values(Engine.state.equipment),keys:Engine.state.flags.keys,music:Engine.state.settings.audio.music,maxHP:Engine.state.character.MaxHP,scene:Engine.state.campaign.sceneId}));
-assert(preEquipment.version===4&&preEquipment.items.join('|')==='Torch|Oil Flask','Pre-equipment inventory did not migrate'); assert(preEquipment.equipment.every(item=>item===null),'Pre-equipment save did not receive safe empty slots'); assert(preEquipment.keys.includes('Stone'),'Legacy seals did not migrate to Keys'); assert(preEquipment.music===.2,'Legacy ambience preference did not migrate to music'); assert(preEquipment.maxHP===8,'Legacy HP did not normalize to MaxHP'); results.migration={overflow:migration,preEquipment};
+assert(preEquipment.version===5&&preEquipment.items.join('|')==='Torch|Oil Flask','Pre-equipment inventory did not migrate'); assert(preEquipment.equipment.every(item=>item===null),'Pre-equipment save did not receive safe empty slots'); assert(preEquipment.keys.includes('Stone'),'Legacy seals did not migrate to Keys'); assert(preEquipment.music===.2,'Legacy ambience preference did not migrate to music'); assert(preEquipment.maxHP===8,'Legacy HP did not normalize to MaxHP'); results.migration={overflow:migration,preEquipment};
 await migrationContext.close();
 
 assert(results.consoleErrors.length===0,`Console errors: ${results.consoleErrors.join(' | ')}`);

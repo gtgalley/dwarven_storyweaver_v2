@@ -459,6 +459,8 @@ Threadbearers may be asked to:
 
 A Thread Ledger uses resonant brass leaves, treated paper, indexing thread, and registered seals. When an entry is closed at a civic register, a corresponding pattern is impressed into Archive master plates.
 
+The first Threadbearers preserved their field accounts by physically weaving ordered testimony with needle and thread. Different materials, knots, and stitch intervals distinguished direct witness, measured fact, disputed claim, and later correction. The practice gave the profession its name. Modern ledgers use etched brass leaves and resonant indexing, but ceremonial binding thread remains visible along their spines so the office remembers that a trustworthy account joins distinct strands without pretending they are identical.
+
 An entry can be challenged, annotated, or politically ignored. It cannot be altered or removed without leaving a detectable discontinuity in both the field ledger and master record.
 
 This makes secrecy difficult without making the institution incorruptible. Authorities can still overwhelm truth with delay, hostile interpretation, restricted access, or countless irrelevant records.
@@ -476,11 +478,13 @@ Their emergency decisions must later enter public review. Abuse cannot be perfec
 
 ### 8.5 Training and the Deep Writ
 
-The player begins as a probationary Threadbearer performing supervised work near the surface.
+Threadbearers train at the **Threadbearer Institute**, a small civic school attached to the upper Halls and authenticated by the Archives. Its curriculum combines field surveying, structural observation, interviewing, public-record law, route finding, emergency judgment, and the disciplined separation of fact from inference. Graduates are qualified to serve but do not receive unrestricted authority.
+
+The player begins as a newly graduated, probationary Threadbearer performing supervised work in the open Halls, surface districts, and staffed public works. Captain Brunna knows the player from practical evaluations and believes they may possess the judgment required for deeper work.
 
 A **Deep Writ** is a special authorization allowing a Threadbearer to enter restricted under-works, inspect sealed civic systems, request records across offices, and carry Keys under witnessed custody. It is a permit, not a separate profession.
 
-Captain Brunna oversees the player's field evaluation and recommends the Deep Writ. Lithen authenticates the record basis and Archive access. Warden and Archive support together make the descent politically plausible without making either office the player's owner.
+Captain Brunna oversees the player's field evaluation and grants the Deep Writ after the first joined account proves the player can connect failures without inventing their cause. Lithen later authenticates its Archive basis, authorizes restricted records, and releases the Echo Key under witnessed custody. Warden and Archive support together make the descent politically plausible without making either office the player's owner.
 
 ### 8.6 Why the player is chosen
 
@@ -494,7 +498,7 @@ The important qualities are:
 - Ability to act without concealing failure.
 - Recognition of a pattern everyone else treated as separate accidents.
 
-This earns a provisional assignment inside the Halls. The record produced there supports Brunna's recommendation, and Lithen's later authentication completes the Deep Writ required for the descent.
+This earns Brunna's Deep Writ and a provisional assignment below the public Halls. Lithen's later authentication extends the investigation into restricted Archive systems and establishes the evidentiary basis for carrying the expedition into the Depths.
 
 ### 8.7 The Weaver
 
@@ -529,7 +533,7 @@ The **Works Comptroller** is an office responsible for approving large maintenan
 - Depths crews can identify the practical consequences.
 - The player's final report makes the pattern publicly undeniable.
 
-The current Comptroller may appear as a recurring official, but their name and House remain **open design**. They should embody institutional rationalization rather than serve as the sole cause of the crisis. Their cooperation, exposure, or resistance can affect the strength of the epilogue.
+The current Works Comptroller is **Halvek**. His House affiliation remains open design. He embodies institutional rationalization rather than serving as the sole cause of the crisis: defensive, procedural, and accustomed to treating lawful fragments as proof that no unlawful whole exists. His cooperation, exposure, or resistance can affect resources during the expedition and the strength of the epilogue.
 
 ### 9.4 Civic Wardens
 
@@ -627,9 +631,9 @@ Dorrin issues necessary field gear, sells additional supplies, tracks losses, an
 ### 10.6 Sella Flintwake
 
 **Status:** Supporting canon  
-**Role:** Salvager and mobile supplier in the lower works
+**Role:** Salvager, former Brass Choir trainee, and mobile supplier in the lower works
 
-Sella recovers usable material from abandoned or flooded routes. She provides trade, local knowledge, and evidence of how much infrastructure Brassreach has quietly surrendered.
+Sella recovers usable material from abandoned or flooded routes and preserves practical tuning knowledge after failed budgets scattered several Choir crews. She provides trade, local knowledge, and evidence of how much infrastructure Brassreach has quietly surrendered. At the Silent Brassworks, she coordinates Choir tuners, furnace workers, pump crews, and salvagers into a shared repair.
 
 Her work should raise practical questions about ownership, salvage, and survival without turning every purchase into a moral lecture.
 
@@ -1317,7 +1321,7 @@ Lithen's name for the immense continuous living resonance beneath Brassreach. It
 
 ### Threadbearer
 
-A chartered civic investigator, cartographer, witness, inspector, and mediator who preserves an unbroken record from cause to consequence.
+A graduate of the Threadbearer Institute and chartered civic investigator, cartographer, witness, inspector, and mediator who preserves an unbroken record from cause to consequence.
 
 ### Thread Ledger
 
@@ -1419,7 +1423,6 @@ The following should remain open until explicitly developed:
 
 - Exact founding dates and calendar.
 - Names and number of High Houses.
-- Identity of the current Works Comptroller.
 - Whether any founder suspected the emergence of living resonance.
 - Whether smaller forms of living resonance exist throughout the city.
 - The exact legal text of the Founding Covenant.
