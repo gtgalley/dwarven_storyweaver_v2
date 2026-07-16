@@ -16,6 +16,22 @@ Write concrete nouns and active verbs. A sentence may be regal or vivid, but nev
 
 Use present tense for the scene in front of the player. Use past tense for history only when a character, inscription, document, or visible record supplies it. Do not give the player historical facts through an unexplained omniscient narrator.
 
+Clarity does not require minimalism. Brassreach should feel inhabited: gears turn behind walls, people interrupt one another under pressure, light reveals scale, and old materials carry visible histories. Use meaningful detail generously when it establishes place, clarifies danger, reveals character, demonstrates craft, or gives an outcome emotional weight.
+
+## Authorial voice
+
+The target voice is confident, atmospheric high fantasy written for immediate comprehension. A substantial beat should usually form a small dramatic arc:
+
+1. Establish a strong physical impression.
+2. Introduce motion, sound, light, labor, or danger.
+3. Focus upon the immediate problem.
+4. Let a person, discovery, or environmental response deepen the moment.
+5. End with a choice, warning, revelation, or emotional turn.
+
+Longer passages are welcome when every paragraph adds action, atmosphere, character, or understanding. Do not compress wonder into a report, and do not lengthen routine travel with decorative repetition. Paragraph breaks should mark a new action, speaker, revelation, danger, or moment of silence.
+
+Emotion should arise from events. Show fear through narrowing routes, unstable footing, broken machinery, and urgent voices; show wonder through scale, ritual, light, and the careful discovery of old records; show relief through survivor counts, released breath, and changed behavior after danger passes. Name an emotion only when the physical scene has already earned it.
+
 ## Scene structure
 
 A scene may use several paragraphs when each paragraph earns its place. Prefer this order:
@@ -31,10 +47,10 @@ Do not append unrelated lore merely because the scene is an opportunity to teach
 
 Dialogue should perform work: deliver an order, expose a disagreement, identify evidence, admit uncertainty, or force a decision.
 
-- **Captain Brunna:** short sentences, practical orders, named risks, little ornament. She distinguishes fact from rumor.
+- **Captain Brunna:** experienced, perceptive, encouraging, and authoritative. She may show warmth toward a promising graduate, but danger makes her concise.
 - **Quartermaster Dorrin:** dry, economical, and focused on preparation, ownership, and public purpose.
 - **Lithen the Wise:** formal and learned, but exact. She identifies her sources and says plainly what she cannot verify herself.
-- **Orra Mullinen:** disciplined and protective. She speaks in terms of people, loads, routes, and duties before symbols.
+- **Commander Orra Vale:** urgent, disciplined, brave, and protective. She speaks in terms of people, loads, routes, and duties before symbols.
 - **Piera:** quick, observant, locally informed, and skeptical of official maps that omit lived conditions.
 - **Sella Flintwake:** practical salvage language with enough former Choir training to explain tone, timing, and material failure.
 - **Officials such as Halvek:** procedural and cautious. Their language should reveal how responsibility is divided without turning them into theatrical villains.
@@ -57,6 +73,8 @@ Choice labels begin with a direct verb and describe one coherent action. Integra
 - Avoid: “Take the tools. Help repair the floodgate.”
 
 The success and failure result must state the physical outcome before its larger meaning. Failure moves the story forward, changes the route, and records a consequence.
+
+A developed check result should show the attempt beginning, the relevant resistance, the practical effect of preparation or ability, the immediate resolution, and another person's or the environment's reaction. Do not repeat the choice label as the opening sentence.
 
 When several choices reach one scene, use a short arrival passage keyed to the prior choice. Name the altered route, person, injury, repair, or evidence. The following scene should feel like a continuation of the player’s route, not a reset to a generic script.
 

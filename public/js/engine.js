@@ -1,6 +1,6 @@
 // Brassreach browser game engine
-// v22 — Narrative Clarity & RPG Integration: direct prose, reactive arrivals,
-// source-labelled bonuses, consequence feedback, and save-v5 compatibility.
+// v23 — Atmospheric Narrative Overhaul: authored dramatic arcs, richer reactive
+// prose, ending-specific addresses, and save-v5 compatibility.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -349,12 +349,12 @@ const Weaver = makeWeaver(store,
 );
 // --- Global glossary (fallback for .gloss without data-def) ----------
 window.GLOSS = Object.assign({
-  "brassreach": "A terraced dwarven city whose oldest works join water, stone, brass, and public stewardship.",
-  "threadbearers": "Civic investigators and witnesses who connect testimony, physical evidence, decisions, and consequences in a public record.",
-  "thread-bearers": "Civic investigators and witnesses who connect testimony, physical evidence, decisions, and consequences in a public record.",
-  "thread ledger": "A tamper-evident public record carried by Threadbearers. Later changes remain visible.",
-  "deep writ": "Authority to inspect restricted public works and compel records without granting command over workers or residents.",
-  "unfathomer": "Lithen’s name for a continuous living resonance distributed through water, stone, brass, and the oldest works below Brassreach.",
+  "brassreach": "A layered dwarven city whose living works join water, stone, brass, skilled labor, and public care.",
+  "threadbearers": "Civic investigators trained to follow a failure from physical cause through testimony, decision, and consequence.",
+  "thread-bearers": "Civic investigators trained to follow a failure from physical cause through testimony, decision, and consequence.",
+  "thread ledger": "A tamper-evident field record. Every sealed account, correction, and later alteration remains visible.",
+  "deep writ": "Hard-earned authority to inspect restricted works and cross-office records, without command over workers or residents.",
+  "unfathomer": "Lithen’s careful name for the immense, continuous living resonance spread through the oldest water, stone, and brass.",
   "halls": "Upper civic corridors and inspection works forming the threshold to the old city below.",
   "archives": "The repository of civic law, testimony, engineering history, Threadbearer records, and the Echo Key.",
   "depths": "Flooded foundations, pressure stairs, and cistern galleries beneath the public works.",
@@ -367,7 +367,7 @@ window.GLOSS = Object.assign({
   "weight": "What a structure, institution, or decision must carry, and who bears the consequence.",
   "tone": "The working relationship among voices, materials, mechanisms, and resonant systems.",
   "pattern": "What returns across time, including memory, maintenance, precedent, and change.",
-  "founding covenant": "Brassreach’s early civic constitution. It is not a pact with the Unfathomer."
+  "founding covenant": "Brassreach’s first civic constitution, joining stewardship, public record, shared duty, and limits on inherited power."
 }, window.GLOSS||{});
 
 /* ---------- boot ---------- */
@@ -1570,12 +1570,18 @@ function beginTale(preserveProgress=false){
   else{ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false,...S.flags}; S.campaign=normalizeCampaign(S.campaign,S); S.journal=normalizeJournal(S.journal,S.campaign); }
   enterScene(S.campaign.sceneId||'tutorial-commission');
 }
+function renderEpilogueText(text){
+  Engine.el.epiContent.innerHTML=String(text||'').split(/\n\s*\n/).map(paragraph=>{
+    const clean=paragraph.trim(),counter=clean.startsWith('Counter record:');
+    return `<p class="${counter?'epilogue-counter':''}">${esc(clean)}</p>`;
+  }).join('');
+}
 function endTale(){
   const S=Engine.state,C=S.character,ending=S.campaign.ending;
   const unresolved=S.campaign.flags?.unfathomerNamed?'The Unfathomer’s rise remains unresolved below Brassreach.':'The connected failures below Brassreach remain unexplained.';
   const ep=ending?.text||`You retire the expedition at ${currentScene().title} with ${C.Gold} gold and ${C.inventory.length} carried items. ${unresolved}`;
   if(!ending) appendBeat(ep,null,'story'); renderChoices([]); renderAll();
-  Engine.el.epiTitle.textContent=ending?.title||'Expedition Retired'; Engine.el.epiContent.textContent=ep; openModal(Engine.el.modalEpi);
+  Engine.el.epiTitle.textContent=ending?.title||'Expedition Retired'; renderEpilogueText(ep); openModal(Engine.el.modalEpi);
 }
 function undoTurn(){
   const S=Engine.state,previous=S._undoStack?.pop(); if(!previous){ toast('Nothing to undo'); return; }
@@ -1649,13 +1655,13 @@ function freeText(){ const text=(Engine.el.freeText.value||'').trim(); if(!text)
 function campaignExplorationText(ch){
   const S=Engine.state,scene=currentScene(),count=S.campaign.exploration[scene.id]||0;
   const context={
-    tutorial:['Your inspection confirms the immediate hazard but adds no new cause. You mark the safe route and return to the task in your ledger.','You hear the same low overtone through nearby stone. Its source remains unknown, and you record that limit.'],
-    halls:['A maintenance mark confirms that the route once continued below the modern plan. Your current objective remains the strongest lead.','The masonry is damp but stable for now. You add the observation without claiming it explains the wider failures.'],
-    archives:['A dated margin supports the sequence already in your ledger but does not change the next comparison Lithen requires.','The shelves preserve several competing explanations. You record the disagreement and keep the current task in view.'],
-    depths:['Cold water carries pressure through the floor in one broad movement. You secure the return path before continuing.','A Warden mark confirms the next safe brace. The larger rise remains unchanged by this brief inspection.'],
-    brassworks:['The silent machinery reveals another careful worker patch beneath a newer housing. It supports the existing repair plan without replacing it.','A faint interference beat remains in the floor. You mark its timing and return to the shared tuning sequence.'],
-    gate:['The Gate exposes another layer of load and repair history. Its current instrument still awaits the concrete calibration named in your objective.'],
-    choice:['The surrounding pressure changes with the stable interval but forms no words. The living Choice still depends on the preparation recorded by the Counter.']
+    tutorial:['Your inspection reveals fresh strain around the immediate hazard, but no new cause. You mark the safest return route, add the observation to your ledger, and turn back before curiosity becomes delay.','You hold still until nearby footsteps fade. The same low overtone enters the stone beneath your hand, lingers after the visible mechanism grows quiet, and disappears before you can find its source. You record the limit as carefully as the sound.'],
+    halls:['Beneath soot and newer paint, you uncover a maintenance mark pointing beyond the border of the modern plan. It confirms that the route once continued, but your current objective remains the strongest way to learn where it went.','Water beads along the lower masonry, cold and metallic against your fingers. The wall remains stable for now. You enter the damp line in your ledger without pretending it explains the wider failure.'],
+    archives:['A dated note in the margin supports the sequence already assembled in your ledger. It changes no conclusion by itself, but Lithen nods when you preserve it beside the source that gave it meaning.','Three neighboring shelves preserve three different explanations for the same old collapse. You record the disagreement, the authors, and the evidence each possessed before returning to the comparison Lithen can actually test.'],
+    depths:['Cold water presses through the floor in one broad movement and makes every loose chain answer together. You secure the return line, wait for the pressure to pass, and continue without mistaking survival for discovery.','A scarred Warden mark identifies the next brace that still carries weight. You verify it before trusting your rope to the stone. The larger rise does not slow for this brief inspection.'],
+    brassworks:['Behind a polished modern housing, you find another careful worker patch bearing years of heat without recognition. Its workmanship supports the shared repair plan; it cannot replace the next coordinated step.','A faint interference beat persists beneath the silent machines. You follow it across two floor plates, mark the timing, and return to Sella before testing anything alone.'],
+    gate:['The Gate reveals another layer of load, repair, and consequence. The image is vast enough to invite speculation, but the active instrument still awaits the concrete calibration named in your objective.'],
+    choice:['Pressure changes around you with the stable interval, and the cerulean lights turn as one. No words form in the water. The living Choice still depends upon the preparation measured by the Counter.']
   };
   const lines=context[scene.chapter]||context.tutorial,line=lines[count%lines.length]; S.campaign.exploration[scene.id]=count+1;
   return `You ${ch.sentence.replace(/^you\s+/i,'')}. ${line}`;
@@ -1670,11 +1676,11 @@ function liveCanonContext(){
       'Narrate only the submitted exploratory action; do not advance the authored scene, award items, change stats, or resolve the objective.',
       named?'The Unfathomer is continuous living resonance and cannot speak complex language.':'Do not use the name Unfathomer or reveal a hidden entity; the player knows only connected failures and a low overtone.',
       'Do not introduce a Fourth Measure, Line Measure, stolen constitutional record, magical command, or speaking boss.',
-      'Use present-tense, concrete action with a clear actor, object, and visible result. Do not personify a mechanism when a literal verb is clearer.',
+      'Use present-tense, atmospheric high-fantasy prose with a clear actor, object, physical setting, and visible result. Rich detail must establish scale, danger, character, or causality.',
       'Historical facts must come from a named speaker, document, inscription, or other source available in the current scene.',
       'Preserve each character voice: Brunna is concise, Dorrin practical, Lithen learned but explicit about uncertainty, Orra direct, and Sella dry and technically observant.',
       'Never invent item ownership, equipment, bonuses, injuries, gold changes, reputation changes, or other game-state changes.',
-      'Keep the prose dramatic but plain enough to understand on one reading. Preserve uncertainty where the record is incomplete.'
+      'Let the beat move from physical impression through action or discovery to a clear turn, while remaining understandable on one attentive reading. Preserve uncertainty where the record is incomplete.'
     ]
   };
 }
@@ -1737,7 +1743,7 @@ function eligibleSacrifices(){
 function failureCost(){ const order=['tutorial','halls','archives','depths','brassworks','gate','choice'],index=Math.max(0,order.indexOf(Engine.state.campaign.chapter)); return 4+(index*2); }
 function openLostEncounter(ch,result){
   const id=ch.encounter||ch.id,used=!!Engine.state.campaign.rerollsUsed[id],cost=failureCost(),items=eligibleSacrifices(); Engine.pendingFailure={ch,result,id,cost};
-  Engine.el.lostContent.innerHTML=`<p id="lostSummary">${esc(ch.failure||'The attempt fails, but the expedition can continue.')}</p><div class="lost-roll"><span>Result</span><strong>${esc(rollLabel(result))}</strong></div><p class="lost-copy">Accept the consequence, or pay once to make a new attempt. Keys, relics, quest items, and equipped gear are protected.</p><div class="lost-options"><button class="btn gold" data-lost-action="gold" ${used||Engine.state.character.Gold<cost?'disabled':''}>Spend ${cost} gold<br><small>${used?'Reroll already used':`${Engine.state.character.Gold} available`}</small></button><button class="btn" data-lost-action="item" ${used||!items.length?'disabled':''}>Risk a random item<br><small>${items.length} eligible</small></button><button class="btn red" data-lost-action="accept">Accept consequence<br><small>The story moves forward</small></button></div>`;
+  Engine.el.lostContent.innerHTML=`<p id="lostSummary">${esc(ch.failure||'The attempt fails, but the expedition can continue.')}</p><div class="lost-roll"><span>Result</span><strong>${esc(rollLabel(result))}</strong></div><p class="lost-copy">The moment cannot be erased. You may accept its consequence, pay once for emergency labor and replacement material, or surrender an ordinary carried item to create one more opening. Keys, relics, quest records, and equipped gear remain protected.</p><div class="lost-options"><button class="btn gold" data-lost-action="gold" ${used||Engine.state.character.Gold<cost?'disabled':''}>Spend ${cost} gold<br><small>${used?'Second attempt already used':`${Engine.state.character.Gold} available`}</small></button><button class="btn" data-lost-action="item" ${used||!items.length?'disabled':''}>Sacrifice a random item<br><small>${items.length} eligible</small></button><button class="btn red" data-lost-action="accept">Accept the consequence<br><small>The story continues from it</small></button></div>`;
   openModal(Engine.el.modalLost); Engine.el.modalLost.querySelector('button:not([disabled])')?.focus();
 }
 function closeLost(){ Engine.pendingFailure=null; closeModal(Engine.el.modalLost); }
@@ -1768,10 +1774,11 @@ function finalizeEnding(id){
   };
   const quality=strongByEnding[id]?'strong':'strained';
   const counter=`Counter record: ${metrics.keys} Keys, ${metrics.evidence} evidence entries, ${metrics.testimony} witnessed accounts, ${metrics.repairs} completed repairs, and ${metrics.alliances} allied groups.`;
-  const text=`${ending[quality]} ${counter}`;
+  const narrative=[ending.address,ending[quality]].filter(Boolean).join('\n\n');
+  const text=`${narrative}\n\n${counter}`;
   S.campaign.ending={id,title:ending.title,text,quality,metrics}; S.flags.bossDealtWith=true; S.campaign.objective='The expedition is complete.';
-  addJournal('milestones',ending.title); appendBeat(text,null,'story'); renderChoices([]); S.turn++; renderAll(); persistState('Epilogue stored');
-  Engine.el.epiTitle.textContent=ending.title; Engine.el.epiContent.textContent=text; openModal(Engine.el.modalEpi); BGM.updateForState(S);
+  addJournal('milestones',ending.title); appendPassage(narrative); appendEffectSummary([{tone:'record',label:'Counter record',detail:`${metrics.keys} Keys · ${metrics.evidence} evidence · ${metrics.testimony} accounts · ${metrics.repairs} repairs · ${metrics.alliances} allies`}]); renderChoices([]); S.turn++; renderAll(); persistState('Epilogue stored');
+  Engine.el.epiTitle.textContent=ending.title; renderEpilogueText(text); openModal(Engine.el.modalEpi); BGM.updateForState(S);
 }
 
 function openMerchant(id){ Engine.activeMerchant=MERCHANTS[id]; if(!Engine.activeMerchant) return; renderMerchant(); openModal(Engine.el.modalMerchant); }
@@ -1906,7 +1913,7 @@ function getIntroSlidesHTML(){
     <section class="slide s1 active" data-side="img-left" aria-label="Slide 1">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Lanterns burn across the terraces of <span class="gloss" data-def="A dwarven city whose oldest works join water, stone, brass, and shared stewardship.">Brassreach</span>. Its founders shaped natural caverns into reservoirs, foundations, and tuned public works. The city above depends on those systems, though many citizens rarely see them. Important failures are investigated by <span class="gloss" data-def="Civic investigators and witnesses who connect testimony, evidence, decisions, and consequences.">Threadbearers</span>. They carry a <span class="gloss" data-def="A public, tamper-evident record in which later changes remain visible.">Thread Ledger</span>, hear the people affected, test the physical cause, and preserve who chose what came next. Their work can guide civic law because it makes consequences difficult to hide.</p>
+        <p>The labyrinth of towers, alleyways, stairwells, and terraces in <span class="gloss" data-def="A layered dwarven city whose living works join water, stone, brass, skilled labor, and public care.">Brassreach</span> glows beneath a thousand mechanical lanterns. Gears turn within the walls; lifts climb between crowded levels; bells carry the hours from the highest towers to the stone below. The city seems alive by design. Centuries of work reaching back to the Founders taught its metal skeleton to whir, click, and hum in one great harmony. At least, it once did. In recent decades, greed, vanity, and divided authority have left that flawless machinery frail and shuddering. Bells answer one another out of tune. Public gears grind while private towers shine. Factions pursue gold, influence, and inherited privilege, while fewer citizens remember the shared care that made the young city possible. Brassreach still blazes against the mountain dark, but anyone who listens closely can hear its heartbeat falter.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introSkip1">Skip</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1915,7 +1922,7 @@ function getIntroSlidesHTML(){
     <section class="slide s2" data-side="img-left" aria-label="Slide 2">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>Brassreach has endured years of rising water and failing repairs. Now three ordinary incidents share one strange detail: a cracked bell-stair, flooded homes in the <span class="gloss" data-def="A dense craft and residential district built from workshops, ropewalks, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den all carry the same low overtone. No official map connects the sites. The problem may be one mechanism, several failures acting together, or something the city has forgotten how to measure. At the start, nobody gives you a monster’s name or a prophecy. You have observations, people in danger, and a question that must remain honestly unanswered until the evidence supports more.</p>
+        <p>Brassreach descends as far as it rises. The surface holds civic workshops, dwellings, wealthy towers, and Halls where elected officials and hereditary power struggle over the city's course. Beneath them, the Undercity opens into founder-made reservoirs and vaulted public works, lit by golden seams that fade a little more each year. Deeper still lie the Archives, where the memory of Brassreach survives in law, maps, testimony, and repaired fragments. To and from those galleries travel <span class="gloss" data-def="Civic investigators trained to follow a failure from physical cause through testimony, decision, and consequence.">Threadbearers</span>. Their predecessors returned from long journeys with accounts woven by needle and thread; modern bearers carry each witnessed cause and consequence in a <span class="gloss" data-def="A tamper-evident field record whose sealed accounts and later corrections remain visible.">Thread Ledger</span>. Most work near the public Halls. A trusted few earn the <span class="gloss" data-def="Hard-earned authority to inspect restricted works and cross-office records without commanding their people.">Deep Writ</span> and descend toward the Cistern Fields, where high vaults, dark reservoirs, and the oldest foundations pass beyond common knowledge.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack2">◂ Back</button><button class="btn gold intro-next">Continue ▸</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1924,7 +1931,7 @@ function getIntroSlidesHTML(){
     <section class="slide s3" data-side="img-left" aria-label="Slide 3">
       <div class="img" aria-hidden="true"></div>
       <div class="copy"><div class="scroll">
-        <p>You begin under a <span class="gloss" data-def="Limited authority for a new Threadbearer to investigate public hazards under supervision.">probationary writ</span>. Captain Brunna will judge whether your account is accurate enough to earn deeper authority. Your attributes, equipment, testimony, repairs, and alliances can change later checks. Failure redirects the scene and leaves a real consequence; it does not erase the campaign. You may spend gold or risk an ordinary item for one renewed attempt. Use the journal to review the current objective and the inventory to prepare for concrete tasks. Most of all, distinguish what you saw from what you suspect. Brassreach has spent generations turning neglected warnings into separate problems. Your first work is to join them without inventing an answer.</p>
+        <p>The Founders shaped the Cistern Fields chamber by chamber, listening to pickaxe, water, stone, and brass until the deepest works rang in accord with the city above. That accord has weakened. Water has risen for years through decaying channels, and failures once separated by whole districts now carry the same strange vibration. A cracked bell-stair, flooded homes in the <span class="gloss" data-def="A dense craft and residential district of workshops, ropewalks, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den should have nothing in common. No official map joins them. You begin as a recent Institute graduate under a <span class="gloss" data-def="Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna's supervision.">probationary writ</span>. Your attributes, equipment, testimony, repairs, and alliances will shape what follows; failure will leave a real consequence without ending the campaign. Captain Brunna does not offer you a prophecy or a hidden enemy. She gives you people in danger, machines that no longer behave as they should, and one low overtone climbing from somewhere the modern maps refuse to show.</p>
       </div></div>
       <div class="nav"><button class="btn secondary" id="introBack3">◂ Back</button><button class="btn gold intro-begin">Begin Story</button></div>
       <div class="mist" aria-hidden="true"></div>
@@ -1936,7 +1943,7 @@ function getIntroScrollHTML(){
   return `
     <hr class="sep"/>
     <div class="quick-tables">
-      <h4>Threadbearer Field Brief</h4>
+      <h4>Threadbearer Institute Field Brief</h4>
       <div class="grid2">
         <div>
           <h5>The Office</h5>
@@ -1945,7 +1952,7 @@ function getIntroScrollHTML(){
             <li><b>Witness</b> — Record who was affected and what they observed.</li>
             <li><b>Connect</b> — Show how decisions, repairs, and consequences form one chain.</li>
           </ul>
-          <p>A Threadbearer records civic truth. The office does not grant unchecked command.</p>
+          <p>A Threadbearer follows the unbroken line from a damaged work to the people, decisions, and duties around it. The office grants access and witness—not unchecked command.</p>
         </div>
         <div>
           <h5>Your Record</h5>
@@ -1955,11 +1962,11 @@ function getIntroScrollHTML(){
             <li><b>Repairs</b> — Concrete improvements completed along the route.</li>
             <li><b>Consequences</b> — Costs that remain even when the story moves forward.</li>
           </ul>
-          <p>The journal keeps these strands visible as the investigation grows.</p>
+          <p>Your Thread Ledger keeps these strands together so a later office cannot preserve the repair while burying its cause.</p>
         </div>
       </div>
       <h5>First Commission</h5>
-      <ul><li>Inspect the cracked bell-stair.</li><li>Compare official plans with lived routes in the Tangles.</li><li>Protect displaced animals and residents.</li><li>Report what the evidence proves—and what it does not.</li></ul>
+      <ul><li>Secure the cracked bell-stair and hear its unusual vibration.</li><li>Compare official plans with the routes people actually use in the Tangles.</li><li>Protect residents and animals displaced by the rising water.</li><li>Return to Captain Brunna with what the evidence proves—and what remains honestly unknown.</li></ul>
     </div>`;
 }
 

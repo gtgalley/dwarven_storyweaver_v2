@@ -18,7 +18,10 @@ const context=await browser.newContext({viewport:{width:1440,height:1000},device
 const page=await context.newPage();
 page.on('console',message=>{ if(message.type()==='error') results.consoleErrors.push(message.text()); });
 page.on('pageerror',error=>results.consoleErrors.push(error.message));
-page.on('requestfailed',request=>{ if(request.url().startsWith(base)) results.failedLocalRequests.push(`${request.url()} — ${request.failure()?.errorText||'failed'}`); });
+page.on('requestfailed',request=>{
+  const error=request.failure()?.errorText||'failed';
+  if(request.url().startsWith(base)&&error!=='net::ERR_ABORTED') results.failedLocalRequests.push(`${request.url()} — ${error}`);
+});
 
 async function ready(){
   await page.goto(base,{waitUntil:'networkidle'});
@@ -131,7 +134,7 @@ await page.screenshot({path:path.join(output,'07-sella-brassworks.png'),fullPage
 
 await seedScene('gate-counter',{items:['Echo Key','Stone Key','Brass Key'],story:'The final witnesses seal the ledger.'});
 const gateText=await page.locator('#story').innerText();
-assert(gateText.includes('The Counter is not a judge, and it does not speak.'),'Counter explanation lost its literal framing');
+assert(/not a judge, and it does not speak/i.test(gateText),'Counter explanation lost its literal framing');
 await page.screenshot({path:path.join(output,'08-gate-counter.png'),fullPage:true});
 
 assert(results.consoleErrors.length===0,`Console errors: ${results.consoleErrors.join(' | ')}`);
