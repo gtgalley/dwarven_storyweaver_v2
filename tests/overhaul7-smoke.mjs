@@ -62,21 +62,27 @@ await page.evaluate(()=>{
   localStorage.removeItem('brassreach:intro_seen');
 });
 await page.reload({waitUntil:'networkidle'});
-await page.waitForFunction(()=>document.querySelector('#intro .slide.active .scroll'));
+await page.waitForFunction(()=>document.querySelector('#intro .book-shell.is-dormant'));
 const introText=await page.locator('#intro').textContent();
 assert(introText.includes('Threadbearer'),'The intro no longer establishes the player’s role');
 assert(!/Unfathomer|Gate of Measures|Three Keys/.test(introText),'The intro reveals late-game discoveries');
+await page.keyboard.press('Enter');
+await page.waitForFunction(()=>document.querySelector('#intro .book-shell.is-ready'));
 for(const width of [1920,1440,1280,1024]){
   await page.setViewportSize({width,height:1000});
   await page.waitForTimeout(50);
   const metric=await page.evaluate(()=>{
-    const slide=document.querySelector('#intro .slide.active'),pic=slide.querySelector('.pic'),scroll=slide.querySelector('.scroll');
-    const sr=slide.getBoundingClientRect(),pr=pic.getBoundingClientRect(),tr=scroll.getBoundingClientRect(),before=getComputedStyle(slide,'::before'),after=getComputedStyle(slide,'::after');
-    return {width:innerWidth,lineCenter:sr.left+parseFloat(before.left),jewelCenter:sr.left+parseFloat(after.left),viewportCenter:innerWidth/2,leftGap:innerWidth/2-pr.right,rightGap:tr.left-innerWidth/2,overflow:document.documentElement.scrollWidth-innerWidth};
+    const stage=document.querySelector('#intro .book-stage').getBoundingClientRect();
+    const gutter=document.querySelector('#intro .book-gutter').getBoundingClientRect();
+    const slide=document.querySelector('#intro .slide.active');
+    const art=slide.querySelector('.pic').getBoundingClientRect();
+    const copy=slide.querySelector('.copy').getBoundingClientRect();
+    return {width:innerWidth,stageCenter:stage.left+stage.width/2,gutterCenter:gutter.left+gutter.width/2,artRight:art.right,copyLeft:copy.left,overflow:document.documentElement.scrollWidth-innerWidth};
   });
-  assert(Math.abs(metric.lineCenter-metric.viewportCenter)<.1,`Intro divider is off-center at ${width}px`);
-  assert(Math.abs(metric.jewelCenter-metric.viewportCenter)<.1,`Intro jewel is off-center at ${width}px`);
-  assert(Math.abs(metric.leftGap-metric.rightGap)<.1,`Intro panels are asymmetric at ${width}px`);
+  assert(Math.abs(metric.stageCenter-width/2)<1.5,`Open book is not centered at ${width}px`);
+  assert(Math.abs(metric.gutterCenter-width/2)<2,`Book gutter is not centered at ${width}px`);
+  assert(metric.artRight<=width/2+2,`Intro artwork crosses the gutter at ${width}px`);
+  assert(metric.copyLeft>=width/2-2,`Intro copy crosses the gutter at ${width}px`);
   assert(metric.overflow<=0,`Horizontal overflow at ${width}px`);
   results.intro.push(metric);
 }

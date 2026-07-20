@@ -1,5 +1,5 @@
 // Brassreach browser game engine
-// v24 — Interim author-workbook integration, living-book intro, and grouped story turns.
+// v25 — Deliberate living-book opening, tactile page audio, and opening-story grouping.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -39,8 +39,10 @@ const store={
 };
 
 /* ---------- inventory & equipment ---------- */
-const SAVE_VERSION=6;
+const SAVE_VERSION=7;
 const BACKPACK_CAPACITY=40;
+const OPENING_GROUP_ID='opening-journey';
+const OPENING_GROUP_TITLE='The Journey Begins';
 const EQUIPMENT_SLOTS = [
   ['head','Head'], ['chest','Chest'], ['hands','Hands'], ['legs','Legs'],
   ['feet','Feet'], ['mainHand','Main Hand'], ['offHand','Off Hand'], ['accessory','Accessory']
@@ -185,32 +187,38 @@ const BGM = (function(){
     depths:   { title:"Beneath the Cistern Fields", srcs:["./public/audio/662478af-b29d-4034-a2fc-d2ea9fd75dc4.mp3"] },
     archives: { title:"Whispers of the Archives", srcs:["./public/audio/73a9c81f-6be8-45a2-8338-2b8b7a53d596.mp3"] },
   };
-  const cache = new Map();
+  const cache = new Map(), loads=new Map();
   function getCtx(){ try{ Sound.ensure(); }catch{}; return (Sound.getCtx? Sound.getCtx() : new (window.AudioContext||window.webkitAudioContext)()); }
   async function load(name){
     if(cache.has(name)) return cache.get(name);
+    if(loads.has(name)) return loads.get(name);
     const t = tracks[name]; if(!t) return null;
-    const C = getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.music ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
-    for(const url of t.srcs){
-      try{
-        const res = await fetch(url, {cache:"force-cache"}); if(!res.ok) continue;
-        const arr = await res.arrayBuffer();
-        const buf = await C.decodeAudioData(arr.slice(0));
-        const layers=[];
-        for(const layerUrl of (t.layerSrcs||[])){
-          try{
-            const layerRes=await fetch(layerUrl,{cache:"force-cache"});
-            if(layerRes.ok) layers.push(await C.decodeAudioData((await layerRes.arrayBuffer()).slice(0)));
-          }catch{}
-        }
-        const o = {buffers:[buf,...layers]}; cache.set(name,o); return o;
-      }catch(e){}
-    }
-    return null;
+    const pending=(async()=>{
+      const C = getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.music ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
+      for(const url of t.srcs){
+        try{
+          const res = await fetch(url, {cache:"force-cache"}); if(!res.ok) continue;
+          const arr = await res.arrayBuffer();
+          const buf = await C.decodeAudioData(arr.slice(0));
+          const layers=[];
+          for(const layerUrl of (t.layerSrcs||[])){
+            try{
+              const layerRes=await fetch(layerUrl,{cache:"force-cache"});
+              if(layerRes.ok) layers.push(await C.decodeAudioData((await layerRes.arrayBuffer()).slice(0)));
+            }catch{}
+          }
+          const o = {buffers:[buf,...layers]}; cache.set(name,o); return o;
+        }catch(e){}
+      }
+      return null;
+    })();
+    loads.set(name,pending);
+    try{ return await pending; }finally{ loads.delete(name); }
   }
+  function prime(name){ return load(name).catch(()=>null); }
   function setBus(v){ if(bus) bus.gain.value=v; }
   async function crossTo(name){
-    if(!unlocked){ pendingName=name; return; }
+    if(!unlocked){ pendingName=name; prime(name); return false; }
     if(name===targetName || (name===currentName && cur.length)) return;
     targetName=name;
     const token=++requestToken;
@@ -237,9 +245,11 @@ const BGM = (function(){
       currentName=name;
       if(prev.length){ setTimeout(()=>prev.forEach(source=>{ try{ source.stop(); }catch{} }), fade*1000+120); }
       const t=tracks[name]; if(t) setNowPlaying(t.title);
+      return true;
     }catch(e){
       if(token===requestToken) targetName=currentName;
       console.error('BGM crossTo error', e);
+      return false;
     }
   }
   function stop(){
@@ -267,32 +277,58 @@ const BGM = (function(){
     return crossTo('halls');
   }
   function setNowPlaying(t){ try{ if (window.setNowPlaying) window.setNowPlaying(t); else { const e=document.getElementById('npTitle'); if(e) e.textContent=t; } }catch{} }
-  function unlock(){
-    if(unlocked) return Sound.resume();
-    unlocked=true;
-    Sound.ensure();
-    Sound.resume();
+  async function unlock(name=null){
+    if(name) pendingName=name;
     const requested=pendingName;
+    if(requested) prime(requested);
+    Sound.ensure();
+    await Sound.resume();
+    const C=Sound.getCtx?.();
+    if(C?.state!=='running') return false;
+    unlocked=true;
     pendingName=null;
-    if(requested) crossTo(requested);
+    if(requested) await crossTo(requested);
+    return true;
   }
-  return {crossTo, stop, updateForState, setLevel:setBus, unlock};
+  function attempt(name){ return unlock(name).catch(()=>false); }
+  function debugState(){ return {unlocked,currentName,targetName,pendingName,primed:[...cache.keys()],sources:cur.length,contextState:ctx?.state||null}; }
+  return {crossTo, stop, updateForState, setLevel:setBus, unlock, attempt, prime, debugState};
 })();
 
 /* ---------- sound @ ~20 BPM base ---------- */
 
 const Sound = (()=>{
   let ctx, master, ui;
-  const inventoryBuffers=new Map();
+  const audioBuffers=new Map();
   const inventoryUrls={pickup:'./public/audio/inventory-pickup.wav',place:'./public/audio/inventory-place.wav',reject:'./public/audio/inventory-reject.wav'};
+  const introUrls={
+    sparkle:'./public/audio/intro-sparkle.mp3',
+    cover:'./public/audio/book-cover-open.ogg',
+    binding:'./public/audio/book-binding-creak.ogg',
+    page:'./public/audio/book-page-turn.wav',
+    settle:'./public/audio/book-page-settle.ogg'
+  };
   const ensure = ()=>{
-    if (ctx) return;
+    if (ctx) return ctx;
     ctx = new (window.AudioContext||window.webkitAudioContext)();
     master = ctx.createGain(); master.gain.value = Engine.state.settings.audio.master; master.connect(ctx.destination);
     ui = ctx.createGain(); ui.gain.value = Engine.state.settings.audio.ui; ui.connect(master);
+    return ctx;
   };
   const setLevels = ()=>{ if(!ctx) return; master.gain.value = Engine.state.settings.audio.master; ui.gain.value = Engine.state.settings.audio.ui; };
-  const resume = ()=>{ if(ctx?.state==='suspended') return ctx.resume().catch(()=>{}); };
+  const resume = ()=>{ ensure(); return ctx.state==='suspended'?ctx.resume().catch(()=>false):Promise.resolve(true); };
+  const loadBuffer=url=>{
+    if(audioBuffers.has(url)) return audioBuffers.get(url);
+    ensure();
+    const pending=fetch(url,{cache:'force-cache'}).then(response=>{
+      if(!response.ok) throw new Error(`Audio unavailable: ${url}`);
+      return response.arrayBuffer();
+    }).then(data=>ctx.decodeAudioData(data.slice(0)));
+    audioBuffers.set(url,pending);
+    pending.catch(()=>audioBuffers.delete(url));
+    return pending;
+  };
+  const primeIntro=()=>Promise.allSettled(Object.values(introUrls).map(loadBuffer));
   const click = ()=>{ ensure(); const t=ctx.currentTime; const o=ctx.createOscillator(); o.type='square';
     o.frequency.setValueAtTime(300,t); o.frequency.exponentialRampToValueAtTime(120,t+.09);
     const g=ctx.createGain(); g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.28,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+.16);
@@ -325,20 +361,34 @@ const Sound = (()=>{
     ensure(); resume();
     try{
       const soundKind=kind==='swap'?'place':kind;
-      let buffer=inventoryBuffers.get(soundKind);
-      if(!buffer){
-        const response=await fetch(inventoryUrls[soundKind],{cache:'force-cache'});
-        if(!response.ok) throw new Error('inventory audio unavailable');
-        buffer=await ctx.decodeAudioData((await response.arrayBuffer()).slice(0));
-        inventoryBuffers.set(soundKind,buffer);
-      }
+      const buffer=await loadBuffer(inventoryUrls[soundKind]);
       const source=ctx.createBufferSource(), gain=ctx.createGain();
       source.buffer=buffer; gain.gain.value=kind==='reject'?.42:kind==='swap'?.68:.58;
       source.connect(gain).connect(ui); source.start();
     }catch{ sfx(kind==='reject'?'fail':'story'); }
   };
+  const intro=async(kind,{gain:gainOverride=null,pan=0}={})=>{
+    const sa=Engine.state.settings.audio||{};
+    if(sa.sfx_story===false||!introUrls[kind]) return false;
+    ensure(); await resume();
+    try{
+      const buffer=await loadBuffer(introUrls[kind]);
+      const source=ctx.createBufferSource(), gain=ctx.createGain();
+      const levels={sparkle:.34,cover:.54,binding:.2,page:.46,settle:.22};
+      source.buffer=buffer; gain.gain.value=gainOverride??levels[kind]??.3;
+      source.connect(gain);
+      if(ctx.createStereoPanner){
+        const panner=ctx.createStereoPanner(); panner.pan.value=clamp(pan,-.18,.18); gain.connect(panner).connect(ui);
+      }else gain.connect(ui);
+      source.start();
+      return true;
+    }catch{
+      if(kind==='sparkle') sfx('success');
+      return false;
+    }
+  };
   const ambOn = ()=>ensure(); // for legacy calls
-  return {click, sfx, gong, inventory, ambOn, setLevels, resume, ensure, getCtx:()=>{ ensure(); return ctx; }, getMaster:()=>master};
+  return {click, sfx, gong, inventory, intro, primeIntro, ambOn, setLevels, resume, ensure, getCtx:()=>ensure(), getMaster:()=>master};
 })();
 
 /* ---------- weaver ---------- */
@@ -391,15 +441,30 @@ export function boot(){
     try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
     document.getElementById('fxIntro')?.remove();
     if (!Engine.state.storyBeats.length) beginTale(Engine.loadedSave);
+  }else{
+    Sound.primeIntro();
   }
 
   /* ambience removed */ BGM.updateForState(Engine.state);
+  BGM.attempt();
+  Engine.getAudioDebug=()=>BGM.debugState();
   Engine.el.fxMainCtl=FX.start('fx');
 
-  // Browsers require a gesture before a suspended AudioContext may play.
-  const unlockAudio=()=>BGM.unlock();
-  window.addEventListener('pointerdown',unlockAudio,{once:true});
-  window.addEventListener('keydown',unlockAudio,{once:true});
+  // Browsers may require a deliberate gesture before a suspended AudioContext can play.
+  const releaseAudioListeners=()=>{
+    window.removeEventListener('pointerdown',unlockAudio);
+    window.removeEventListener('keydown',unlockAudio);
+  };
+  const unlockAudio=e=>{
+    if(e?.type==='keydown'){
+      const target=e.target;
+      if(e.key==='Tab'||e.key==='Escape'||['Shift','Control','Alt','Meta','CapsLock'].includes(e.key)||e.ctrlKey||e.altKey||e.metaKey) return;
+      if(target?.matches?.('input,textarea,select,[contenteditable="true"]')) return;
+    }
+    BGM.unlock().then(ok=>{ if(ok) releaseAudioListeners(); });
+  };
+  window.addEventListener('pointerdown',unlockAudio);
+  window.addEventListener('keydown',unlockAudio);
   
   // Dev convenience: Alt+I marks the intro as seen (persisted)
   window.addEventListener('keydown', (e)=>{
@@ -537,33 +602,6 @@ function tuneIntroLayout(){
   intro.classList.add('two-pane');
 }
 
-// Local helper: set the slide's image (safe even if .pic/.img aren't present)
-function setSlideImage(index, url){
-  const sl = Engine.el.slides?.[index];
-  if (!sl) return;
-
-  let pic = sl.querySelector('.pic');
-  if (!pic){
-    pic = document.createElement('div');
-    pic.className = 'pic';
-    const copy = sl.querySelector('.copy');
-    sl.insertBefore(pic, copy || sl.firstChild);
-  }
-
-  let img = pic.querySelector('.img');
-  if (!img){
-    img = document.createElement('div');
-    img.className = 'img';
-    pic.appendChild(img);
-  }
-
-  // apply background
-  img.style.backgroundImage = `url("${url}")`;
-  img.style.backgroundSize = 'cover';
-  img.style.backgroundPosition = 'center';
-  img.style.backgroundRepeat = 'no-repeat';
-}
-
 function insertIntro(){
   const existing = document.getElementById('intro');
   if (existing){
@@ -581,74 +619,91 @@ function insertIntro(){
 
   Engine.el.slides.forEach(sl=>{
     sl.setAttribute('aria-hidden','true');
-    let pic = sl.querySelector('.pic');
-    if(!pic){
-      pic = document.createElement('div');
-      pic.className = 'pic';
-      const copy = sl.querySelector('.copy');
-      sl.insertBefore(pic, copy || sl.firstChild);
-    }
-    const strayImg = sl.querySelector(':scope > .img');
-    if(strayImg) pic.appendChild(strayImg);
-    if(!pic.querySelector('.img')){
-      const imgInPic=document.createElement('div');
-      imgInPic.className='img';
-      pic.appendChild(imgInPic);
-    }
-  });
-
-  const ART = {
-    0:'public/img/intro/intro_city_baked.png',
-    1:'public/img/intro/intro_gate_baked.png',
-    2:'public/img/intro/intro_unfathomer_baked.png'
-  };
-  Object.entries(ART).forEach(([i,url])=>{
-    const slide=Engine.el.slides[+i];
-    if(!slide) return;
-    slide.classList.add('baked');
-    setSlideImage(+i,url);
+    sl.classList.add('baked');
   });
 
   const shell=Engine.el.intro.querySelector('.book-shell');
+  const stage=Engine.el.intro.querySelector('.book-stage');
+  const awaken=Engine.el.intro.querySelector('#introAwaken');
+  const status=Engine.el.intro.querySelector('#introStatus');
+  const cover=Engine.el.intro.querySelector('.cover-face');
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  let idx=0,turning=false;
-  const activate=i=>{
+  const wait=ms=>new Promise(resolve=>window.setTimeout(resolve,ms));
+  let idx=0,turning=false,started=false;
+  const closeGloss=()=>{
+    const tip=document.querySelector('.gloss-tip');
+    if(tip){ tip.classList.remove('on'); tip.style.visibility='hidden'; }
+    document.activeElement?.closest?.('#intro .gloss')?.blur?.();
+  };
+  const announce=message=>{ if(status) status.textContent=message; };
+  const revealInk=slide=>{
+    if(!slide||reduced) return;
+    const p=slide.querySelector('.scroll p'),copy=slide.querySelector('.copy');
+    [p,copy].forEach(element=>{
+      if(!element) return;
+      element.classList.remove(element===p?'ink-revealing':'ink-settling');
+      void element.offsetWidth;
+      element.classList.add(element===p?'ink-revealing':'ink-settling');
+    });
+    window.setTimeout(()=>{ p?.classList.remove('ink-revealing'); copy?.classList.remove('ink-settling'); },1100);
+  };
+  const activate=(i,{reveal=true}={})=>{
     idx=Math.max(0,Math.min(Engine.el.slides.length-1,i));
     Engine.el.slides.forEach((slide,k)=>{
       const active=k===idx;
       slide.classList.toggle('active',active);
       slide.setAttribute('aria-hidden',String(!active));
-      if(!active) return;
-      const p=slide.querySelector('.scroll p');
-      if(p&&!p.dataset.typed){
-        p.dataset.typed='1';
-        if(Engine.state.settings.typewriter) typewriteRich(p,Engine.state.settings.cps);
-      }
+      if(active&&reveal) revealInk(slide);
     });
   };
-  const show=(i,animate=true)=>{
+  const show=async(i,animate=true)=>{
     const target=Math.max(0,Math.min(Engine.el.slides.length-1,i));
     if(target===idx&&shell?.classList.contains('is-ready')){ activate(target); return; }
     if(turning) return;
-    if(!animate||reduced||!shell?.classList.contains('is-ready')){ activate(target); return; }
+    if(!animate||!shell?.classList.contains('is-ready')){ activate(target); return; }
     turning=true;
     const direction=target>idx?'forward':'back';
+    closeGloss();
+    if(reduced){
+      shell.classList.add('is-turning','content-out');
+      await wait(120);
+      activate(target,{reveal:false});
+      shell.classList.add('content-in');
+      shell.classList.remove('content-out');
+      announce(`${Engine.el.slides[idx].querySelector('.folio-mark strong')?.textContent||'Chronicle page'}, page ${idx+1} of ${Engine.el.slides.length}.`);
+      await wait(120);
+      shell.classList.remove('content-in','is-turning');
+      turning=false;
+      return;
+    }
+    shell.classList.add('is-turning','content-out');
+    await wait(300);
+    activate(target,{reveal:false});
     shell.classList.add(`turn-${direction}`);
-    window.setTimeout(()=>activate(target),260);
-    window.setTimeout(()=>{ shell.classList.remove(`turn-${direction}`); turning=false; },620);
+    Sound.intro('page',{pan:direction==='forward'?.08:-.08});
+    await wait(750);
+    shell.classList.remove(`turn-${direction}`);
+    Sound.intro('settle',{pan:direction==='forward'?-.05:.05});
+    await wait(150);
+    shell.classList.add('content-in');
+    shell.classList.remove('content-out');
+    revealInk(Engine.el.slides[idx]);
+    announce(`${Engine.el.slides[idx].querySelector('.folio-mark strong')?.textContent||'Chronicle page'}, page ${idx+1} of ${Engine.el.slides.length}.`);
+    await wait(450);
+    shell.classList.remove('content-in','is-turning');
+    turning=false;
   };
 
   Engine.el.nextBtns.forEach(button=>button.addEventListener('click',()=>{
-    Sound.sfx('story');
     show(idx+1);
   }));
-  Engine.el.intro.querySelector('#introBack2')?.addEventListener('click',()=>{ Sound.click(); show(idx-1); });
-  Engine.el.intro.querySelector('#introBack3')?.addEventListener('click',()=>{ Sound.click(); show(idx-1); });
+  Engine.el.intro.querySelector('#introBack2')?.addEventListener('click',()=>show(idx-1));
+  Engine.el.intro.querySelector('#introBack3')?.addEventListener('click',()=>show(idx-1));
   Engine.el.intro.querySelector('#introSkip1')?.addEventListener('click',()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
 
   if(Engine.el.beginBtn){
     Engine.el.beginBtn.onclick=()=>{
-      BGM.crossTo('prelude');
+      BGM.unlock('prelude');
       Sound.gong();
       try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
       document.getElementById('fxIntro')?.remove();
@@ -659,6 +714,69 @@ function insertIntro(){
     };
   }
 
+  const beginOpening=async()=>{
+    if(started||shell?.classList.contains('is-ready')) return false;
+    started=true; turning=true;
+    shell.classList.remove('is-dormant');
+    shell.classList.add('is-awakening','is-turning','content-out');
+    shell.setAttribute('aria-busy','true');
+    awaken?.setAttribute('aria-disabled','true');
+    announce('The Brassreach chronicle is opening.');
+    BGM.unlock('intro');
+    Sound.intro('sparkle');
+    await wait(reduced?80:430);
+    shell.classList.add('is-opening','is-open');
+    Sound.intro('cover',{pan:.05});
+    if(!reduced) window.setTimeout(()=>Sound.intro('binding',{pan:-.04}),90);
+    await wait(reduced?160:1180);
+    activate(0,{reveal:false});
+    shell.classList.add('is-ready','content-in');
+    shell.classList.remove('is-opening','is-awakening');
+    shell.removeAttribute('role');
+    shell.removeAttribute('tabindex');
+    shell.removeAttribute('aria-describedby');
+    shell.setAttribute('aria-label','The open Brassreach chronicle');
+    shell.setAttribute('aria-busy','false');
+    awaken?.setAttribute('aria-hidden','true');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      shell.classList.remove('content-out');
+      revealInk(Engine.el.slides[0]);
+    }));
+    await wait(reduced?120:450);
+    shell.classList.remove('content-in','is-turning');
+    turning=false;
+    announce('The chronicle is open. The City, page 1 of 3.');
+    Engine.el.slides[0]?.querySelector('.intro-next')?.focus({preventScroll:true});
+    return true;
+  };
+  const appropriateBeginKey=e=>{
+    if(e.repeat||e.ctrlKey||e.altKey||e.metaKey) return false;
+    if(['Tab','Escape','Shift','Control','Alt','Meta','CapsLock','NumLock','ScrollLock'].includes(e.key)) return false;
+    if(e.target?.matches?.('input,textarea,select,[contenteditable="true"]')) return false;
+    return e.key==='Enter'||e.key===' '||e.key.length===1;
+  };
+  const onIntroKey=e=>{
+    if(!appropriateBeginKey(e)||started||Engine.el.intro.classList.contains('hidden')) return;
+    if(e.key===' ') e.preventDefault();
+    beginOpening();
+  };
+  awaken?.addEventListener('click',event=>{ event.stopPropagation(); beginOpening(); });
+  stage?.addEventListener('click',event=>{ if(!event.target.closest('.nav')) beginOpening(); });
+  window.addEventListener('keydown',onIntroKey);
+  stage?.addEventListener('pointermove',event=>{
+    if(started||!cover) return;
+    const rect=cover.getBoundingClientRect();
+    const x=clamp(((event.clientX-rect.left)/rect.width)*100,0,100);
+    const y=clamp(((event.clientY-rect.top)/rect.height)*100,0,100);
+    cover.style.setProperty('--cover-x',`${x}%`);
+    cover.style.setProperty('--cover-y',`${y}%`);
+  });
+  stage?.addEventListener('pointerleave',()=>{
+    cover?.style.setProperty('--cover-x','50%');
+    cover?.style.setProperty('--cover-y','46%');
+  });
+  Engine.introController={start:beginOpening,show,get index(){return idx;},get turning(){return turning;}};
+
   if(!document.getElementById('fxIntro')){
     const fx=document.createElement('div');
     fx.id='fxIntro';
@@ -667,15 +785,6 @@ function insertIntro(){
     Engine.el.intro.prepend(fx);
   }
   Engine.el.fxIntroCtl=FX.start('fxIntro');
-
-  const openingDelay=reduced?0:280;
-  const readyDelay=reduced?0:1480;
-  window.setTimeout(()=>shell?.classList.add('is-open'),openingDelay);
-  window.setTimeout(()=>{
-    shell?.classList.add('is-ready');
-    shell?.setAttribute('aria-busy','false');
-    activate(0);
-  },readyDelay);
   tuneIntroLayout();
 }
 
@@ -1011,6 +1120,26 @@ function normalizeStoryBeats(beats){
     return next;
   });
 }
+function migrateOpeningStoryGroup(beats){
+  const normalized=normalizeStoryBeats(beats);
+  if(!normalized.length||normalized.some(beat=>beat.groupId===OPENING_GROUP_ID)) return normalized;
+  const working=normalized.filter(beat=>beat.kind!=='opening');
+  const scene=CAMPAIGN_SCENES['tutorial-commission'];
+  const expected=String(scene.story||'').split(/\n\s*\n/).map(text=>text.trim()).filter(Boolean);
+  const readable=beat=>String(beat?.html?stripHTML(beat.html):beat?.text||'').trim();
+  if(!expected.length||expected.some((text,index)=>readable(working[index])!==text)) return normalized;
+
+  const migrated=working.map(beat=>({...beat}));
+  let end=expected.length;
+  for(let index=0;index<expected.length;index++) migrated[index].groupId=OPENING_GROUP_ID;
+  const itemReason=String(scene.enter?.item?.reason||'').trim();
+  if(itemReason&&readable(migrated[end])===itemReason){ migrated[end].groupId=OPENING_GROUP_ID; end++; }
+  if(migrated[end]?.kind==='effects'){
+    const labels=(migrated[end].effects||[]).map(effect=>effect.label);
+    if(labels.some(label=>label==='Authority updated'||label==='Item gained')) migrated[end].groupId=OPENING_GROUP_ID;
+  }
+  return [{kind:'opening',text:OPENING_GROUP_TITLE,groupId:OPENING_GROUP_ID},...migrated];
+}
 function storyGroupSequence(beats){
   return normalizeStoryBeats(beats).reduce((highest,beat)=>{
     const match=String(beat.groupId||'').match(/(\d+)$/);
@@ -1077,7 +1206,7 @@ function hydrate(){
   const backpack=normalizeBackpack(saved.backpack,legacyInventory);
   const migratedInventory=backpackItems(backpack);
   const campaign=normalizeCampaign(saved.campaign,saved);
-  const storyBeats=normalizeStoryBeats(saved.storyBeats);
+  const storyBeats=migrateOpeningStoryGroup(saved.storyBeats);
   Engine.state = {
     ...d, ...saved,
     saveVersion:SAVE_VERSION,
@@ -1487,6 +1616,13 @@ function renderAll(){
         caption.innerHTML=`<span>Chosen course</span><strong>${esc(beat.text||'Recorded choice')}</strong>`;
         continue;
       }
+      if(beat.kind==='opening'){
+        group.classList.add('story-group-opening');
+        group.setAttribute('aria-label','Opening story passage: The Journey Begins');
+        const caption=group.querySelector('.story-choice-caption');
+        caption.innerHTML=`<span>Opening record</span><strong>${esc(beat.text||OPENING_GROUP_TITLE)}</strong>`;
+        continue;
+      }
       parent=group.querySelector('.story-group-content');
     }else if(beat.kind==='choice'){
       continue;
@@ -1638,7 +1774,13 @@ function beginTale(preserveProgress=false){
   Engine.activeStoryGroup=null; Engine.pendingScrollGroupId=null; Engine.resetStoryScroll=true;
   if(!preserveProgress){ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false}; S.campaign=defaultCampaign(); S.journal=defaultJournal(); }
   else{ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false,...S.flags}; S.campaign=normalizeCampaign(S.campaign,S); S.journal=normalizeJournal(S.journal,S.campaign); }
-  enterScene(S.campaign.sceneId||'tutorial-commission');
+  const sceneId=S.campaign.sceneId||'tutorial-commission';
+  if(sceneId==='tutorial-commission'){
+    Engine.activeStoryGroup=OPENING_GROUP_ID;
+    S.storyBeats.push({kind:'opening',text:OPENING_GROUP_TITLE,groupId:OPENING_GROUP_ID});
+    S.transcript.push(`Opening — ${OPENING_GROUP_TITLE}`);
+    try{ enterScene(sceneId); }finally{ endStoryGroup(); }
+  }else enterScene(sceneId);
 }
 function renderEpilogueText(text){
   Engine.el.epiContent.innerHTML=String(text||'').split(/\n\s*\n/).map(paragraph=>{
@@ -1963,6 +2105,7 @@ function exportTranscript(){
       if(group) body+='<section class="turn">';
       openGroup=group;
     }
+    if(beat.kind==='opening'){ body+=`<h2><span>Opening record</span>${esc(beat.text||OPENING_GROUP_TITLE)}</h2>`; continue; }
     if(beat.kind==='choice'){ body+=`<h2><span>Chosen course</span>${esc(beat.text||'Recorded choice')}</h2>`; continue; }
     if(beat.kind==='effects'){
       body+=`<ul class="effects">${(beat.effects||[]).map(effect=>`<li><b>${esc(effect.label)}</b>${effect.detail?` — ${esc(effect.detail)}`:''}</li>`).join('')}</ul>`;
@@ -2017,8 +2160,10 @@ function typewriteRich(p, cps=40){
 function getIntroSlidesHTML(){
   return `
   <div id="intro" class="intro">
+    <div class="reading-lantern" aria-hidden="true"><span class="lantern-cap"></span><span class="lantern-cage"><i></i></span><span class="lantern-foot"></span></div>
     <div class="book-stage">
-      <div class="book-shell" aria-label="The Brassreach chronicle" aria-busy="true">
+      <div class="reading-lectern" aria-hidden="true"></div>
+      <div class="book-shell is-dormant" role="button" tabindex="0" aria-label="Open the Brassreach chronicle" aria-describedby="introBeginPrompt" aria-busy="false">
         <div class="book-page-stack left" aria-hidden="true"></div>
         <div class="book-page-stack right" aria-hidden="true"></div>
         <div class="book-spread">
@@ -2026,24 +2171,27 @@ function getIntroSlidesHTML(){
           <div class="page-turn" aria-hidden="true"></div>
 
           <section class="slide s1 active" data-side="img-left" aria-label="Chronicle page 1 of 3">
-            <div class="img" aria-hidden="true"></div>
-            <div class="copy"><div class="scroll">
+            <figure class="pic"><img class="intro-art" src="public/img/intro/intro_city_baked.png" alt="An engraved view of Brassreach glowing beneath its mechanical lanterns."></figure>
+            <div class="folio-mark"><span>Folio I</span><strong>The City</strong></div>
+            <div class="copy"><span class="ink-trace" aria-hidden="true"></span><div class="scroll">
               <p>The labyrinth of towers, alleyways, stairwells, and terraces of <span class="gloss" tabindex="0" data-def="A layered dwarven city whose unique constructions join water, stone, brass, and sound.">Brassreach</span> glows beneath a thousand mechanical lanterns. Metal gears turn with impossible ease everywhere you look. The city itself seems alive, and by design; centuries of work dating back to the Founders brought to life a city whose metal heartbeat whirrs, clicks, and hums in perfect harmony. At least, it once did. In recent decades, neglect born of greed, vanity, and contested authority renders the once flawless machinery of Brassreach frail and shuddering. Gone is the pealing chorus of perfectly tuned bells, while superficially lavish towers loom imperiously above ever-worsening squalor. Factions have arisen, some with eyes only for gold and jewels, others for political gain, and all the while fewer and fewer remain who remember the concord of a youthful Brassreach.</p>
             </div></div>
             <div class="nav"><button class="btn secondary" id="introSkip1">Skip</button><button class="btn gold intro-next">Turn page ▸</button></div>
           </section>
 
           <section class="slide s2" data-side="img-left" aria-label="Chronicle page 2 of 3">
-            <div class="img" aria-hidden="true"></div>
-            <div class="copy"><div class="scroll">
+            <figure class="pic"><img class="intro-art" src="public/img/intro/intro_gate_baked.png" alt="An engraved Founder gate opening into the layered Undercity."></figure>
+            <div class="folio-mark"><span>Folio II</span><strong>The Threadbearers</strong></div>
+            <div class="copy"><span class="ink-trace" aria-hidden="true"></span><div class="scroll">
               <p>The stone and metal maze of Brassreach's surface holds civic workshops, dwellings, towers, and the Halls where elected officials and hereditary power struggle over the city's course. Beneath them, however, layer by Brass-wrought layer, the Undercity opens into sprawling Founder-made reservoirs and vaulted public works, lit by golden seams that fade a little more each year. Deeper still lie the Archives, where the memory of Brassreach survives in etched metal tablets of witness accounts, work inspections, and repair orders. To and from those galleries travel <span class="gloss" tabindex="0" data-def="Civic investigators trained to seek truth by following mechanical failures to their source, uncovering hidden patterns and decoding mystery along the way.">Threadbearers</span>. The first of these truth-seekers returned from long journeys with accounts woven by needle and thread; modern bearers carry their findings in a <span class="gloss" tabindex="0" data-def="A Threadbearer's field record whose firsthand accounts are vital.">Thread Ledger</span>, and seldom venture as far as their predecessors. Most now work near the public Halls, while a trusted few earn the <span class="gloss" tabindex="0" data-def="A hard-earned seal of authority to inspect restricted work, cross-office records, and the deepest reaches of the Undercity.">Deep Writ</span> and descend toward the Cistern Fields, where high vaults, dark reservoirs, and the very foundations of Brassreach are legendary.</p>
             </div></div>
             <div class="nav"><button class="btn secondary" id="introBack2">◂ Previous page</button><button class="btn gold intro-next">Turn page ▸</button></div>
           </section>
 
           <section class="slide s3" data-side="img-left" aria-label="Chronicle page 3 of 3">
-            <div class="img" aria-hidden="true"></div>
-            <div class="copy"><div class="scroll">
+            <figure class="pic"><img class="intro-art" src="public/img/intro/intro_unfathomer_baked.png" alt="An engraved descent toward dark water beneath the Cistern Fields."></figure>
+            <div class="folio-mark"><span>Folio III</span><strong>The First Commission</strong></div>
+            <div class="copy"><span class="ink-trace" aria-hidden="true"></span><div class="scroll">
               <p>The Founders shaped the Cistern Fields chamber by chamber, guiding sound through water, stone, and brass until the deepest works rang true enough to birth a city. That foundational accord has weakened. Water has risen for years through neglected channels, and repair orders miles from one another hint at the same strange, pulsing undertone. A cracked stairwell near the public Halls, flooded neighborhoods in the <span class="gloss" tabindex="0" data-def="A densely settled district of workshops, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den below the Markets should have nothing in common...<br><br>You begin as a recent Institute graduate under a <span class="gloss" tabindex="0" data-def="Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna's supervision.">probationary writ</span>. Your attributes, equipment, testimony, repairs, and alliances will shape what follows; failures come at a cost, while successes follow in your footsteps as you explore deeper and deeper. Though you are but a recent Initiate, it is up to you to follow your intuition and uncover what might otherwise spell the end of Brassreach.</p>
             </div></div>
             <div class="nav"><button class="btn secondary" id="introBack3">◂ Previous page</button><button class="btn gold intro-begin">Begin Story</button></div>
@@ -2052,6 +2200,14 @@ function getIntroSlidesHTML(){
 
         <div class="book-cover" aria-hidden="true">
           <div class="cover-face">
+            <span class="cover-light"></span>
+            <svg class="cover-filagree" viewBox="0 0 800 1000" preserveAspectRatio="none" aria-hidden="true">
+              <path class="filagree-frame" d="M86 90H714L744 120V880L714 910H86L56 880V120Z"/>
+              <path class="filagree-route route-left" d="M78 500H208L256 452H318L350 420"/>
+              <path class="filagree-route route-right" d="M722 500H592L544 452H482L450 420"/>
+              <path class="filagree-route route-spine" d="M400 866V736L356 692V642M400 736L444 692V642"/>
+              <circle cx="400" cy="736" r="10"/><circle cx="400" cy="500" r="7"/>
+            </svg>
             <span class="cover-rule"></span>
             <span class="cover-kicker">The Dwarven Storyweaver</span>
             <strong><i>BRASS</i><b>REACH</b></strong>
@@ -2061,6 +2217,8 @@ function getIntroSlidesHTML(){
           <div class="cover-inside"></div>
         </div>
       </div>
+      <button class="intro-awaken" id="introAwaken" type="button"><span id="introBeginPrompt">Press any key to begin your <strong>journey</strong>.</span></button>
+      <p class="sr-only" id="introStatus" aria-live="polite"></p>
     </div>
   </div>`;
 }

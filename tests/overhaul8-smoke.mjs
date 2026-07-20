@@ -49,20 +49,17 @@ await page.evaluate(()=>{
   localStorage.removeItem('brassreach:intro_seen');
 });
 await page.reload({waitUntil:'networkidle'});
-await page.waitForFunction(()=>document.querySelector('#intro .book-shell.is-ready'));
-
-await page.evaluate(()=>document.querySelector('#intro .book-shell').classList.remove('is-ready','is-open'));
-await page.waitForTimeout(1250);
+await page.waitForFunction(()=>document.querySelector('#intro .book-shell.is-dormant'));
 await page.screenshot({path:path.join(output,'01-intro-closed-book.png')});
-await page.evaluate(()=>document.querySelector('#intro .book-shell').classList.add('is-open'));
+await page.locator('#introAwaken').click();
 await page.waitForTimeout(520);
 await page.screenshot({path:path.join(output,'02-intro-book-opening.png')});
-await page.waitForTimeout(760);
-await page.evaluate(()=>document.querySelector('#intro .book-shell').classList.add('is-ready'));
+await page.waitForFunction(()=>document.querySelector('#intro .book-shell.is-ready'),null,{timeout:3000});
+await page.waitForTimeout(470);
 await page.screenshot({path:path.join(output,'03-intro-open-city.png')});
 
 const expectedArt=['intro_city_baked.png','intro_gate_baked.png','intro_unfathomer_baked.png'];
-report.intro.art=await page.locator('#intro .slide').evaluateAll(slides=>slides.map(slide=>getComputedStyle(slide.querySelector('.img')).backgroundImage));
+report.intro.art=await page.locator('#intro .intro-art').evaluateAll(images=>images.map(image=>image.getAttribute('src')));
 expectedArt.forEach((name,index)=>assert(report.intro.art[index].includes(name),`Intro slide ${index+1} does not use ${name}`));
 assert(!(await page.locator('#intro').textContent()).includes('ADD A GLOSSARY'),'An author instruction leaked into visible intro copy');
 
@@ -94,12 +91,12 @@ assert((await page.locator('.gloss-tip').textContent()).includes('water, stone, 
 
 await page.locator('#intro .s1 .intro-next').click();
 await page.waitForFunction(()=>document.querySelector('#intro .slide.s2.active'));
-await page.waitForTimeout(650);
+await page.waitForFunction(()=>!document.querySelector('#intro .book-shell.is-turning'),null,{timeout:2200});
 assert((await page.locator('#intro .s2 .scroll').textContent()).includes('Thread Ledger'),'Second intro page lost its approved text');
 await page.screenshot({path:path.join(output,'03b-intro-open-gate.png')});
 await page.locator('#intro .s2 .intro-next').click();
 await page.waitForFunction(()=>document.querySelector('#intro .slide.s3.active'));
-await page.waitForTimeout(650);
+await page.waitForFunction(()=>!document.querySelector('#intro .book-shell.is-turning'),null,{timeout:2200});
 assert((await page.locator('#intro .s3 .scroll').textContent()).includes('spell the end of Brassreach'),'Third intro page lost its approved conclusion');
 assert(await page.locator('#intro .s3 .nav button').count()===2&&await page.locator('#introBack3').isVisible(),'Third intro page lost its Previous Page control');
 await page.screenshot({path:path.join(output,'03c-intro-open-unfathomer.png')});
@@ -115,9 +112,9 @@ await page.screenshot({path:path.join(output,'04-main-story-initial.png'),fullPa
 await page.locator('[data-choice-id="tutorial-accept"]').click();
 await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-quartermaster');
 let groups=page.locator('#story .story-group');
-assert(await groups.count()===1,'The first player choice did not create one story group');
-assert((await groups.first().locator('.story-choice-caption').textContent()).includes('Take the writ and ask to which location'),'The chosen option is not preserved in its group');
-assert((await groups.first().textContent()).includes('Quartermaster Dorrin'),'The resulting scene is not contained by the first group');
+assert(await groups.count()===2,'The first player choice did not follow the opening story group');
+assert((await groups.last().locator('.story-choice-caption').textContent()).includes('Take the writ and ask to which location'),'The chosen option is not preserved in its group');
+assert((await groups.last().textContent()).includes('Quartermaster Dorrin'),'The resulting scene is not contained by the first choice group');
 
 const beforeMerchant=await groups.count();
 await page.locator('[data-choice-id="tutorial-dorrin-shop"]').click();
@@ -171,7 +168,7 @@ await page.evaluate(()=>{
 });
 await page.reload({waitUntil:'networkidle'});
 await page.waitForFunction(()=>window.Engine?.state&&Engine.state.storyBeats.length>0);
-assert(await page.locator('#story .story-group').count()===0,'Legacy ungrouped beats were assigned false groups');
+assert(await page.locator('#story .story-group').count()===1,'Legacy migration should restore only the verified opening group');
 assert(await page.locator('#story p.beat').count()>0,'Legacy story beats failed to render');
 report.migration.legacySave=true;
 
@@ -186,7 +183,9 @@ const reducedPage=await reducedContext.newPage();
 await reducedPage.goto(base,{waitUntil:'networkidle'});
 await reducedPage.evaluate(()=>{ localStorage.clear(); });
 await reducedPage.reload({waitUntil:'networkidle'});
-await reducedPage.waitForFunction(()=>document.querySelector('#intro .book-shell.is-ready'));
+await reducedPage.waitForFunction(()=>document.querySelector('#intro .book-shell.is-dormant'));
+await reducedPage.keyboard.press('Enter');
+await reducedPage.waitForFunction(()=>document.querySelector('#intro .book-shell.is-ready')&&!document.querySelector('#intro .book-shell.is-turning'));
 assert(await reducedPage.evaluate(()=>{
   const value=getComputedStyle(document.querySelector('#intro .book-shell')).transitionDuration.split(',')[0].trim();
   const seconds=value.endsWith('ms')?parseFloat(value)/1000:parseFloat(value);
