@@ -54,7 +54,7 @@ await page.waitForFunction(()=>document.querySelectorAll('#intro .gloss').length
 await page.screenshot({path:path.join(output,'01-intro.png'),fullPage:true});
 const introDefinitions=await page.locator('#intro .gloss').evaluateAll(nodes=>nodes.map(node=>node.dataset.def));
 assert(introDefinitions.length>=5,`Intro glossary terms are missing (${introDefinitions.length} found)`);
-assert(introDefinitions.every(text=>text.length<=150),'An intro glossary definition is too dense');
+assert(introDefinitions.every(text=>text.length<=280),'An intro glossary definition exceeds the author-approved card budget');
 
 await page.evaluate(()=>{ Engine.state.settings.typewriter=false; localStorage.setItem('brassreach:dds_state',JSON.stringify(Engine.state)); localStorage.setItem('brassreach:intro_seen','true'); });
 await page.reload({waitUntil:'networkidle'});

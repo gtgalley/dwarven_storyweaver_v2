@@ -1,6 +1,5 @@
 // Brassreach browser game engine
-// v23 — Atmospheric Narrative Overhaul: authored dramatic arcs, richer reactive
-// prose, ending-specific addresses, and save-v5 compatibility.
+// v24 — Interim author-workbook integration, living-book intro, and grouped story turns.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -40,7 +39,7 @@ const store={
 };
 
 /* ---------- inventory & equipment ---------- */
-const SAVE_VERSION=5;
+const SAVE_VERSION=6;
 const BACKPACK_CAPACITY=40;
 const EQUIPMENT_SLOTS = [
   ['head','Head'], ['chest','Chest'], ['hands','Hands'], ['legs','Legs'],
@@ -142,7 +141,7 @@ function defaultJournal(){ return {milestones:[],discoveries:[],evidence:[],test
 function defaults(){
   return {
     saveVersion:SAVE_VERSION, seed:rnd(1,9_999_999), turn:0, scene:'Halls',
-    storyBeats:[], transcript:[],
+    storyBeats:[], transcript:[], storyGroupSeq:0,
     character:{ name:'Eldan', race:'Dwarf', STR:12,DEX:14,INT:12,CHA:10, HP:14, MaxHP:14, Gold:5, inventory:['Torch','Canteen'] },
     equipment:blankEquipment(),
     backpack:normalizeBackpack(null,['Torch','Canteen']),
@@ -153,7 +152,7 @@ function defaults(){
     live:{ on:store.get('dm_on',false), endpoint:store.get('dm_ep','/dm-turn') }
   };
 }
-const Engine={ el:{}, state: defaults(), inventoryDraft:[], selectedInventoryItem:null, inventoryView:{quality:'all',category:'all',sort:'pack'}, tooltipPinned:false, tooltipItem:null, busy:false, loadedSave:false, pendingFailure:null, activeMerchant:null };
+const Engine={ el:{}, state: defaults(), inventoryDraft:[], selectedInventoryItem:null, inventoryView:{quality:'all',category:'all',sort:'pack'}, tooltipPinned:false, tooltipItem:null, busy:false, loadedSave:false, pendingFailure:null, activeMerchant:null, activeMerchantChoice:null, activeStoryGroup:null, pendingScrollGroupId:null, resetStoryScroll:false };
 window.Engine=Engine;
 
 // --- Now Playing chip controller (ephemeral) -------------------------
@@ -367,7 +366,10 @@ window.GLOSS = Object.assign({
   "weight": "What a structure, institution, or decision must carry, and who bears the consequence.",
   "tone": "The working relationship among voices, materials, mechanisms, and resonant systems.",
   "pattern": "What returns across time, including memory, maintenance, precedent, and change.",
-  "founding covenant": "Brassreach’s first civic constitution, joining stewardship, public record, shared duty, and limits on inherited power."
+  "founding covenant": "Brassreach’s first civic constitution, joining stewardship, public record, shared duty, and limits on inherited power.",
+  "tangles": "A densely settled district of workshops, homes, and improvised bridges.",
+  "probationary writ": "Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna’s supervision.",
+  "lantern constables": "Officers of the Lantern Constabulary who patrol public districts, investigate crimes, make lawful arrests, and protect residents from violence. They are separate from Threadbearers and public-works Wardens."
 }, window.GLOSS||{});
 
 /* ---------- boot ---------- */
@@ -422,6 +424,7 @@ function attachGlossTips(){
   if (!tip){
     tip = document.createElement('div');
     tip.className = 'gloss-tip';
+    tip.id = 'glossTip';
     tip.setAttribute('role','tooltip');
     document.body.appendChild(tip);
   }
@@ -484,6 +487,28 @@ function attachGlossTips(){
     hideAt = Date.now();
   });
 
+  root.addEventListener('focusin',(e)=>{
+    const term=e.target.closest?.('.gloss');
+    if(!term) return;
+    const def=resolveDef(term);
+    if(!def) return;
+    overTerm=term;
+    term.setAttribute('aria-describedby',tip.id);
+    tip.textContent=def;
+    tip.style.visibility='visible';
+    tip.classList.add('on');
+    const rect=term.getBoundingClientRect();
+    place(rect.left+(rect.width/2),rect.bottom);
+  });
+  root.addEventListener('focusout',(e)=>{
+    const term=e.target.closest?.('.gloss');
+    if(!term) return;
+    term.removeAttribute('aria-describedby');
+    overTerm=null;
+    tip.classList.remove('on');
+    tip.style.visibility='hidden';
+  });
+
   // ALT to pin; click anywhere to unpin
   root.addEventListener('keydown', (e)=>{
     if (e.altKey && overTerm){
@@ -540,7 +565,6 @@ function setSlideImage(index, url){
 }
 
 function insertIntro(){
-  // DOM-aware guard so we never stack duplicate intros
   const existing = document.getElementById('intro');
   if (existing){
     Engine.el.intro  = existing;
@@ -548,22 +572,15 @@ function insertIntro(){
     return;
   }
 
-  // Build and inject the overlay
-  const slidesHTML = getIntroSlidesHTML(); // your existing factory
-  document.body.insertAdjacentHTML('afterbegin', slidesHTML);
-
-  // Cache refs
+  document.body.insertAdjacentHTML('afterbegin', getIntroSlidesHTML());
   Engine.el.intro    = document.getElementById('intro');
   Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
   Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
   Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
-  
-  // Normalize every baked slide to .pic > .img.
-(function ensureIntroCutout(){
-  const slides = Engine.el.slides || Array.from(document.querySelectorAll('#intro .slide'));
-  slides.forEach(sl=>{
-    // 1) ensure container
+
+  Engine.el.slides.forEach(sl=>{
+    sl.setAttribute('aria-hidden','true');
     let pic = sl.querySelector('.pic');
     if(!pic){
       pic = document.createElement('div');
@@ -571,125 +588,94 @@ function insertIntro(){
       const copy = sl.querySelector('.copy');
       sl.insertBefore(pic, copy || sl.firstChild);
     }
-
-    // 2) unify the .img
-    let imgInPic = pic.querySelector('.img');
-    const strayImg = sl.querySelector(':scope > .img'); // direct child of slide
-    if(!imgInPic && strayImg){
-      pic.appendChild(strayImg);
-      imgInPic = strayImg;
-    } else if(!imgInPic){
-      imgInPic = document.createElement('div');
-      imgInPic.className = 'img';
+    const strayImg = sl.querySelector(':scope > .img');
+    if(strayImg) pic.appendChild(strayImg);
+    if(!pic.querySelector('.img')){
+      const imgInPic=document.createElement('div');
+      imgInPic.className='img';
       pic.appendChild(imgInPic);
-    } else if(strayImg && strayImg !== imgInPic){
-      // prefer the stray (likely the authored one), remove duplicate
-      pic.removeChild(imgInPic);
-      pic.appendChild(strayImg);
-      imgInPic = strayImg;
-    }
-
-    // Visible placeholder if no image has been assigned yet.
-    const cs = getComputedStyle(imgInPic);
-    const hasBG = cs.backgroundImage && cs.backgroundImage !== 'none';
-    if(!hasBG){
-      imgInPic.style.backgroundImage =
-        "linear-gradient(135deg, rgba(213,168,74,.28), rgba(22,16,10,.28))";
-      imgInPic.style.backgroundSize = 'cover';
-      imgInPic.style.backgroundPosition = 'center';
     }
   });
-})();
-  
 
-  // Title at top of slides with double underline
-if (!Engine.el.intro.querySelector('.intro-title')){
-  const t = document.createElement('div');
-  t.className = 'intro-title u-double-underline';
-  t.innerHTML = '<span class="title-left">BRASS</span><span class="title-gap"></span><span class="title-right">REACH</span>';
-  Engine.el.intro.appendChild(t);
-}
-  // One-at-a-time slides + per-slide typewriter
-  let idx = 0;
-  const show = (i)=>{
-    idx = Math.max(0, Math.min(Engine.el.slides.length - 1, i));
-    Engine.el.slides.forEach((s, k)=>{
-      const active = (k === idx);
-      s.classList.toggle('active', active);
-      if (!active) return;
+  const ART = {
+    0:'public/img/intro/intro_city_baked.png',
+    1:'public/img/intro/intro_gate_baked.png',
+    2:'public/img/intro/intro_unfathomer_baked.png'
+  };
+  Object.entries(ART).forEach(([i,url])=>{
+    const slide=Engine.el.slides[+i];
+    if(!slide) return;
+    slide.classList.add('baked');
+    setSlideImage(+i,url);
+  });
 
-      // trigger typewriter once per slide
-      const p = s.querySelector('.scroll p');
-      if (p && !p.dataset.typed){
-        p.dataset.typed = '1';
-        if(Engine.state.settings.typewriter) typewriteRich(p, Engine.state.settings.cps);
+  const shell=Engine.el.intro.querySelector('.book-shell');
+  const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let idx=0,turning=false;
+  const activate=i=>{
+    idx=Math.max(0,Math.min(Engine.el.slides.length-1,i));
+    Engine.el.slides.forEach((slide,k)=>{
+      const active=k===idx;
+      slide.classList.toggle('active',active);
+      slide.setAttribute('aria-hidden',String(!active));
+      if(!active) return;
+      const p=slide.querySelector('.scroll p');
+      if(p&&!p.dataset.typed){
+        p.dataset.typed='1';
+        if(Engine.state.settings.typewriter) typewriteRich(p,Engine.state.settings.cps);
       }
     });
   };
-
-  // Button wiring
-  Engine.el.nextBtns.forEach(b => b.addEventListener('click', ()=>{
-    Sound.sfx('story'); show(idx + 1);
-  }));
-  const back2 = Engine.el.intro.querySelector('#introBack2');
-  const back3 = Engine.el.intro.querySelector('#introBack3');
-  const skip1 = Engine.el.intro.querySelector('#introSkip1');
-
-  back2 && back2.addEventListener('click', ()=>{ Sound.click(); show(idx - 1); });
-  back3 && back3.addEventListener('click', ()=>{ Sound.click(); show(idx - 1); });
-  skip1 && skip1.addEventListener('click', ()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
-
-  if (Engine.el.beginBtn){
-    Engine.el.beginBtn.onclick = ()=>{
-      BGM.crossTo('prelude');
-      Sound.gong();
-  
-      // stop/remove intro embers so only main-screen embers remain
-      try { Engine.el.fxIntroCtl && Engine.el.fxIntroCtl.stop && Engine.el.fxIntroCtl.stop(); } catch {}
-      const fxIntro = document.getElementById('fxIntro'); if (fxIntro) fxIntro.remove();
-  
-      Engine.el.intro.classList.add('hidden');
-      store.set('intro_seen', true);
-      if (!Engine.state.storyBeats.length) beginTale(Engine.loadedSave);
-  
-      // open editor and mount scroll icon
-      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); }, 120);
-    };
-  }
-  
-// ---- Intro embers layer (behind panels, above crest) ----
-if (!document.getElementById('fxIntro')){
-  const fx = document.createElement('div');
-  fx.id = 'fxIntro';
-  fx.setAttribute('aria-hidden','true');
-  Object.assign(fx.style, {
-    position:'fixed', inset:'0', pointerEvents:'none', zIndex:'1'
-  });
-  // put embers behind everything in the intro stack
-  Engine.el.intro.prepend(fx);
-}
-// start intro embers and keep a handle to stop later
-Engine.el.fxIntroCtl = FX.start('fxIntro');
-// --- Assign baked-edge intro art (no veil mask) ---
-(function(){
-  // IMPORTANT: use relative paths so GH Pages serves from the project root
-  const ART = {
-    0: 'public/img/intro/intro_city_baked.png',
-    1: 'public/img/materials/stone-scuffed.jpg',
-    2: 'public/img/materials/brass-scratched.jpg'
+  const show=(i,animate=true)=>{
+    const target=Math.max(0,Math.min(Engine.el.slides.length-1,i));
+    if(target===idx&&shell?.classList.contains('is-ready')){ activate(target); return; }
+    if(turning) return;
+    if(!animate||reduced||!shell?.classList.contains('is-ready')){ activate(target); return; }
+    turning=true;
+    const direction=target>idx?'forward':'back';
+    shell.classList.add(`turn-${direction}`);
+    window.setTimeout(()=>activate(target),260);
+    window.setTimeout(()=>{ shell.classList.remove(`turn-${direction}`); turning=false; },620);
   };
 
-  Object.entries(ART).forEach(([i, url])=>{
-    const idx = +i;
-    const sl  = Engine.el.slides?.[idx];
-    if (!sl) return;
-    sl.classList.add('baked');          // hide veil via CSS
-    setSlideImage(idx, url);            // (replaces missing setIntroImage)
-  });
-})();
-  
-  // Start at the first slide
-  show(0);
+  Engine.el.nextBtns.forEach(button=>button.addEventListener('click',()=>{
+    Sound.sfx('story');
+    show(idx+1);
+  }));
+  Engine.el.intro.querySelector('#introBack2')?.addEventListener('click',()=>{ Sound.click(); show(idx-1); });
+  Engine.el.intro.querySelector('#introBack3')?.addEventListener('click',()=>{ Sound.click(); show(idx-1); });
+  Engine.el.intro.querySelector('#introSkip1')?.addEventListener('click',()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
+
+  if(Engine.el.beginBtn){
+    Engine.el.beginBtn.onclick=()=>{
+      BGM.crossTo('prelude');
+      Sound.gong();
+      try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
+      document.getElementById('fxIntro')?.remove();
+      Engine.el.intro.classList.add('hidden');
+      store.set('intro_seen',true);
+      if(!Engine.state.storyBeats.length) beginTale(Engine.loadedSave);
+      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); },120);
+    };
+  }
+
+  if(!document.getElementById('fxIntro')){
+    const fx=document.createElement('div');
+    fx.id='fxIntro';
+    fx.setAttribute('aria-hidden','true');
+    Object.assign(fx.style,{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'1'});
+    Engine.el.intro.prepend(fx);
+  }
+  Engine.el.fxIntroCtl=FX.start('fxIntro');
+
+  const openingDelay=reduced?0:280;
+  const readyDelay=reduced?0:1480;
+  window.setTimeout(()=>shell?.classList.add('is-open'),openingDelay);
+  window.setTimeout(()=>{
+    shell?.classList.add('is-ready');
+    shell?.setAttribute('aria-busy','false');
+    activate(0);
+  },readyDelay);
   tuneIntroLayout();
 }
 
@@ -753,14 +739,8 @@ function buildUI(){
           <div class="panel-heading choice-heading">
             <span class="panel-kicker">Choose Your Course</span>
             <span class="panel-rule" aria-hidden="true"></span>
-            <span id="weaveStatus" class="weave-status" role="status">Ready</span>
           </div>
           <div id="choices"></div>
-          <div class="free">
-            <input id="freeText" aria-label="Write your own action" placeholder="Write your own action — search the alcove, read the tablet…" />
-            <button id="btnAct" class="btn gold">ACT</button>
-            <button id="btnCont" class="btn">Continue story</button>
-          </div>
         </div>
       </section>
 
@@ -960,13 +940,12 @@ function buildUI(){
   // cache
   document.querySelectorAll('.frame').forEach(el=>{['tl','tr','bl','br'].forEach(pos=>{const s=document.createElement('span'); s.className='chev '+pos; el.appendChild(s);});});
   Engine.el.story=$('#story'); Engine.el.choiceList=$('#choices'); Engine.el.choicesBox=$('.choices');
-  Engine.el.freeText=$('#freeText'); Engine.el.btnAct=$('#btnAct'); Engine.el.btnCont=$('#btnCont');
 
   Engine.el.btnEnd=$('#btnEnd'); Engine.el.btnSettings=$('#btnSettings'); Engine.el.keysArc=$('#keysArc'); Engine.el.meterKicker=$('#meterKicker'); Engine.el.meterLabel=$('#meterLabel'); Engine.el.sceneHeading=$('#sceneHeading');
 
   Engine.el.charPanel=$('#charPanel'); Engine.el.charHeaderName=$('#charHeaderName'); Engine.el.charHeaderRace=$('#charHeaderRace'); Engine.el.hotbarPanel=$('#hotbarPanel'); Engine.el.ledgerPanel=$('#ledgerPanel'); Engine.el.objectivePanel=$('#objectivePanel'); Engine.el.btnJournal=$('#btnJournal');
   Engine.el.seedVal=$('#seedVal'); Engine.el.turnVal=$('#turnVal'); Engine.el.keysVal=$('#keysVal'); Engine.el.sessionProgressLabel=$('#sessionProgressLabel');
-  Engine.el.saveStatus=$('#saveStatus'); Engine.el.weaveStatus=$('#weaveStatus'); Engine.el.toastRegion=$('#toastRegion');
+  Engine.el.saveStatus=$('#saveStatus'); Engine.el.toastRegion=$('#toastRegion');
   Engine.el.btnEdit=$('#btnEdit');
   Engine.el.btnInventory=$('#btnInventory');
   Engine.el.shade=$('#shade'); Engine.el.nowplay=$('#nowplay'); Engine.el.npTitle=$('#npTitle');
@@ -1022,6 +1001,22 @@ function mountScrollFab(){
 
 /* ---------- storage ---------- */
 const uniqueText=list=>[...new Set((Array.isArray(list)?list:[]).filter(value=>typeof value==='string'&&value.trim()).map(value=>value.trim()))];
+function normalizeStoryBeats(beats){
+  return (Array.isArray(beats)?beats:[]).filter(beat=>beat&&typeof beat==='object').map(beat=>{
+    const next={...beat};
+    if(typeof next.text!=='string'&&typeof next.html!=='string') next.text='';
+    if(next.groupId!==undefined&&next.groupId!==null) next.groupId=String(next.groupId);
+    else delete next.groupId;
+    if(next.kind==='effects') next.effects=(Array.isArray(next.effects)?next.effects:[]).filter(effect=>effect?.label).map(effect=>({tone:String(effect.tone||'info'),label:String(effect.label),detail:String(effect.detail||'')}));
+    return next;
+  });
+}
+function storyGroupSequence(beats){
+  return normalizeStoryBeats(beats).reduce((highest,beat)=>{
+    const match=String(beat.groupId||'').match(/(\d+)$/);
+    return match?Math.max(highest,+match[1]||0):highest;
+  },0);
+}
 function inferCampaignScene(saved){
   const legacyScene=saved?.campaign?.sceneId||'';
   const migrated={
@@ -1082,9 +1077,13 @@ function hydrate(){
   const backpack=normalizeBackpack(saved.backpack,legacyInventory);
   const migratedInventory=backpackItems(backpack);
   const campaign=normalizeCampaign(saved.campaign,saved);
+  const storyBeats=normalizeStoryBeats(saved.storyBeats);
   Engine.state = {
     ...d, ...saved,
     saveVersion:SAVE_VERSION,
+    storyBeats,
+    transcript:Array.isArray(saved.transcript)?saved.transcript.map(entry=>String(entry)):[],
+    storyGroupSeq:Math.max(+saved.storyGroupSeq||0,storyGroupSequence(storyBeats)),
     character:{...d.character, ...(saved.character||{}), inventory:migratedInventory},
     backpack,
     equipment:normalizeEquipment(saved.equipment,migratedInventory),
@@ -1100,6 +1099,7 @@ function hydrate(){
   };
   Engine.state.character.MaxHP=Math.max(4,+saved.character?.MaxHP||+saved.character?.HP||d.character.MaxHP);
   Engine.state.scene=CAMPAIGN_SCENES[campaign.sceneId].title;
+  Engine.pendingScrollGroupId=[...storyBeats].reverse().find(beat=>beat.groupId)?.groupId||null;
   Engine.loadedSave=true;
   store.set('dds_state',Engine.state);
 }
@@ -1117,8 +1117,7 @@ function persistState(message='Progress stored'){
 }
 function setBusy(busy){
   Engine.busy=busy;
-  [Engine.el.btnAct,Engine.el.btnCont].forEach(button=>{ if(button) button.disabled=busy; });
-  if(Engine.el.weaveStatus){ Engine.el.weaveStatus.textContent=busy?'Recording…':'Ready'; Engine.el.weaveStatus.classList.toggle('active',busy); }
+  $$('#choices button').forEach(button=>{ button.disabled=busy||button.dataset.locked==='true'; });
 }
 
 function renderEditorInventory(){
@@ -1300,11 +1299,6 @@ function bind(){
     }
   });
 
-  // main actions
-  Engine.el.btnCont.onclick=()=>{ if(Engine.busy) return; if(!Engine.state.storyBeats || !Engine.state.storyBeats.length){ beginTale(Engine.loadedSave); return; } const recommended=makeChoiceSet().find(choice=>choice.type!=='merchant'&&(choice.type!=='ending'||requirementStatus(choice).ok))||makeChoiceSet()[0]; if(recommended) resolveChoice(recommended); };
-  Engine.el.btnAct.onclick=()=>{ if(!Engine.busy) freeText(); };
-  Engine.el.freeText.addEventListener('keydown',e=>{ if(e.key==='Enter') freeText(); });
-
   Engine.el.btnEnd.onclick=endTale;
   document.addEventListener('keydown', (e)=>{
   if (e.shiftKey && e.key.toLowerCase() === 'd'){
@@ -1386,6 +1380,27 @@ function renderInventory(){
   Engine.el.equipmentStats.innerHTML=`<span><small>Power</small><strong>${stats.power}</strong></span><span><small>Armor</small><strong>${stats.armor}</strong></span><span><small>Resilience</small><strong>${stats.resilience}</strong></span>`;
 }
 
+function renderStoryBeat(beat,parent){
+  if(beat.kind==='effects'){
+    const panel=document.createElement('div');
+    panel.className='effect-summary';
+    panel.setAttribute('role','status');
+    panel.innerHTML=(beat.effects||[]).map(effect=>`<span class="effect-entry ${esc(effect.tone||'info')}"><b>${esc(effect.label)}</b>${effect.detail?`<small>${esc(effect.detail)}</small>`:''}</span>`).join('');
+    parent.appendChild(panel);
+    return null;
+  }
+  const p=document.createElement('p');
+  p.classList.add('beat');
+  p.dataset.beatKind=beat.kind||'story';
+  p.innerHTML=beat.html?sanitizeRichHTML(beat.html):esc(beat.text);
+  if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
+  if(beat.kind==='success'){ p.classList.add('glow-success'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#D5A84A'; }
+  if(beat.kind==='fail'){ p.classList.add('glow-fail'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#A12525'; }
+  if(beat.kind==='story') p.classList.add('glow-story');
+  parent.appendChild(p);
+  return p;
+}
+
 function renderAll(){
   const s=Engine.state, C=s.character, F=s.flags;
   $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn;
@@ -1447,39 +1462,93 @@ function renderAll(){
   // Story
 
   Engine.el.story.innerHTML='';
+  const groups=new Map();
+  let latestTextElement=null;
   for(const beat of s.storyBeats){
-    if(beat.kind==='effects'){
-      const panel=document.createElement('div'); panel.className='effect-summary'; panel.setAttribute('role','status');
-      panel.innerHTML=(beat.effects||[]).map(effect=>`<span class="effect-entry ${esc(effect.tone||'info')}"><b>${esc(effect.label)}</b>${effect.detail?`<small>${esc(effect.detail)}</small>`:''}</span>`).join('');
-      Engine.el.story.appendChild(panel); continue;
+    let parent=Engine.el.story;
+    if(beat.groupId){
+      let group=groups.get(beat.groupId);
+      if(!group){
+        group=document.createElement('section');
+        group.className='story-group';
+        group.dataset.storyGroup=beat.groupId;
+        group.setAttribute('aria-label','Player choice and its result');
+        const caption=document.createElement('div');
+        caption.className='story-choice-caption';
+        caption.innerHTML='<span>Chosen course</span><strong>Recorded choice</strong>';
+        const content=document.createElement('div');
+        content.className='story-group-content';
+        group.append(caption,content);
+        groups.set(beat.groupId,group);
+        Engine.el.story.appendChild(group);
+      }
+      if(beat.kind==='choice'){
+        const caption=group.querySelector('.story-choice-caption');
+        caption.innerHTML=`<span>Chosen course</span><strong>${esc(beat.text||'Recorded choice')}</strong>`;
+        continue;
+      }
+      parent=group.querySelector('.story-group-content');
+    }else if(beat.kind==='choice'){
+      continue;
     }
-    const p=document.createElement('p');
-    p.classList.add('beat');
-    p.innerHTML=beat.html?sanitizeRichHTML(beat.html):esc(beat.text);
-    if(beat.roll){ const g=document.createElement('span'); g.className='rollglyph'; g.textContent=' ⟡'; g.title=beat.roll; p.appendChild(g); }
-    if(beat.kind==='success'){ p.classList.add('glow-success'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#D5A84A'; }
-    if(beat.kind==='fail'){ p.classList.add('glow-fail'); const rg=p.querySelector('.rollglyph'); if(rg) rg.style.color='#A12525'; }
-    if(beat.kind==='story') p.classList.add('glow-story');
-    Engine.el.story.appendChild(p);
+    const rendered=renderStoryBeat(beat,parent);
+    if(rendered) latestTextElement=rendered;
   }
-  Engine.el.story.scrollTop=Engine.el.story.scrollHeight;
+  const renderedGroups=$$('.story-group',Engine.el.story);
+  renderedGroups.at(-1)?.classList.add('latest');
 
   if (s.settings.typewriter && s._pendingType){
-    const p=Engine.el.story.lastElementChild;
-    if (p && !p.dataset.typed){ p.dataset.typed='1'; typewriteRich(p, s.settings.cps); }
+    const p=latestTextElement;
+    if(p&&!p.dataset.typed){ p.dataset.typed='1'; typewriteRich(p,s.settings.cps); }
     s._pendingType=false;
+  }
+  if(Engine.resetStoryScroll){
+    Engine.el.story.scrollTop=0;
+    Engine.resetStoryScroll=false;
+  }else if(Engine.pendingScrollGroupId){
+    const groupId=String(Engine.pendingScrollGroupId);
+    const target=Engine.el.story.querySelector(`[data-story-group="${CSS.escape(groupId)}"]`);
+    Engine.pendingScrollGroupId=null;
+    if(target) requestAnimationFrame(()=>{
+      const storyRect=Engine.el.story.getBoundingClientRect();
+      const targetRect=target.getBoundingClientRect();
+      const top=Math.max(0,Engine.el.story.scrollTop+(targetRect.top-storyRect.top)-18);
+      Engine.el.story.scrollTo({top,behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+    });
   }
 }
 
 /* ---------- authored campaign flow ---------- */
 function currentScene(){ return CAMPAIGN_SCENES[Engine.state.campaign?.sceneId]||CAMPAIGN_SCENES['tutorial-commission']; }
+function beginStoryGroup(choice,labelOverride=''){
+  const S=Engine.state;
+  S.storyGroupSeq=(+S.storyGroupSeq||0)+1;
+  const groupId=`story-${S.storyGroupSeq}`;
+  const label=String(labelOverride||choice?.label||choice?.sentence||'Recorded choice').trim();
+  Engine.activeStoryGroup=groupId;
+  Engine.pendingScrollGroupId=groupId;
+  S.storyBeats.push({kind:'choice',text:label,choiceId:choice?.id||null,groupId});
+  S.transcript.push(`Choice — ${label}`);
+  return groupId;
+}
+function ensureStoryGroup(choice,labelOverride=''){
+  return Engine.activeStoryGroup||beginStoryGroup(choice,labelOverride);
+}
+function endStoryGroup(){ Engine.activeStoryGroup=null; }
+function authoredPassageHTML(text){
+  const source=String(text||'');
+  const term='Lantern Constables';
+  if(!source.includes(term)) return null;
+  const definition=window.GLOSS?.['lantern constables']||'';
+  return esc(source).split(term).join(`<span class="gloss" tabindex="0" data-def="${esc(definition)}">${term}</span>`);
+}
 function appendPassage(text,kind='story'){
-  String(text||'').split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean).forEach(part=>appendBeat(part,null,kind));
+  String(text||'').split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean).forEach(part=>appendBeat(part,null,kind,authoredPassageHTML(part)));
 }
 function appendEffectSummary(effects){
   const clean=(effects||[]).filter(effect=>effect?.label);
   if(!clean.length) return;
-  Engine.state.storyBeats.push({kind:'effects',effects:clean});
+  Engine.state.storyBeats.push({kind:'effects',effects:clean,...(Engine.activeStoryGroup?{groupId:Engine.activeStoryGroup}:{})});
   Engine.state.transcript.push(clean.map(effect=>`${effect.label}${effect.detail?` — ${effect.detail}`:''}`).join(' | '));
   Engine.state._pendingType=false;
 }
@@ -1565,7 +1634,8 @@ function enterScene(sceneId,{appendStory=true,arrivalKey=null}={}){
 }
 function beginTale(preserveProgress=false){
   const S=Engine.state;
-  S.turn=0; S.storyBeats=[]; S.transcript=[]; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
+  S.turn=0; S.storyBeats=[]; S.transcript=[]; S.storyGroupSeq=0; S._choiceHistory=[]; S._lastChoices=[]; S._undoStack=[]; S._arcStep=0;
+  Engine.activeStoryGroup=null; Engine.pendingScrollGroupId=null; Engine.resetStoryScroll=true;
   if(!preserveProgress){ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false}; S.campaign=defaultCampaign(); S.journal=defaultJournal(); }
   else{ S.flags={rumors:false,keys:[],bossReady:false,bossDealtWith:false,...S.flags}; S.campaign=normalizeCampaign(S.campaign,S); S.journal=normalizeJournal(S.journal,S.campaign); }
   enterScene(S.campaign.sceneId||'tutorial-commission');
@@ -1646,12 +1716,11 @@ function renderChoices(choices){
     const requirement=ch.type==='ending'?requirementStatus(ch):{ok:true};
     const btn=document.createElement('button'); btn.className=`choice-btn choice-${ch.type||'check'}${index===0?' recommended':''}`;
     btn.innerHTML=`<span class="choice-label">${esc(ch.label||ch.sentence)}</span><small>${esc(modifierText(ch))}</small>`;
-    btn.dataset.choiceId=ch.id; btn.disabled=!requirement.ok; btn.setAttribute('aria-disabled',String(!requirement.ok));
+    btn.dataset.choiceId=ch.id; btn.dataset.locked=String(!requirement.ok); btn.disabled=!requirement.ok; btn.setAttribute('aria-disabled',String(!requirement.ok));
     btn.onclick=()=>{ Sound.click(); resolveChoice(ch); }; list.appendChild(btn);
   });
 }
 
-function freeText(){ const text=(Engine.el.freeText.value||'').trim(); if(!text) return; Engine.el.freeText.value=''; doNarrate({sentence:text}); }
 function campaignExplorationText(ch){
   const S=Engine.state,scene=currentScene(),count=S.campaign.exploration[scene.id]||0;
   const context={
@@ -1706,14 +1775,19 @@ function doNarrate(ch){
 
 function resolveChoice(ch){
   if(Engine.busy||!ch) return;
-  if(ch.type==='merchant'){ openMerchant(ch.merchant); return; }
+  if(ch.type==='merchant'){ openMerchant(ch.merchant,ch); return; }
   if(ch.type==='ending'){
     const requirement=requirementStatus(ch);
     if(!requirement.ok){ toast(`That course is not yet supported: ${requirement.missing.join(', ')}.`,'warning'); return; }
-    pushUndo(); finalizeEnding(ch.ending); return;
+    pushUndo(); beginStoryGroup(ch); try{ finalizeEnding(ch.ending); }finally{ endStoryGroup(); } return;
   }
   pushUndo();
-  if(ch.type==='advance'){ appendPassage(ch.outcome||'You move on.'); applyEffects(ch.effects||{},{source:ch.label}); enterScene(ch.next,{arrivalKey:ch.id}); return; }
+  if(ch.type==='advance'){
+    beginStoryGroup(ch);
+    try{ appendPassage(ch.outcome||'You move on.'); applyEffects(ch.effects||{},{source:ch.label}); enterScene(ch.next,{arrivalKey:ch.id}); }
+    finally{ endStoryGroup(); }
+    return;
+  }
   setBusy(true);
   const bonus=choiceBonusBreakdown(ch),roll=rnd(1,20),total=roll+bonus.total,result={roll,total,dc:ch.dc,bonus,passed:total>=ch.dc};
   if(!result.passed){ openLostEncounter(ch,result); setBusy(false); return; }
@@ -1729,12 +1803,14 @@ function rollLabel(result){
   return `d20 ${result.roll} ${fmt(result.bonus.parts[0]?.value||0)}${extras?` + ${extras}`:''} vs DC ${result.dc} = ${result.total}`;
 }
 function completeCheckedChoice(ch,result,passed){
+  ensureStoryGroup(ch);
   markEncounter(ch);
   const resultText=passed?(ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.');
   const paragraphs=String(resultText).split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean);
   paragraphs.forEach((paragraph,index)=>appendBeat(paragraph,index===paragraphs.length-1?rollLabel(result):null,index===paragraphs.length-1?(passed?'success':'fail'):'story'));
   const effects=ch.effects?(ch.effects[passed?'success':'failure']||{}):{}; applyEffects(effects,{source:ch.label}); Sound.sfx(passed?'success':'fail');
   enterScene(passed?(ch.nextSuccess||ch.next):(ch.nextFail||ch.next),{arrivalKey:`${ch.id}:${passed?'success':'failure'}`});
+  endStoryGroup();
 }
 function eligibleSacrifices(){
   const equipped=new Set(Object.values(Engine.state.equipment||{}).filter(Boolean));
@@ -1752,10 +1828,12 @@ function rerollFailure(method){
   const pending=Engine.pendingFailure; if(!pending) return; const S=Engine.state; if(S.campaign.rerollsUsed[pending.id]) return; let payment='';
   if(method==='gold'){
     if(S.character.Gold<pending.cost) return;
+    ensureStoryGroup(pending.ch);
     payment=`You pay ${pending.cost} gold for emergency help, replacement material, and one more attempt.`;
     appendPassage(payment); applyEffects({gold:-pending.cost,goldReason:'funded a second attempt'},{source:'Encounter recovery'});
   }else{
     const eligible=eligibleSacrifices(); if(!eligible.length) return; const lost=pick(eligible);
+    ensureStoryGroup(pending.ch);
     S.character.inventory=S.character.inventory.filter(item=>item!==lost); syncInventoryState(S);
     payment=`You leave the ${lost} behind to recover your position and try again.`; appendPassage(payment); appendEffectSummary([{tone:'loss',label:'Item lost',detail:lost}]);
   }
@@ -1781,7 +1859,7 @@ function finalizeEnding(id){
   Engine.el.epiTitle.textContent=ending.title; renderEpilogueText(text); openModal(Engine.el.modalEpi); BGM.updateForState(S);
 }
 
-function openMerchant(id){ Engine.activeMerchant=MERCHANTS[id]; if(!Engine.activeMerchant) return; renderMerchant(); openModal(Engine.el.modalMerchant); }
+function openMerchant(id,choice=null){ Engine.activeMerchant=MERCHANTS[id]; Engine.activeMerchantChoice=choice; if(!Engine.activeMerchant) return; renderMerchant(); openModal(Engine.el.modalMerchant); }
 function merchantBuyPrice(name){ return Math.max(1,Math.ceil(itemMeta(name).value*.65)); }
 function merchantSellPrice(name){ return Math.max(1,Math.floor(itemMeta(name).value*.45)); }
 function canSell(name){ return !Object.values(Engine.state.equipment||{}).includes(name)&&!isProtectedInventoryItem(name); }
@@ -1793,16 +1871,22 @@ function renderMerchant(){
 }
 function buyMerchantItem(name){
   const price=merchantBuyPrice(name),S=Engine.state;if(S.character.Gold<price||S.character.inventory.includes(name)) return;
-  appendPassage(`You bought the ${name} from ${Engine.activeMerchant.name} for ${price} gold.`);
-  applyEffects({gold:-price,goldReason:`bought ${name}`,item:{name}},{source:`Purchase from ${Engine.activeMerchant.name}`,suppressItemNarrative:true});
-  persistState('Purchase stored'); renderAll(); renderMerchant(); Sound.inventory('place');
+  beginStoryGroup(Engine.activeMerchantChoice,`Buy ${name} from ${Engine.activeMerchant.name}.`);
+  try{
+    appendPassage(`You bought the ${name} from ${Engine.activeMerchant.name} for ${price} gold.`);
+    applyEffects({gold:-price,goldReason:`bought ${name}`,item:{name}},{source:`Purchase from ${Engine.activeMerchant.name}`,suppressItemNarrative:true});
+    persistState('Purchase stored'); renderAll(); renderMerchant(); Sound.inventory('place');
+  }finally{ endStoryGroup(); }
 }
 function sellMerchantItem(name){
   if(!canSell(name)) return; const S=Engine.state,price=merchantSellPrice(name);
-  S.character.inventory=S.character.inventory.filter(item=>item!==name); S.character.Gold+=price; syncInventoryState(S);
-  appendPassage(`You sold the ${name} to ${Engine.activeMerchant.name} for ${price} gold.`);
-  appendEffectSummary([{tone:'gain',label:`Gold +${price}`,detail:`sold ${name}`},{tone:'loss',label:'Item sold',detail:name}]);
-  persistState('Sale stored'); renderAll(); renderMerchant(); Sound.inventory('pickup');
+  beginStoryGroup(Engine.activeMerchantChoice,`Sell ${name} to ${Engine.activeMerchant.name}.`);
+  try{
+    S.character.inventory=S.character.inventory.filter(item=>item!==name); S.character.Gold+=price; syncInventoryState(S);
+    appendPassage(`You sold the ${name} to ${Engine.activeMerchant.name} for ${price} gold.`);
+    appendEffectSummary([{tone:'gain',label:`Gold +${price}`,detail:`sold ${name}`},{tone:'loss',label:'Item sold',detail:name}]);
+    persistState('Sale stored'); renderAll(); renderMerchant(); Sound.inventory('pickup');
+  }finally{ endStoryGroup(); }
 }
 function renderJournal(){
   const C=Engine.state.campaign,J=Engine.state.journal,scene=currentScene(),chapter=CAMPAIGN_CHAPTERS[C.chapter]||CAMPAIGN_CHAPTERS.tutorial,metrics=campaignMetrics();
@@ -1815,7 +1899,8 @@ function makeChoiceSet(){ return currentScene().choices||[]; }
 
 /* ---------- helpers ---------- */
 function appendBeat(text, roll, kind=null, html=null){
-  const entry= html?{html:sanitizeRichHTML(html),roll,kind}:{text,roll,kind};
+  const group=Engine.activeStoryGroup?{groupId:Engine.activeStoryGroup}:{};
+  const entry=html?{html:sanitizeRichHTML(html),roll,kind,...group}:{text,roll,kind,...group};
   Engine.state.storyBeats.push(entry);
   Engine.state.transcript.push(html?strip(html):text);
   Engine.state._pendingType=true;
@@ -1824,6 +1909,7 @@ function captureRunState(S){
   return JSON.parse(JSON.stringify({
     seed:S.seed, turn:S.turn, scene:S.scene,
     storyBeats:S.storyBeats, transcript:S.transcript,
+    storyGroupSeq:S.storyGroupSeq,
     character:S.character, backpack:S.backpack, equipment:S.equipment, flags:S.flags, campaign:S.campaign, journal:S.journal,
     _choiceHistory:S._choiceHistory, _lastChoices:S._lastChoices,
     _arcStep:S._arcStep, _pendingType:false
@@ -1853,6 +1939,7 @@ function sanitizeRichHTML(html){
       el.className='gloss';
       const def=node.getAttribute('data-def');
       if(def) el.setAttribute('data-def',def);
+      el.setAttribute('tabindex','0');
     }
     el.appendChild(children);
     return el;
@@ -1866,7 +1953,27 @@ function autoGen(){ const n=['Eldan','Brassa','Keled','Varek','Moriah','Thrain',
   const protectedItems=C.inventory.filter(isProtectedInventoryItem);
   C.name=pick(n); C.race=pick(['Dwarf','Human','Elf','Gnome','Halfling','Orc']); C.STR=rnd(8,18); C.DEX=rnd(8,18); C.INT=rnd(8,18); C.CHA=rnd(8,18); C.HP=rnd(8,20); C.MaxHP=C.HP; C.Gold=rnd(0,25); C.inventory=cleanInventory([...['Torch','Canteen','Oil Flask','Rope Coil','Lockpin'].sort(()=>Math.random()-.5).slice(0,rnd(1,3)),...protectedItems]); Engine.state.equipment=blankEquipment(); syncInventoryState(Engine.state); renderAll(); }
 function toast(txt,tone='info'){ const region=Engine.el.toastRegion||document.body; while(region.children.length>=4) region.firstElementChild?.remove(); const t=document.createElement('div'); t.className=`toast ${tone}`; t.textContent=txt; region.appendChild(t); requestAnimationFrame(()=>t.classList.add('show')); setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),240); },2400); }
-function exportTranscript(){ const S=Engine.state; const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{font:16px Georgia,serif;margin:32px;color:#222}h1{font:700 22px system-ui,Segoe UI,Roboto,sans-serif}.meta{color:#555;margin-bottom:14px}p{line-height:1.55}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${S.transcript.map(t=>`<p>${esc(t)}</p>`).join('')}`; const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url); }
+function exportTranscript(){
+  const S=Engine.state;
+  let body='',openGroup=null;
+  for(const beat of S.storyBeats){
+    const group=beat.groupId||null;
+    if(group!==openGroup){
+      if(openGroup) body+='</section>';
+      if(group) body+='<section class="turn">';
+      openGroup=group;
+    }
+    if(beat.kind==='choice'){ body+=`<h2><span>Chosen course</span>${esc(beat.text||'Recorded choice')}</h2>`; continue; }
+    if(beat.kind==='effects'){
+      body+=`<ul class="effects">${(beat.effects||[]).map(effect=>`<li><b>${esc(effect.label)}</b>${effect.detail?` — ${esc(effect.detail)}`:''}</li>`).join('')}</ul>`;
+      continue;
+    }
+    body+=`<p>${esc(beat.html?stripHTML(beat.html):beat.text||'')}</p>`;
+  }
+  if(openGroup) body+='</section>';
+  const html=`<!doctype html><meta charset="utf-8"><title>Story Transcript</title><style>body{max-width:850px;font:16px/1.58 Georgia,serif;margin:32px auto;padding:0 24px;color:#25201a}h1{font:700 24px system-ui,Segoe UI,sans-serif}.meta{color:#655c50;margin-bottom:24px}.turn{position:relative;margin:28px 0;padding:18px 24px 18px 34px;border-left:3px solid #a36d2e;border-top:1px solid #d2b078;border-bottom:1px solid #d2b078}.turn h2{margin:0 0 18px;font:600 17px/1.4 system-ui,Segoe UI,sans-serif;color:#593618}.turn h2 span{display:block;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#8b704c}.effects{padding:10px 14px 10px 30px;background:#f2eadc;color:#4c4033}p{margin:0 0 1.1em}</style><h1>Brassreach — Transcript</h1><div class="meta">Engine: ${S.live.on?'Live':'Local'} · Seed ${S.seed} · Turns ${S.turn}</div>${body}`;
+  const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='brassreach_transcript.html'; a.click(); URL.revokeObjectURL(url);
+}
 
 /* ---------- rich typewriter (preserves glossary and roll markup) ---------- */
 function typewriteRich(p, cps=40){
@@ -1910,32 +2017,51 @@ function typewriteRich(p, cps=40){
 function getIntroSlidesHTML(){
   return `
   <div id="intro" class="intro">
-    <section class="slide s1 active" data-side="img-left" aria-label="Slide 1">
-      <div class="img" aria-hidden="true"></div>
-      <div class="copy"><div class="scroll">
-        <p>The labyrinth of towers, alleyways, stairwells, and terraces in <span class="gloss" data-def="A layered dwarven city whose living works join water, stone, brass, skilled labor, and public care.">Brassreach</span> glows beneath a thousand mechanical lanterns. Gears turn within the walls; lifts climb between crowded levels; bells carry the hours from the highest towers to the stone below. The city seems alive by design. Centuries of work reaching back to the Founders taught its metal skeleton to whir, click, and hum in one great harmony. At least, it once did. In recent decades, greed, vanity, and divided authority have left that flawless machinery frail and shuddering. Bells answer one another out of tune. Public gears grind while private towers shine. Factions pursue gold, influence, and inherited privilege, while fewer citizens remember the shared care that made the young city possible. Brassreach still blazes against the mountain dark, but anyone who listens closely can hear its heartbeat falter.</p>
-      </div></div>
-      <div class="nav"><button class="btn secondary" id="introSkip1">Skip</button><button class="btn gold intro-next">Continue ▸</button></div>
-      <div class="mist" aria-hidden="true"></div>
-    </section>
+    <div class="book-stage">
+      <div class="book-shell" aria-label="The Brassreach chronicle" aria-busy="true">
+        <div class="book-page-stack left" aria-hidden="true"></div>
+        <div class="book-page-stack right" aria-hidden="true"></div>
+        <div class="book-spread">
+          <div class="book-gutter" aria-hidden="true"></div>
+          <div class="page-turn" aria-hidden="true"></div>
 
-    <section class="slide s2" data-side="img-left" aria-label="Slide 2">
-      <div class="img" aria-hidden="true"></div>
-      <div class="copy"><div class="scroll">
-        <p>Brassreach descends as far as it rises. The surface holds civic workshops, dwellings, wealthy towers, and Halls where elected officials and hereditary power struggle over the city's course. Beneath them, the Undercity opens into founder-made reservoirs and vaulted public works, lit by golden seams that fade a little more each year. Deeper still lie the Archives, where the memory of Brassreach survives in law, maps, testimony, and repaired fragments. To and from those galleries travel <span class="gloss" data-def="Civic investigators trained to follow a failure from physical cause through testimony, decision, and consequence.">Threadbearers</span>. Their predecessors returned from long journeys with accounts woven by needle and thread; modern bearers carry each witnessed cause and consequence in a <span class="gloss" data-def="A tamper-evident field record whose sealed accounts and later corrections remain visible.">Thread Ledger</span>. Most work near the public Halls. A trusted few earn the <span class="gloss" data-def="Hard-earned authority to inspect restricted works and cross-office records without commanding their people.">Deep Writ</span> and descend toward the Cistern Fields, where high vaults, dark reservoirs, and the oldest foundations pass beyond common knowledge.</p>
-      </div></div>
-      <div class="nav"><button class="btn secondary" id="introBack2">◂ Back</button><button class="btn gold intro-next">Continue ▸</button></div>
-      <div class="mist" aria-hidden="true"></div>
-    </section>
+          <section class="slide s1 active" data-side="img-left" aria-label="Chronicle page 1 of 3">
+            <div class="img" aria-hidden="true"></div>
+            <div class="copy"><div class="scroll">
+              <p>The labyrinth of towers, alleyways, stairwells, and terraces of <span class="gloss" tabindex="0" data-def="A layered dwarven city whose unique constructions join water, stone, brass, and sound.">Brassreach</span> glows beneath a thousand mechanical lanterns. Metal gears turn with impossible ease everywhere you look. The city itself seems alive, and by design; centuries of work dating back to the Founders brought to life a city whose metal heartbeat whirrs, clicks, and hums in perfect harmony. At least, it once did. In recent decades, neglect born of greed, vanity, and contested authority renders the once flawless machinery of Brassreach frail and shuddering. Gone is the pealing chorus of perfectly tuned bells, while superficially lavish towers loom imperiously above ever-worsening squalor. Factions have arisen, some with eyes only for gold and jewels, others for political gain, and all the while fewer and fewer remain who remember the concord of a youthful Brassreach.</p>
+            </div></div>
+            <div class="nav"><button class="btn secondary" id="introSkip1">Skip</button><button class="btn gold intro-next">Turn page ▸</button></div>
+          </section>
 
-    <section class="slide s3" data-side="img-left" aria-label="Slide 3">
-      <div class="img" aria-hidden="true"></div>
-      <div class="copy"><div class="scroll">
-        <p>The Founders shaped the Cistern Fields chamber by chamber, listening to pickaxe, water, stone, and brass until the deepest works rang in accord with the city above. That accord has weakened. Water has risen for years through decaying channels, and failures once separated by whole districts now carry the same strange vibration. A cracked bell-stair, flooded homes in the <span class="gloss" data-def="A dense craft and residential district of workshops, ropewalks, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den should have nothing in common. No official map joins them. You begin as a recent Institute graduate under a <span class="gloss" data-def="Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna's supervision.">probationary writ</span>. Your attributes, equipment, testimony, repairs, and alliances will shape what follows; failure will leave a real consequence without ending the campaign. Captain Brunna does not offer you a prophecy or a hidden enemy. She gives you people in danger, machines that no longer behave as they should, and one low overtone climbing from somewhere the modern maps refuse to show.</p>
-      </div></div>
-      <div class="nav"><button class="btn secondary" id="introBack3">◂ Back</button><button class="btn gold intro-begin">Begin Story</button></div>
-      <div class="mist" aria-hidden="true"></div>
-    </section>
+          <section class="slide s2" data-side="img-left" aria-label="Chronicle page 2 of 3">
+            <div class="img" aria-hidden="true"></div>
+            <div class="copy"><div class="scroll">
+              <p>The stone and metal maze of Brassreach's surface holds civic workshops, dwellings, towers, and the Halls where elected officials and hereditary power struggle over the city's course. Beneath them, however, layer by Brass-wrought layer, the Undercity opens into sprawling Founder-made reservoirs and vaulted public works, lit by golden seams that fade a little more each year. Deeper still lie the Archives, where the memory of Brassreach survives in etched metal tablets of witness accounts, work inspections, and repair orders. To and from those galleries travel <span class="gloss" tabindex="0" data-def="Civic investigators trained to seek truth by following mechanical failures to their source, uncovering hidden patterns and decoding mystery along the way.">Threadbearers</span>. The first of these truth-seekers returned from long journeys with accounts woven by needle and thread; modern bearers carry their findings in a <span class="gloss" tabindex="0" data-def="A Threadbearer's field record whose firsthand accounts are vital.">Thread Ledger</span>, and seldom venture as far as their predecessors. Most now work near the public Halls, while a trusted few earn the <span class="gloss" tabindex="0" data-def="A hard-earned seal of authority to inspect restricted work, cross-office records, and the deepest reaches of the Undercity.">Deep Writ</span> and descend toward the Cistern Fields, where high vaults, dark reservoirs, and the very foundations of Brassreach are legendary.</p>
+            </div></div>
+            <div class="nav"><button class="btn secondary" id="introBack2">◂ Previous page</button><button class="btn gold intro-next">Turn page ▸</button></div>
+          </section>
+
+          <section class="slide s3" data-side="img-left" aria-label="Chronicle page 3 of 3">
+            <div class="img" aria-hidden="true"></div>
+            <div class="copy"><div class="scroll">
+              <p>The Founders shaped the Cistern Fields chamber by chamber, guiding sound through water, stone, and brass until the deepest works rang true enough to birth a city. That foundational accord has weakened. Water has risen for years through neglected channels, and repair orders miles from one another hint at the same strange, pulsing undertone. A cracked stairwell near the public Halls, flooded neighborhoods in the <span class="gloss" tabindex="0" data-def="A densely settled district of workshops, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den below the Markets should have nothing in common...<br><br>You begin as a recent Institute graduate under a <span class="gloss" tabindex="0" data-def="Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna's supervision.">probationary writ</span>. Your attributes, equipment, testimony, repairs, and alliances will shape what follows; failures come at a cost, while successes follow in your footsteps as you explore deeper and deeper. Though you are but a recent Initiate, it is up to you to follow your intuition and uncover what might otherwise spell the end of Brassreach.</p>
+            </div></div>
+            <div class="nav"><button class="btn secondary" id="introBack3">◂ Previous page</button><button class="btn gold intro-begin">Begin Story</button></div>
+          </section>
+        </div>
+
+        <div class="book-cover" aria-hidden="true">
+          <div class="cover-face">
+            <span class="cover-rule"></span>
+            <span class="cover-kicker">The Dwarven Storyweaver</span>
+            <strong><i>BRASS</i><b>REACH</b></strong>
+            <small>A chronicle of the city below</small>
+            <span class="cover-seal">BR</span>
+          </div>
+          <div class="cover-inside"></div>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1943,30 +2069,30 @@ function getIntroScrollHTML(){
   return `
     <hr class="sep"/>
     <div class="quick-tables">
-      <h4>Threadbearer Institute Field Brief</h4>
+      <h4>Threadbearer Institute Field Briefing</h4>
       <div class="grid2">
         <div>
-          <h5>The Office</h5>
+          <h5>Captain Brunna's Office</h5>
           <ul>
-            <li><b>Investigate</b> — Test the physical site and preserve uncertainty.</li>
-            <li><b>Witness</b> — Record who was affected and what they observed.</li>
-            <li><b>Connect</b> — Show how decisions, repairs, and consequences form one chain.</li>
+            <li><b>Investigate</b> — Follow the evidence as far as it leads.</li>
+            <li><b>Witness</b> — Record the firsthand accounts of those affected.</li>
+            <li><b>Connect</b> — Where possible, connect pieces of seemingly unrelated and circumstantial evidence to paint a picture of cause to effect.</li>
           </ul>
-          <p>A Threadbearer follows the unbroken line from a damaged work to the people, decisions, and duties around it. The office grants access and witness—not unchecked command.</p>
+          <p>A Threadbearer follows the line from failing mechanism through the people, decisions, and neglected duties that left vulnerabilities to such failure. Your Probationary Writ grants access to witness and account- use it well.</p>
         </div>
         <div>
           <h5>Your Record</h5>
           <ul>
-            <li><b>Evidence</b> — Tested facts that support a conclusion.</li>
-            <li><b>Testimony</b> — Lived accounts kept in their proper context.</li>
-            <li><b>Repairs</b> — Concrete improvements completed along the route.</li>
-            <li><b>Consequences</b> — Costs that remain even when the story moves forward.</li>
+            <li><b>Evidence</b> — Your observations and deductions that begin to form a network of cause and effect.</li>
+            <li><b>Testimony</b> — Firsthand accounts recorded regardless of caste, duty, authority, or wealth.</li>
+            <li><b>Repairs</b> — By directing or initiating a proper chain of repair duties, the very failures you investigate can be righted as you explore.</li>
+            <li><b>Consequences</b> — Your failures will leave their mark in gold, gathered items, or the relationships you form through your journeys.</li>
           </ul>
-          <p>Your Thread Ledger keeps these strands together so a later office cannot preserve the repair while burying its cause.</p>
+          <p>Your Thread Ledger keeps safe these strands of evidence and testimony, preserving the truth in perpetuity.</p>
         </div>
       </div>
       <h5>First Commission</h5>
-      <ul><li>Secure the cracked bell-stair and hear its unusual vibration.</li><li>Compare official plans with the routes people actually use in the Tangles.</li><li>Protect residents and animals displaced by the rising water.</li><li>Return to Captain Brunna with what the evidence proves—and what remains honestly unknown.</li></ul>
+      <ul><li>Examine and secure the cracked stairwell, keeping an ear out for unusual resonance.</li><li>Compare dated city plans with the routes you find in use in the Tangles.</li><li>Protect residents and animals displaced by the rising water.</li><li>Return to Captain Brunna with your findings across Brassreach- and the potential for strange connections between them.</li></ul>
     </div>`;
 }
 
