@@ -106,5 +106,25 @@ credits are retained here for provenance.
   - Source page: <https://opengameart.org/content/completion-sound>
   - License selected for this project: CC0 1.0 Universal
   - Original file: `completetask_0.mp3`
-  - Use: renamed without transcoding and played once as the word `journey`
+  - Use: renamed without transcoding and played once as the word `adventure`
     illuminates before the cover opens.
+
+## Photoreal Living-Book Intro
+
+The following artwork was generated specifically for Brassreach and is
+original project artwork rather than an external library asset:
+
+- `public/img/intro/living-book/closed-cover.webp`
+- `public/img/intro/living-book/open-base.webp`
+- `public/img/intro/living-book/art-city.png`
+- `public/img/intro/living-book/art-archives.png`
+- `public/img/intro/living-book/art-unfathomer.png`
+
+The open-book base remains fixed at runtime. The three PNG files are
+registered, feathered left-page overlays produced from the matching generated
+source plates by `tools/build_living_book_assets.py`. This preserves identical
+lantern, lectern, binding, page, lighting, and camera geometry across slides.
+
+No new third-party runtime dependency, font, music, sound, or texture was added
+for this pass. Existing documented CC0 audio remains in use for the cover,
+binding, page, settling, sparkle, music, and fire layers.
