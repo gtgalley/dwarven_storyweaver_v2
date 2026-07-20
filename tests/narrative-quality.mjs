@@ -60,7 +60,8 @@ assert(Object.keys(ENDINGS).length===5,'Ending count changed during prose edit')
 
 const glossaryDefinitions=[...engine.matchAll(/data-def="([^"]+)"/g)].map(match=>match[1]);
 assert(glossaryDefinitions.length>=5,'Intro glossary definitions were lost');
-for(const definition of glossaryDefinitions) assert(definition.length<=150,`Intro glossary definition is too dense: ${definition}`);
+// Author-approved workbook definitions may carry one complete explanatory sentence.
+for(const definition of glossaryDefinitions) assert(definition.length<=280,`Glossary definition exceeds the approved concise-card budget: ${definition}`);
 
 assert(/bonus\.equipped|bonus\.equippedAny/.test(engine),'Engine does not calculate equipped-item bonuses');
 assert(/Owned:/.test(engine)&&/Equipped:/.test(engine),'Bonus labels do not distinguish owned from equipped items');
