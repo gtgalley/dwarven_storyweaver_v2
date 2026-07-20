@@ -9,13 +9,20 @@
   <link rel="icon" href="data:,">
 
   <!-- single stylesheet (RELATIVE path) -->
-  <link rel="stylesheet" href="./public/css/skin.css?v=24">
+  <link rel="stylesheet" href="./public/css/skin.css?v=25">
 
-  <!-- Intro art is needed immediately; music is fetched on demand after boot. -->
+  <!-- The closed chronicle primes its first spread and audio before interaction. -->
   <link rel="preload" as="image" href="public/img/intro/intro_city_baked.png">
   <link rel="preload" as="image" href="public/img/intro/intro_gate_baked.png">
   <link rel="preload" as="image" href="public/img/intro/intro_unfathomer_baked.png">
+  <link rel="preload" as="image" href="public/img/materials/parchment-fiber.jpg">
   <link rel="preload" as="audio" href="public/audio/intro-hearth-lament.mp3" type="audio/mpeg">
+  <link rel="preload" as="audio" href="public/audio/intro-fire-crackle.ogg" type="audio/ogg">
+  <link rel="preload" as="audio" href="public/audio/intro-sparkle.mp3" type="audio/mpeg">
+  <link rel="preload" as="audio" href="public/audio/book-cover-open.ogg" type="audio/ogg">
+  <link rel="preload" as="audio" href="public/audio/book-binding-creak.ogg" type="audio/ogg">
+  <link rel="preload" as="audio" href="public/audio/book-page-turn.wav" type="audio/wav">
+  <link rel="preload" as="audio" href="public/audio/book-page-settle.ogg" type="audio/ogg">
 </head>
 <body>
   <!-- KEEP FOR DEBUG PROOFING (move was the fix): -->
@@ -26,7 +33,7 @@
   <div class="boot" id="boot"><div class="box">Loading…</div></div>
 
   <script type="module">
-    import { boot } from './public/js/engine.js?v=24';
+    import { boot } from './public/js/engine.js?v=25';
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('boot').classList.add('ok');
       boot();
