@@ -1,5 +1,5 @@
 // Brassreach browser game engine
-// v26 — Photographic living-book intro with stable scene plates and HTML page copy.
+// v27 — Refined photographic chronicle with passage navigation and seamless presentation.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -180,7 +180,7 @@ const BGM = (function(){
   let currentName=null, targetName=null, requestToken=0;
   let unlocked=false, pendingName=null;
   const tracks = {
-    intro:    { title:"Lament at the Foundry Hearth", srcs:["./public/audio/intro-hearth-lament.mp3"], layerSrcs:["./public/audio/intro-fire-crackle.ogg"] },
+    intro:    { title:"Lament at the Foundry Hearth", srcs:["./public/audio/intro-hearth-lament.mp3"], layerSrcs:["./public/audio/intro-fireplace-loop.wav"], layerGains:[1,.22] },
     prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a"] },
     halls:    { title:"Halls of the Brassreach", srcs:["./public/audio/8b264fe3-26f0-4c6c-9356-60a270d2ef21.mp3"] },
     depths2:  { title:"When the Unfathomer Stirs", srcs:["./public/audio/66bf880d-6cea-470f-8dba-7de081c046fa.mp3"] },
@@ -225,12 +225,13 @@ const BGM = (function(){
     try{
       const data = await load(name);
       if(!data || token!==requestToken){ if(token===requestToken) targetName=currentName; return; }
+      const track=tracks[name];
       const C = ctx || getCtx(); ctx=C; if(!bus){ bus=C.createGain(); bus.gain.value=Engine.state?.settings?.audio?.music ?? 0.5; if(Sound.getMaster){ bus.connect(Sound.getMaster()); } else { bus.connect(C.destination); } }
       // A track may contain synchronized layers (the intro music and its hearth recording).
       const ng = C.createGain(); ng.gain.value=0; ng.connect(bus); const now=C.currentTime;
       const nextSources=data.buffers.map((buffer,index)=>{
         const src=C.createBufferSource(); src.buffer=buffer; src.loop=true;
-        const layerGain=C.createGain(); layerGain.gain.value=index===0?1:.34;
+           const layerGain=C.createGain(); layerGain.gain.value=track?.layerGains?.[index]??(index===0?1:.34);
         src.connect(layerGain).connect(ng); src.start(now+0.02); return src;
       });
       const fade = Math.max(0.10, fadeMs/1000);
@@ -244,7 +245,7 @@ const BGM = (function(){
       cur = nextSources; curGain = ng;
       currentName=name;
       if(prev.length){ setTimeout(()=>prev.forEach(source=>{ try{ source.stop(); }catch{} }), fade*1000+120); }
-      const t=tracks[name]; if(t) setNowPlaying(t.title);
+      if(track) setNowPlaying(track.title);
       return true;
     }catch(e){
       if(token===requestToken) targetName=currentName;
@@ -299,14 +300,16 @@ const BGM = (function(){
 
 const Sound = (()=>{
   let ctx, master, ui;
+  const introHistory=[];
+  const rememberIntro=kind=>{ introHistory.push({kind,at:performance.now()}); if(introHistory.length>40) introHistory.shift(); };
   const audioBuffers=new Map();
   const inventoryUrls={pickup:'./public/audio/inventory-pickup.wav',place:'./public/audio/inventory-place.wav',reject:'./public/audio/inventory-reject.wav'};
   const introUrls={
-    sparkle:'./public/audio/intro-sparkle.mp3',
     cover:'./public/audio/book-cover-open.ogg',
     binding:'./public/audio/book-binding-creak.ogg',
     page:'./public/audio/book-page-turn.wav',
-    settle:'./public/audio/book-page-settle.ogg'
+    settle:'./public/audio/book-page-settle.ogg',
+    passage:'./public/audio/book-page-settle.ogg'
   };
   const ensure = ()=>{
     if (ctx) return ctx;
@@ -370,11 +373,12 @@ const Sound = (()=>{
   const intro=async(kind,{gain:gainOverride=null,pan=0}={})=>{
     const sa=Engine.state.settings.audio||{};
     if(sa.sfx_story===false||!introUrls[kind]) return false;
+    rememberIntro(kind);
     ensure(); await resume();
     try{
       const buffer=await loadBuffer(introUrls[kind]);
       const source=ctx.createBufferSource(), gain=ctx.createGain();
-      const levels={sparkle:.34,cover:.54,binding:.2,page:.46,settle:.22};
+      const levels={cover:.54,binding:.2,page:.42,settle:.2,passage:.085};
       source.buffer=buffer; gain.gain.value=gainOverride??levels[kind]??.3;
       source.connect(gain);
       if(ctx.createStereoPanner){
@@ -382,13 +386,59 @@ const Sound = (()=>{
       }else gain.connect(ui);
       source.start();
       return true;
-    }catch{
-      if(kind==='sparkle') sfx('success');
-      return false;
-    }
+    }catch{ return false; }
+  };
+  const journey=()=>{
+    const sa=Engine.state.settings.audio||{};
+    if(sa.sfx_story===false) return false;
+    rememberIntro('journey');
+    ensure(); resume();
+    const t=ctx.currentTime;
+
+    // A restrained bass-drum impact: low fundamentals, a short filtered body,
+    // and no bright transient that could read as a UI click.
+    const impact=ctx.createGain();
+    impact.gain.setValueAtTime(.0001,t);
+    impact.gain.exponentialRampToValueAtTime(.72,t+.018);
+    impact.gain.exponentialRampToValueAtTime(.0001,t+.78);
+    impact.connect(ui);
+    [[78,39,'sine'],[112,52,'triangle']].forEach(([start,end,type],index)=>{
+      const oscillator=ctx.createOscillator();
+      oscillator.type=type;
+      oscillator.frequency.setValueAtTime(start,t);
+      oscillator.frequency.exponentialRampToValueAtTime(end,t+(index?.48:.7));
+      oscillator.connect(impact);
+      oscillator.start(t);
+      oscillator.stop(t+.82);
+    });
+
+    const noiseBuffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.36),ctx.sampleRate);
+    const samples=noiseBuffer.getChannelData(0);
+    for(let i=0;i<samples.length;i++) samples[i]=(Math.random()*2-1)*(1-(i/samples.length));
+    const noise=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),noiseGain=ctx.createGain();
+    noise.buffer=noiseBuffer; filter.type='lowpass'; filter.frequency.value=165;
+    noiseGain.gain.setValueAtTime(.18,t); noiseGain.gain.exponentialRampToValueAtTime(.0001,t+.34);
+    noise.connect(filter).connect(noiseGain).connect(ui); noise.start(t); noise.stop(t+.37);
+
+    // A low metallic overtone trails the impact. Closely related partials keep
+    // it ethereal without producing a bright completion-jingle sparkle.
+    const shimmer=ctx.createGain(),shimmerStart=t+.16;
+    shimmer.gain.setValueAtTime(.0001,shimmerStart);
+    shimmer.gain.exponentialRampToValueAtTime(.13,shimmerStart+.09);
+    shimmer.gain.exponentialRampToValueAtTime(.0001,shimmerStart+1.65);
+    shimmer.connect(ui);
+    [286,429,572].forEach((frequency,index)=>{
+      const oscillator=ctx.createOscillator();
+      oscillator.type='sine';
+      oscillator.frequency.value=frequency+(index*1.7);
+      oscillator.connect(shimmer);
+      oscillator.start(shimmerStart);
+      oscillator.stop(shimmerStart+1.7);
+    });
+    return true;
   };
   const ambOn = ()=>ensure(); // for legacy calls
-  return {click, sfx, gong, inventory, intro, primeIntro, ambOn, setLevels, resume, ensure, getCtx:()=>ensure(), getMaster:()=>master};
+  return {click, sfx, gong, inventory, intro, journey, primeIntro, ambOn, setLevels, resume, ensure, getCtx:()=>ensure(), getMaster:()=>master, debugIntro:()=>introHistory.map(entry=>({...entry}))};
 })();
 
 /* ---------- weaver ---------- */
@@ -448,6 +498,7 @@ export function boot(){
   /* ambience removed */ BGM.updateForState(Engine.state);
   BGM.attempt();
   Engine.getAudioDebug=()=>BGM.debugState();
+  Engine.getIntroSoundDebug=()=>Sound.debugIntro();
   Engine.el.fxMainCtl=FX.start('fx');
 
   // Browsers may require a deliberate gesture before a suspended AudioContext can play.
@@ -529,6 +580,7 @@ function attachGlossTips(){
   root.addEventListener('pointerover', (e)=>{
     const t = e.target.closest('.gloss');
     if (!t) return;
+    if(pinned&&pinned!==t) return;
     overTerm = t;
 
     const def = resolveDef(t);
@@ -569,27 +621,46 @@ function attachGlossTips(){
     const term=e.target.closest?.('.gloss');
     if(!term) return;
     term.removeAttribute('aria-describedby');
+    if(pinned===term) return;
     overTerm=null;
     tip.classList.remove('on');
     tip.style.visibility='hidden';
   });
 
-  // ALT to pin; click anywhere to unpin
+  const hidePinned=()=>{
+    tip.classList.remove('on');
+    tip.style.visibility='hidden';
+    tip.style.pointerEvents='none';
+    pinned=null;
+    hideAt=Date.now();
+  };
+
+  // ALT remains a keyboard pin shortcut. Click/touch also pins a definition
+  // without preventing normal text selection or focus behavior.
   root.addEventListener('keydown', (e)=>{
     if (e.altKey && overTerm){
-      pinned = tip; // keep the same element pinned
+      pinned = overTerm;
       tip.style.pointerEvents = 'auto';
+    }else if(e.key==='Escape'&&pinned){
+      hidePinned();
     }
   });
 
-  window.addEventListener('click', ()=>{
-    if (pinned){
-      tip.classList.remove('on');
-      tip.style.visibility = 'hidden';
-      pinned = null;
-      hideAt = Date.now();
-    }
-  }, true);
+  root.addEventListener('click',e=>{
+    const term=e.target.closest?.('.gloss');
+    if(!term){ if(pinned) hidePinned(); return; }
+    if(pinned===term){ hidePinned(); return; }
+    const def=resolveDef(term);
+    if(!def) return;
+    pinned=term;
+    overTerm=term;
+    tip.textContent=def;
+    tip.style.visibility='visible';
+    tip.style.pointerEvents='auto';
+    tip.classList.add('on');
+    const rect=term.getBoundingClientRect();
+    place(rect.left+(rect.width/2),rect.bottom);
+  });
 }
 
 // ----------------------------------------------------------------
@@ -614,12 +685,15 @@ function insertIntro(){
   Engine.el.intro    = document.getElementById('intro');
   Engine.el.intro.classList.add('two-pane');
   Engine.el.slides   = Array.from(Engine.el.intro.querySelectorAll('.slide'));
-  Engine.el.nextBtns = Array.from(Engine.el.intro.querySelectorAll('.intro-next'));
-  Engine.el.beginBtn = Engine.el.intro.querySelector('.intro-begin');
+  Engine.el.beginBtn = Engine.el.intro.querySelector('#introAdvance');
 
   Engine.el.slides.forEach(sl=>{
     sl.setAttribute('aria-hidden','true');
     sl.classList.add('baked');
+    sl.querySelectorAll('.intro-passage').forEach(passage=>{
+      passage.hidden=true;
+      passage.setAttribute('aria-hidden','true');
+    });
   });
 
   const shell=Engine.el.intro.querySelector('.book-shell');
@@ -627,9 +701,17 @@ function insertIntro(){
   const awaken=Engine.el.intro.querySelector('#introAwaken');
   const status=Engine.el.intro.querySelector('#introStatus');
   const art=Engine.el.intro.querySelector('#introArtLayer');
+  const previous=Engine.el.intro.querySelector('#introPrevious');
+  const advance=Engine.el.intro.querySelector('#introAdvance');
+  const skip=Engine.el.intro.querySelector('#introSkip');
   const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const wait=ms=>new Promise(resolve=>window.setTimeout(resolve,ms));
-  let idx=0,turning=false,started=false;
+  let folioIndex=0,passageIndex=0,turning=false,started=false;
+
+  Engine.el.intro.querySelectorAll('img').forEach(image=>{
+    image.draggable=false;
+    image.addEventListener('dragstart',event=>event.preventDefault());
+  });
 
   // Decode the three interchangeable paintings early. The cover and blank
   // spread are separately preloaded in index.html because they form the first
@@ -643,9 +725,29 @@ function insertIntro(){
     document.activeElement?.closest?.('#intro .gloss')?.blur?.();
   };
   const announce=message=>{ if(status) status.textContent=message; };
+  const passagesFor=folio=>Array.from(Engine.el.slides[folio]?.querySelectorAll('.intro-passage')||[]);
+  const isFirst=()=>folioIndex===0&&passageIndex===0;
+  const isLast=()=>folioIndex===Engine.el.slides.length-1&&passageIndex===passagesFor(folioIndex).length-1;
+  const describePosition=()=>{
+    const slide=Engine.el.slides[folioIndex];
+    const title=slide?.querySelector('.folio-mark strong')?.textContent||'Chronicle';
+    return `${title}, passage ${passageIndex+1} of ${passagesFor(folioIndex).length}; Folio ${folioIndex+1} of ${Engine.el.slides.length}.`;
+  };
+  const updateControls=()=>{
+    if(previous) previous.hidden=isFirst();
+    if(!advance) return;
+    const finalPassage=passageIndex===passagesFor(folioIndex).length-1;
+    const finalFolio=folioIndex===Engine.el.slides.length-1;
+    const label=finalPassage?(finalFolio?'Begin Story':'Next'):'Turn Page';
+    advance.dataset.action=finalPassage?(finalFolio?'begin':'next-folio'):'next-passage';
+    advance.classList.toggle('intro-begin',finalPassage&&finalFolio);
+    advance.classList.toggle('intro-next',!(finalPassage&&finalFolio));
+    advance.innerHTML=`<span>${label}</span>${finalPassage&&finalFolio?'':' <span aria-hidden="true">›</span>'}`;
+    advance.setAttribute('aria-label',finalPassage&&finalFolio?'Begin the Brassreach story':`${label}: ${describePosition()}`);
+  };
   const revealInk=slide=>{
     if(!slide||reduced) return;
-    const p=slide.querySelector('.scroll p'),copy=slide.querySelector('.copy');
+    const p=slide.querySelector('.intro-passage.active'),copy=slide.querySelector('.copy');
     [p,copy].forEach(element=>{
       if(!element) return;
       element.classList.remove(element===p?'ink-revealing':'ink-settling');
@@ -654,61 +756,97 @@ function insertIntro(){
     });
     window.setTimeout(()=>{ p?.classList.remove('ink-revealing'); copy?.classList.remove('ink-settling'); },1100);
   };
-  const activate=(i,{reveal=true}={})=>{
-    idx=Math.max(0,Math.min(Engine.el.slides.length-1,i));
+  const activate=(folio,passage,{reveal=true,updateArt=true}={})=>{
+    folioIndex=Math.max(0,Math.min(Engine.el.slides.length-1,folio));
+    const folioPassages=passagesFor(folioIndex);
+    passageIndex=Math.max(0,Math.min(folioPassages.length-1,passage));
     Engine.el.slides.forEach((slide,k)=>{
-      const active=k===idx;
+      const active=k===folioIndex;
       slide.classList.toggle('active',active);
       slide.setAttribute('aria-hidden',String(!active));
+      slide.querySelectorAll('.intro-passage').forEach((entry,j)=>{
+        const passageActive=active&&j===passageIndex;
+        entry.classList.toggle('active',passageActive);
+        entry.hidden=!passageActive;
+        entry.setAttribute('aria-hidden',String(!passageActive));
+      });
       if(active&&reveal) revealInk(slide);
     });
-    if(art){
-      art.src=Engine.el.slides[idx]?.dataset.art||'';
-      art.dataset.slide=String(idx+1);
+    if(art&&updateArt){
+      art.src=Engine.el.slides[folioIndex]?.dataset.art||'';
+      art.dataset.slide=String(folioIndex+1);
     }
+    shell.dataset.folio=String(folioIndex+1);
+    shell.dataset.passage=String(passageIndex+1);
+    updateControls();
   };
-  const show=async(i,animate=true)=>{
-    const target=Math.max(0,Math.min(Engine.el.slides.length-1,i));
-    if(target===idx&&shell?.classList.contains('is-ready')){ activate(target); return; }
+  const show=async(folio,passage=0,animate=true)=>{
+    const targetFolio=Math.max(0,Math.min(Engine.el.slides.length-1,folio));
+    const targetPassages=passagesFor(targetFolio);
+    const targetPassage=Math.max(0,Math.min(targetPassages.length-1,passage));
+    if(targetFolio===folioIndex&&targetPassage===passageIndex&&shell?.classList.contains('is-ready')){
+      activate(targetFolio,targetPassage);
+      return;
+    }
     if(turning) return;
-    if(!animate||!shell?.classList.contains('is-ready')){ activate(target); return; }
+    if(!animate||!shell?.classList.contains('is-ready')){ activate(targetFolio,targetPassage); return; }
     turning=true;
-    const direction=target>idx?'forward':'back';
+    const crossFolio=targetFolio!==folioIndex;
+    const direction=targetFolio>folioIndex||(targetFolio===folioIndex&&targetPassage>passageIndex)?'forward':'back';
     closeGloss();
     shell.classList.add('is-turning');
-    shell.classList.remove('content-visible');
-    Sound.intro('page',{pan:direction==='forward'?.08:-.08});
-    await wait(reduced?30:200);
-    activate(target,{reveal:false});
-    await wait(reduced?20:50);
-    shell.classList.add('content-visible');
-    revealInk(Engine.el.slides[idx]);
-    announce(`${Engine.el.slides[idx].querySelector('.folio-mark strong')?.textContent||'Chronicle page'}, page ${idx+1} of ${Engine.el.slides.length}.`);
-    await wait(reduced?30:240);
-    Sound.intro('settle',{pan:direction==='forward'?-.05:.05});
-    shell.classList.remove('is-turning');
+    if(crossFolio){
+      shell.classList.add('is-folio-turning');
+      shell.classList.remove('content-visible');
+      Sound.intro('page',{pan:direction==='forward'?.08:-.08});
+      await wait(reduced?20:190);
+      activate(targetFolio,targetPassage,{reveal:false,updateArt:true});
+      await wait(reduced?15:55);
+      shell.classList.add('content-visible');
+      revealInk(Engine.el.slides[folioIndex]);
+      await wait(reduced?20:230);
+      Sound.intro('settle',{pan:direction==='forward'?-.05:.05});
+    }else{
+      shell.classList.add('is-passage-turning');
+      Sound.intro('passage',{pan:direction==='forward'?.025:-.025});
+      await wait(reduced?15:165);
+      activate(targetFolio,targetPassage,{reveal:false,updateArt:false});
+      await wait(reduced?10:22);
+      shell.classList.remove('is-passage-turning');
+      revealInk(Engine.el.slides[folioIndex]);
+      await wait(reduced?15:170);
+    }
+    announce(describePosition());
+    shell.classList.remove('is-turning','is-folio-turning','is-passage-turning');
     turning=false;
   };
 
-  Engine.el.nextBtns.forEach(button=>button.addEventListener('click',()=>{
-    show(idx+1);
-  }));
-  Engine.el.intro.querySelector('#introBack2')?.addEventListener('click',()=>show(idx-1));
-  Engine.el.intro.querySelector('#introBack3')?.addEventListener('click',()=>show(idx-1));
-  Engine.el.intro.querySelector('#introSkip1')?.addEventListener('click',()=>{ Sound.click(); Engine.el.beginBtn?.click(); });
+  const finishIntro=()=>{
+    if(turning) return;
+    BGM.unlock('prelude');
+    Sound.gong();
+    window.removeEventListener('keydown',onIntroKey);
+    try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
+    document.getElementById('fxIntro')?.remove();
+    Engine.el.intro.classList.add('hidden');
+    store.set('intro_seen',true);
+    if(!Engine.state.storyBeats.length) beginTale(Engine.loadedSave);
+    setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); },120);
+  };
 
-  if(Engine.el.beginBtn){
-    Engine.el.beginBtn.onclick=()=>{
-      BGM.unlock('prelude');
-      Sound.gong();
-      try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
-      document.getElementById('fxIntro')?.remove();
-      Engine.el.intro.classList.add('hidden');
-      store.set('intro_seen',true);
-      if(!Engine.state.storyBeats.length) beginTale(Engine.loadedSave);
-      setTimeout(()=>{ Engine.el.btnEdit.click(); mountScrollFab(); },120);
-    };
-  }
+  advance?.addEventListener('click',()=>{
+    if(turning) return;
+    const passages=passagesFor(folioIndex);
+    if(isLast()){ finishIntro(); return; }
+    if(passageIndex<passages.length-1) show(folioIndex,passageIndex+1);
+    else show(folioIndex+1,0);
+  });
+  previous?.addEventListener('click',()=>{
+    if(turning||isFirst()) return;
+    if(passageIndex>0) show(folioIndex,passageIndex-1);
+    else show(folioIndex-1,passagesFor(folioIndex-1).length-1);
+  });
+  skip?.addEventListener('click',()=>{ if(turning) return; Sound.click(); finishIntro(); });
 
   const beginOpening=async()=>{
     if(started||shell?.classList.contains('is-ready')) return false;
@@ -720,30 +858,30 @@ function insertIntro(){
     awaken?.setAttribute('aria-disabled','true');
     announce('The Brassreach chronicle is opening.');
     BGM.unlock('intro');
-    Sound.intro('sparkle');
-    await wait(reduced?50:340);
+    Sound.journey();
+    await wait(reduced?35:280);
     shell.classList.add('is-black');
-    await wait(reduced?30:340);
-    activate(0,{reveal:false});
+    await wait(reduced?25:320);
+    activate(0,0,{reveal:false});
     shell.classList.add('is-open','is-ready');
     Sound.intro('cover',{pan:.05});
     if(!reduced) window.setTimeout(()=>Sound.intro('binding',{pan:-.04}),90);
-    shell.classList.remove('is-awakening');
     shell.removeAttribute('role');
     shell.removeAttribute('tabindex');
     shell.removeAttribute('aria-describedby');
     shell.setAttribute('aria-label','The open Brassreach chronicle');
     shell.setAttribute('aria-busy','false');
     awaken?.setAttribute('aria-hidden','true');
-    requestAnimationFrame(()=>shell.classList.remove('is-black'));
-    await wait(reduced?35:400);
+    await wait(reduced?15:80);
+    shell.classList.remove('is-black');
+    await wait(reduced?25:420);
     shell.classList.add('content-visible');
     revealInk(Engine.el.slides[0]);
-    await wait(reduced?35:420);
-    shell.classList.remove('is-turning');
+    await wait(reduced?25:250);
+    shell.classList.remove('is-turning','is-awakening');
     turning=false;
-    announce('The chronicle is open. The City, page 1 of 3.');
-    Engine.el.slides[0]?.querySelector('.intro-next')?.focus({preventScroll:true});
+    announce(`The chronicle is open. ${describePosition()}`);
+    advance?.focus({preventScroll:true});
     return true;
   };
   const appropriateBeginKey=e=>{
@@ -760,13 +898,20 @@ function insertIntro(){
   awaken?.addEventListener('click',event=>{ event.stopPropagation(); beginOpening(); });
   stage?.addEventListener('click',event=>{ if(!event.target.closest('.nav')) beginOpening(); });
   window.addEventListener('keydown',onIntroKey);
-  Engine.introController={start:beginOpening,show,get index(){return idx;},get turning(){return turning;}};
+  Engine.introController={
+    start:beginOpening,
+    show,
+    get index(){return folioIndex;},
+    get folioIndex(){return folioIndex;},
+    get passageIndex(){return passageIndex;},
+    get turning(){return turning;}
+  };
 
   if(!document.getElementById('fxIntro')){
     const fx=document.createElement('div');
     fx.id='fxIntro';
     fx.setAttribute('aria-hidden','true');
-    Object.assign(fx.style,{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'1'});
+    Object.assign(fx.style,{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'40'});
     Engine.el.intro.prepend(fx);
   }
   Engine.el.fxIntroCtl=FX.start('fxIntro');
@@ -2148,41 +2293,51 @@ function getIntroSlidesHTML(){
     <div class="intro-stage">
       <div class="book-shell is-dormant" role="button" tabindex="0" aria-label="Open the Brassreach chronicle" aria-describedby="introBeginPrompt" aria-busy="false">
         <div class="intro-plates" aria-hidden="true">
-          <img class="intro-cover-plate" src="public/img/intro/living-book/closed-cover.webp" alt="">
+          <img class="intro-cover-plate" src="public/img/intro/living-book/closed-cover.webp" alt="" draggable="false">
           <div class="intro-open-plate">
-            <img class="intro-base-plate" src="public/img/intro/living-book/open-base.webp" alt="">
-            <img class="intro-art-layer" id="introArtLayer" src="public/img/intro/living-book/art-city.png" alt="">
+            <img class="intro-base-plate" src="public/img/intro/living-book/open-base.webp" alt="" draggable="false">
+            <img class="intro-art-layer" id="introArtLayer" src="public/img/intro/living-book/art-city.png" alt="" draggable="false">
           </div>
         </div>
+        <div class="intro-lantern-light" aria-hidden="true"></div>
+        <div class="intro-edge-haze" aria-hidden="true"></div>
         <div class="intro-page-content">
 
-          <section class="slide s1 active" data-art="public/img/intro/living-book/art-city.png" aria-label="Chronicle page 1 of 3, The City">
+          <section class="slide s1 active" data-art="public/img/intro/living-book/art-city.png" aria-label="Folio I, The City">
             <div class="folio-mark"><span>Folio I</span><strong>The City</strong></div>
             <div class="copy"><span class="ink-trace" aria-hidden="true"></span><div class="scroll">
-              <p>The labyrinth of towers, alleyways, stairwells, and terraces of <span class="gloss" tabindex="0" data-def="A layered dwarven city whose unique constructions join water, stone, brass, and sound.">Brassreach</span> glows beneath a thousand mechanical lanterns. Metal gears turn with impossible ease everywhere you look. The city itself seems alive, and by design; centuries of work dating back to the Founders brought to life a city whose metal heartbeat whirrs, clicks, and hums in perfect harmony. At least, it once did. In recent decades, neglect born of greed, vanity, and contested authority renders the once flawless machinery of Brassreach frail and shuddering. Gone is the pealing chorus of perfectly tuned bells, while superficially lavish towers loom imperiously above ever-worsening squalor. Factions have arisen, some with eyes only for gold and jewels, others for political gain, and all the while fewer and fewer remain who remember the concord of a youthful Brassreach.</p>
+              <p class="intro-passage active" data-passage="1">The labyrinth of towers, alleyways, stairwells, and terraces of <span class="gloss" tabindex="0" data-def="A layered dwarven city whose unique constructions join water, stone, brass, and sound.">Brassreach</span> glows beneath a thousand mechanical lanterns. Metal gears turn with impossible ease everywhere you look. The city itself seems alive, and by design; centuries of work dating back to the Founders brought to life a city whose metal heartbeat whirrs, clicks, and hums in perfect harmony. At least, it once did.</p>
+              <p class="intro-passage" data-passage="2" hidden>In recent decades, neglect born of greed, vanity, and contested authority renders the once flawless machinery of Brassreach frail and shuddering. Gone is the pealing chorus of perfectly tuned bells, while superficially lavish towers loom imperiously above ever-worsening squalor. Factions have arisen, some with eyes only for gold and jewels, others for political gain, and all the while fewer and fewer remain who remember the concord of a youthful Brassreach.</p>
             </div></div>
-            <div class="nav" aria-label="Chronicle navigation"><button class="intro-tab secondary" id="introSkip1">Skip</button><button class="intro-tab primary intro-next">Turn Page <span aria-hidden="true">›</span></button></div>
           </section>
 
-          <section class="slide s2" data-art="public/img/intro/living-book/art-archives.png" aria-label="Chronicle page 2 of 3, The Threadbearers">
+          <section class="slide s2" data-art="public/img/intro/living-book/art-archives.png" aria-label="Folio II, The Threadbearers">
             <div class="folio-mark"><span>Folio II</span><strong>The Threadbearers</strong></div>
             <div class="copy"><span class="ink-trace" aria-hidden="true"></span><div class="scroll">
-              <p>The stone and metal maze of Brassreach's surface holds civic workshops, dwellings, towers, and the Halls where elected officials and hereditary power struggle over the city's course. Beneath them, however, layer by Brass-wrought layer, the Undercity opens into sprawling Founder-made reservoirs and vaulted public works, lit by golden seams that fade a little more each year. Deeper still lie the Archives, where the memory of Brassreach survives in etched metal tablets of witness accounts, work inspections, and repair orders. To and from those galleries travel <span class="gloss" tabindex="0" data-def="Civic investigators trained to seek truth by following mechanical failures to their source, uncovering hidden patterns and decoding mystery along the way.">Threadbearers</span>. The first of these truth-seekers returned from long journeys with accounts woven by needle and thread; modern bearers carry their findings in a <span class="gloss" tabindex="0" data-def="A Threadbearer's field record whose firsthand accounts are vital.">Thread Ledger</span>, and seldom venture as far as their predecessors. Most now work near the public Halls, while a trusted few earn the <span class="gloss" tabindex="0" data-def="A hard-earned seal of authority to inspect restricted work, cross-office records, and the deepest reaches of the Undercity.">Deep Writ</span> and descend toward the Cistern Fields, where high vaults, dark reservoirs, and the very foundations of Brassreach are legendary.</p>
+              <p class="intro-passage active" data-passage="1">The stone and metal maze of Brassreach's surface holds civic workshops, dwellings, towers, and the Halls where elected officials and hereditary power struggle over the city's course. Beneath them, however, layer by Brass-wrought layer, the Undercity opens into sprawling Founder-made reservoirs and vaulted public works, lit by golden seams that fade a little more each year.</p>
+              <p class="intro-passage" data-passage="2" hidden>Deeper still lie the Archives, where the memory of Brassreach survives in etched metal tablets of witness accounts, work inspections, and repair orders. To and from those galleries travel <span class="gloss" tabindex="0" data-def="Civic investigators trained to seek truth by following mechanical failures to their source, uncovering hidden patterns and decoding mystery along the way.">Threadbearers</span>. The first of these truth-seekers returned from long journeys with accounts woven by needle and thread; modern bearers carry their findings in a <span class="gloss" tabindex="0" data-def="A Threadbearer's field record whose firsthand accounts are vital.">Thread Ledger</span>, and seldom venture as far as their predecessors.</p>
+              <p class="intro-passage" data-passage="3" hidden>Most now work near the public Halls, while a trusted few earn the <span class="gloss" tabindex="0" data-def="A hard-earned seal of authority to inspect restricted work, cross-office records, and the deepest reaches of the Undercity.">Deep Writ</span> and descend toward the Cistern Fields, where high vaults, dark reservoirs, and the very foundations of Brassreach are legendary.</p>
             </div></div>
-            <div class="nav" aria-label="Chronicle navigation"><button class="intro-tab secondary" id="introBack2"><span aria-hidden="true">‹</span> Previous</button><button class="intro-tab primary intro-next">Turn Page <span aria-hidden="true">›</span></button></div>
           </section>
 
-          <section class="slide s3" data-art="public/img/intro/living-book/art-unfathomer.png" aria-label="Chronicle page 3 of 3, The First Commission">
+          <section class="slide s3" data-art="public/img/intro/living-book/art-unfathomer.png" aria-label="Folio III, The First Commission">
             <div class="folio-mark"><span>Folio III</span><strong>The First Commission</strong></div>
             <div class="copy"><span class="ink-trace" aria-hidden="true"></span><div class="scroll">
-              <p>The Founders shaped the Cistern Fields chamber by chamber, guiding sound through water, stone, and brass until the deepest works rang true enough to birth a city. That foundational accord has weakened. Water has risen for years through neglected channels, and repair orders miles from one another hint at the same strange, pulsing undertone. A cracked stairwell near the public Halls, flooded neighborhoods in the <span class="gloss" tabindex="0" data-def="A densely settled district of workshops, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den below the Markets should have nothing in common...<br><br>You begin as a recent Institute graduate under a <span class="gloss" tabindex="0" data-def="Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna's supervision.">probationary writ</span>. Your attributes, equipment, testimony, repairs, and alliances will shape what follows; failures come at a cost, while successes follow in your footsteps as you explore deeper and deeper. Though you are but a recent Initiate, it is up to you to follow your intuition and uncover what might otherwise spell the end of Brassreach.</p>
+              <p class="intro-passage active" data-passage="1">The Founders shaped the Cistern Fields chamber by chamber, guiding sound through water, stone, and brass until the deepest works rang true enough to birth a city. That foundational accord has weakened. Water has risen for years through neglected channels, and repair orders miles from one another hint at the same strange, pulsing undertone. A cracked stairwell near the public Halls, flooded neighborhoods in the <span class="gloss" tabindex="0" data-def="A densely settled district of workshops, homes, and improvised bridges.">Tangles</span>, and animals driven from a drainage den below the Markets should have nothing in common...</p>
+              <p class="intro-passage" data-passage="2" hidden>You begin as a recent Institute graduate under a <span class="gloss" tabindex="0" data-def="Limited authority for a new Threadbearer to investigate public hazards under Captain Brunna's supervision.">probationary writ</span>. Your attributes, equipment, testimony, repairs, and alliances will shape what follows; failures come at a cost, while successes follow in your footsteps as you explore deeper and deeper. Though you are but a recent Initiate, it is up to you to follow your intuition and uncover what might otherwise spell the end of Brassreach.</p>
             </div></div>
-            <div class="nav" aria-label="Chronicle navigation"><button class="intro-tab secondary" id="introBack3"><span aria-hidden="true">‹</span> Previous</button><button class="intro-tab primary intro-begin">Begin Story</button></div>
           </section>
+
+          <nav class="nav intro-nav" aria-label="Chronicle navigation">
+            <button class="intro-tab secondary" id="introSkip" type="button">Skip</button>
+            <button class="intro-tab secondary" id="introPrevious" type="button" hidden><span aria-hidden="true">‹</span> <span>Previous</span></button>
+            <button class="intro-tab primary intro-next" id="introAdvance" type="button"><span>Turn Page</span> <span aria-hidden="true">›</span></button>
+          </nav>
         </div>
         <div class="intro-blackout" aria-hidden="true"></div>
+        <div class="intro-golden-bloom" aria-hidden="true"></div>
       </div>
-      <button class="intro-awaken" id="introAwaken" type="button"><span id="introBeginPrompt">Press any key to begin your <strong>adventure</strong>.</span></button>
+      <button class="intro-awaken" id="introAwaken" type="button"><span id="introBeginPrompt">Press any key to begin your <strong>journey</strong>.</span></button>
       <p class="sr-only" id="introStatus" aria-live="polite"></p>
     </div>
   </div>`;

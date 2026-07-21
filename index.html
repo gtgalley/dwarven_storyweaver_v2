@@ -9,15 +9,14 @@
   <link rel="icon" href="data:,">
 
   <!-- single stylesheet (RELATIVE path) -->
-  <link rel="stylesheet" href="./public/css/skin.css?v=26">
+  <link rel="stylesheet" href="./public/css/skin.css?v=27">
 
   <!-- The closed chronicle primes its first spread and audio before interaction. -->
   <link rel="preload" as="image" href="public/img/intro/living-book/closed-cover.webp" type="image/webp">
   <link rel="preload" as="image" href="public/img/intro/living-book/open-base.webp" type="image/webp">
   <link rel="preload" as="image" href="public/img/intro/living-book/art-city.png" type="image/png">
   <link rel="preload" as="audio" href="public/audio/intro-hearth-lament.mp3" type="audio/mpeg">
-  <link rel="preload" as="audio" href="public/audio/intro-fire-crackle.ogg" type="audio/ogg">
-  <link rel="preload" as="audio" href="public/audio/intro-sparkle.mp3" type="audio/mpeg">
+  <link rel="preload" as="audio" href="public/audio/intro-fireplace-loop.wav" type="audio/wav">
   <link rel="preload" as="audio" href="public/audio/book-cover-open.ogg" type="audio/ogg">
   <link rel="preload" as="audio" href="public/audio/book-binding-creak.ogg" type="audio/ogg">
   <link rel="preload" as="audio" href="public/audio/book-page-turn.wav" type="audio/wav">
@@ -32,7 +31,7 @@
   <div class="boot" id="boot"><div class="box">Loading…</div></div>
 
   <script type="module">
-    import { boot } from './public/js/engine.js?v=26';
+    import { boot } from './public/js/engine.js?v=27';
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('boot').classList.add('ok');
       boot();
