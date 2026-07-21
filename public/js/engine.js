@@ -1,5 +1,5 @@
 // Brassreach browser game engine
-// v27 — Refined photographic chronicle with passage navigation and seamless presentation.
+// v28 — Cinematic living-book framing, charged opening, and rebalanced intro audio.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -175,12 +175,14 @@ window.setNowPlaying = (title)=>{
 };
 
 /* ---------- background music manager (file-based, crossfades) ---------- */
+const INTRO_MIX_GAIN=1.15;
+const INTRO_FIRE_GAIN=.22*INTRO_MIX_GAIN*1.15;
 const BGM = (function(){
   let ctx, bus, cur=[], curGain=null, fadeMs=1400;
   let currentName=null, targetName=null, requestToken=0;
   let unlocked=false, pendingName=null;
   const tracks = {
-    intro:    { title:"Lament at the Foundry Hearth", srcs:["./public/audio/intro-hearth-lament.mp3"], layerSrcs:["./public/audio/intro-fireplace-loop.wav"], layerGains:[1,.22] },
+    intro:    { title:"Lament at the Foundry Hearth", srcs:["./public/audio/intro-hearth-lament.mp3"], layerSrcs:["./public/audio/intro-fireplace-loop.wav"], layerGains:[INTRO_MIX_GAIN,INTRO_FIRE_GAIN] },
     prelude:  { title:"Prelude to Brass and Shadow", srcs:["./public/audio/8b5955d3-2e28-447b-bc5f-a91bad52e402.m4a"] },
     halls:    { title:"Halls of the Brassreach", srcs:["./public/audio/8b264fe3-26f0-4c6c-9356-60a270d2ef21.mp3"] },
     depths2:  { title:"When the Unfathomer Stirs", srcs:["./public/audio/66bf880d-6cea-470f-8dba-7de081c046fa.mp3"] },
@@ -292,7 +294,7 @@ const BGM = (function(){
     return true;
   }
   function attempt(name){ return unlock(name).catch(()=>false); }
-  function debugState(){ return {unlocked,currentName,targetName,pendingName,primed:[...cache.keys()],sources:cur.length,contextState:ctx?.state||null}; }
+  function debugState(){ return {unlocked,currentName,targetName,pendingName,primed:[...cache.keys()],sources:cur.length,contextState:ctx?.state||null,layerGains:tracks[currentName]?.layerGains||null}; }
   return {crossTo, stop, updateForState, setLevel:setBus, unlock, attempt, prime, debugState};
 })();
 
@@ -305,8 +307,7 @@ const Sound = (()=>{
   const audioBuffers=new Map();
   const inventoryUrls={pickup:'./public/audio/inventory-pickup.wav',place:'./public/audio/inventory-place.wav',reject:'./public/audio/inventory-reject.wav'};
   const introUrls={
-    cover:'./public/audio/book-cover-open.ogg',
-    binding:'./public/audio/book-binding-creak.ogg',
+    cover:'./public/audio/book-cover-open.wav',
     page:'./public/audio/book-page-turn.wav',
     settle:'./public/audio/book-page-settle.ogg',
     passage:'./public/audio/book-page-settle.ogg'
@@ -370,7 +371,7 @@ const Sound = (()=>{
       source.connect(gain).connect(ui); source.start();
     }catch{ sfx(kind==='reject'?'fail':'story'); }
   };
-  const intro=async(kind,{gain:gainOverride=null,pan=0}={})=>{
+  const intro=async(kind,{gain:gainOverride=null,pan=0,playbackRate=1,lowpass=null}={})=>{
     const sa=Engine.state.settings.audio||{};
     if(sa.sfx_story===false||!introUrls[kind]) return false;
     rememberIntro(kind);
@@ -378,9 +379,12 @@ const Sound = (()=>{
     try{
       const buffer=await loadBuffer(introUrls[kind]);
       const source=ctx.createBufferSource(), gain=ctx.createGain();
-      const levels={cover:.54,binding:.2,page:.42,settle:.2,passage:.085};
-      source.buffer=buffer; gain.gain.value=gainOverride??levels[kind]??.3;
-      source.connect(gain);
+      const levels={cover:.62,page:.483,settle:.23,passage:.098};
+      source.buffer=buffer; source.playbackRate.value=playbackRate;
+      gain.gain.value=gainOverride??levels[kind]??(.3*INTRO_MIX_GAIN);
+      let output=source;
+      if(lowpass){ const filter=ctx.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value=lowpass; source.connect(filter); output=filter; }
+      output.connect(gain);
       if(ctx.createStereoPanner){
         const panner=ctx.createStereoPanner(); panner.pan.value=clamp(pan,-.18,.18); gain.connect(panner).connect(ui);
       }else gain.connect(ui);
@@ -395,45 +399,57 @@ const Sound = (()=>{
     ensure(); resume();
     const t=ctx.currentTime;
 
-    // A restrained bass-drum impact: low fundamentals, a short filtered body,
-    // and no bright transient that could read as a UI click.
+    // A compressed orchestral impact gives way to a descending synthesized
+    // fundamental. The second harmonic keeps the fall audible on small
+    // speakers while the true low voice supplies weight on headphones.
+    const compressor=ctx.createDynamicsCompressor();
+    compressor.threshold.value=-15;
+    compressor.knee.value=18;
+    compressor.ratio.value=5;
+    compressor.attack.value=.006;
+    compressor.release.value=.24;
+    const journeyBus=ctx.createGain();
+    journeyBus.gain.value=INTRO_MIX_GAIN;
+    journeyBus.connect(compressor).connect(ui);
+
     const impact=ctx.createGain();
     impact.gain.setValueAtTime(.0001,t);
-    impact.gain.exponentialRampToValueAtTime(.72,t+.018);
-    impact.gain.exponentialRampToValueAtTime(.0001,t+.78);
-    impact.connect(ui);
-    [[78,39,'sine'],[112,52,'triangle']].forEach(([start,end,type],index)=>{
+    impact.gain.exponentialRampToValueAtTime(.78,t+.018);
+    impact.gain.exponentialRampToValueAtTime(.32,t+.22);
+    impact.gain.exponentialRampToValueAtTime(.0001,t+1.02);
+    impact.connect(journeyBus);
+    [[92,44,'sine',.82],[138,61,'triangle',.68]].forEach(([start,end,type,duration])=>{
       const oscillator=ctx.createOscillator();
       oscillator.type=type;
       oscillator.frequency.setValueAtTime(start,t);
-      oscillator.frequency.exponentialRampToValueAtTime(end,t+(index?.48:.7));
+      oscillator.frequency.exponentialRampToValueAtTime(end,t+duration);
       oscillator.connect(impact);
       oscillator.start(t);
-      oscillator.stop(t+.82);
+      oscillator.stop(t+1.06);
     });
 
-    const noiseBuffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.36),ctx.sampleRate);
+    const noiseBuffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.42),ctx.sampleRate);
     const samples=noiseBuffer.getChannelData(0);
     for(let i=0;i<samples.length;i++) samples[i]=(Math.random()*2-1)*(1-(i/samples.length));
     const noise=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),noiseGain=ctx.createGain();
-    noise.buffer=noiseBuffer; filter.type='lowpass'; filter.frequency.value=165;
-    noiseGain.gain.setValueAtTime(.18,t); noiseGain.gain.exponentialRampToValueAtTime(.0001,t+.34);
-    noise.connect(filter).connect(noiseGain).connect(ui); noise.start(t); noise.stop(t+.37);
+    noise.buffer=noiseBuffer; filter.type='lowpass'; filter.frequency.value=145;
+    noiseGain.gain.setValueAtTime(.24,t); noiseGain.gain.exponentialRampToValueAtTime(.0001,t+.4);
+    noise.connect(filter).connect(noiseGain).connect(journeyBus); noise.start(t); noise.stop(t+.43);
 
-    // A low metallic overtone trails the impact. Closely related partials keep
-    // it ethereal without producing a bright completion-jingle sparkle.
-    const shimmer=ctx.createGain(),shimmerStart=t+.16;
-    shimmer.gain.setValueAtTime(.0001,shimmerStart);
-    shimmer.gain.exponentialRampToValueAtTime(.13,shimmerStart+.09);
-    shimmer.gain.exponentialRampToValueAtTime(.0001,shimmerStart+1.65);
-    shimmer.connect(ui);
-    [286,429,572].forEach((frequency,index)=>{
+    const drop=ctx.createGain(),dropStart=t+.08;
+    drop.gain.setValueAtTime(.0001,dropStart);
+    drop.gain.exponentialRampToValueAtTime(.22,dropStart+.18);
+    drop.gain.exponentialRampToValueAtTime(.56,dropStart+1.04);
+    drop.gain.exponentialRampToValueAtTime(.0001,dropStart+1.67);
+    drop.connect(journeyBus);
+    [[96,36,'sine'],[148,58,'triangle']].forEach(([start,end,type],index)=>{
       const oscillator=ctx.createOscillator();
-      oscillator.type='sine';
-      oscillator.frequency.value=frequency+(index*1.7);
-      oscillator.connect(shimmer);
-      oscillator.start(shimmerStart);
-      oscillator.stop(shimmerStart+1.7);
+      oscillator.type=type;
+      oscillator.frequency.setValueAtTime(start,dropStart);
+      oscillator.frequency.exponentialRampToValueAtTime(end,dropStart+(index?1.46:1.6));
+      oscillator.connect(drop);
+      oscillator.start(dropStart);
+      oscillator.stop(dropStart+1.7);
     });
     return true;
   };
@@ -850,35 +866,37 @@ function insertIntro(){
 
   const beginOpening=async()=>{
     if(started||shell?.classList.contains('is-ready')) return false;
+    const openingStartedAt=performance.now();
     started=true; turning=true;
     shell.classList.remove('is-dormant');
     shell.classList.add('is-awakening','is-turning');
+    Engine.el.intro.classList.add('intro-charging');
     shell.classList.remove('content-visible');
     shell.setAttribute('aria-busy','true');
     awaken?.setAttribute('aria-disabled','true');
     announce('The Brassreach chronicle is opening.');
     BGM.unlock('intro');
     Sound.journey();
-    await wait(reduced?35:280);
+    window.setTimeout(()=>Sound.intro('cover',{pan:-.04,playbackRate:.92,lowpass:4200}),720);
+    window.setTimeout(()=>Sound.intro('page',{pan:.05}),1040);
+    await wait(980);
     shell.classList.add('is-black');
-    await wait(reduced?25:320);
+    await wait(220);
     activate(0,0,{reveal:false});
     shell.classList.add('is-open','is-ready');
-    Sound.intro('cover',{pan:.05});
-    if(!reduced) window.setTimeout(()=>Sound.intro('binding',{pan:-.04}),90);
     shell.removeAttribute('role');
     shell.removeAttribute('tabindex');
     shell.removeAttribute('aria-describedby');
     shell.setAttribute('aria-label','The open Brassreach chronicle');
     shell.setAttribute('aria-busy','false');
     awaken?.setAttribute('aria-hidden','true');
-    await wait(reduced?15:80);
+    await wait(120);
     shell.classList.remove('is-black');
-    await wait(reduced?25:420);
+    await wait(Math.max(0,1750-(performance.now()-openingStartedAt)));
     shell.classList.add('content-visible');
     revealInk(Engine.el.slides[0]);
-    await wait(reduced?25:250);
     shell.classList.remove('is-turning','is-awakening');
+    Engine.el.intro.classList.remove('intro-charging');
     turning=false;
     announce(`The chronicle is open. ${describePosition()}`);
     advance?.focus({preventScroll:true});
@@ -2300,7 +2318,6 @@ function getIntroSlidesHTML(){
           </div>
         </div>
         <div class="intro-lantern-light" aria-hidden="true"></div>
-        <div class="intro-edge-haze" aria-hidden="true"></div>
         <div class="intro-page-content">
 
           <section class="slide s1 active" data-art="public/img/intro/living-book/art-city.png" aria-label="Folio I, The City">
@@ -2340,6 +2357,9 @@ function getIntroSlidesHTML(){
       <button class="intro-awaken" id="introAwaken" type="button"><span id="introBeginPrompt">Press any key to begin your <strong>journey</strong>.</span></button>
       <p class="sr-only" id="introStatus" aria-live="polite"></p>
     </div>
+    <div class="intro-viewport-frame intro-frame-top" aria-hidden="true"><span></span></div>
+    <div class="intro-viewport-frame intro-frame-bottom" aria-hidden="true"><span></span></div>
+    <div class="intro-edge-haze" aria-hidden="true"></div>
   </div>`;
 }
 
