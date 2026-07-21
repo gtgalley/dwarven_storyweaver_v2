@@ -81,27 +81,28 @@ credits are retained here for provenance.
   - Use: renamed without recompression; tinted and layered in CSS for the book
     leaves, page stack, inside cover, and animated turning page.
 
-### Cover, binding, and page-settling sounds
+### Page-settling sound
 
-- `public/audio/book-cover-open.ogg`
-- `public/audio/book-binding-creak.ogg`
 - `public/audio/book-page-settle.ogg`
   - Creator: Kenney Vleugels, **50 RPG Sound Effects**
   - Source page: <https://opengameart.org/node/21999>
   - License: CC0 1.0 Universal
-  - Original files: `bookOpen.ogg`, `creak1.ogg`, and `bookPlace1.ogg`
-  - Use: renamed without transcoding; mixed at restrained levels through the
-    existing UI and master audio buses.
+  - Original file: `bookPlace1.ogg`
+  - Use: renamed without transcoding and mixed quietly for physical page
+    settling and intra-Folio passage changes.
 
-### Page-turn sound
+### Cover-opening and page-turn sounds
 
+- `public/audio/book-cover-open.wav`
 - `public/audio/book-page-turn.wav`
   - Creator: Voltiment555, **Book Flip Sounds**
   - Source page: <https://opengameart.org/content/book-flip-sounds>
   - License: CC0 1.0 Universal
-  - Original file: `BookFlip2.wav`
-  - Use: renamed without transcoding and synchronized with the 750 ms physical
-    page-turn animation.
+  - Original files: `BookFlip3.wav` and `BookFlip2.wav`
+  - Use: renamed without transcoding. The longer `BookFlip3.wav` is filtered
+    and slowed slightly for the heavy cover movement; the familiar
+    `BookFlip2.wav` follows as the first page turn and remains the cross-Folio
+    page sound. Both are mixed through the existing UI and master audio buses.
 
 ## Photoreal Living-Book Intro
 
@@ -138,3 +139,22 @@ recording at a much lower gain and never play the page-turn sample.
 
 The replacement fireplace recording is documented in the intro music section
 above. Source and license information was verified on 2026-07-20.
+
+## Living-Book Cinematic Refinement
+
+The top and bottom viewport framing, full-width smoke, stronger mechanical
+lantern pulse, and Journey charge are original CSS and Web Audio work. The
+Journey cue uses a compressed orchestral-style impact, audible second harmonic,
+and descending synthesized fundamental; no new transition recording or runtime
+dependency was added.
+
+The intro music is raised to 1.15 times its previous layer gain. The fireplace
+layer receives that increase plus an independent additional 1.15 multiplier,
+for a final layer gain of 0.29095 versus its former 0.22. Intro page and book
+effects are likewise raised by approximately 15 percent with compression and
+gain staging retained to prevent clipping.
+
+The former Kenney `bookOpen.ogg` and `creak1.ogg` runtime copies were removed.
+The replacement cover performance uses `BookFlip3.wav` from the already
+documented CC0 **Book Flip Sounds** pack, followed by the existing `BookFlip2`
+page turn. Source and license information was reverified on 2026-07-20.
