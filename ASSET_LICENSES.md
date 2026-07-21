@@ -17,7 +17,7 @@ attribution requirement. Credits are retained here for provenance.
   - License: CC0 1.0 Universal
   - Use: 1K color map, renamed and composited at low opacity in CSS.
 
-## Music and fire layer
+## Intro music and fire layer
 
 - `public/audio/intro-hearth-lament.mp3`
   - Creator: RandomMind
@@ -25,13 +25,16 @@ attribution requirement. Credits are retained here for provenance.
   - Source page: <https://opengameart.org/content/fantasy-lament-for-a-warriors-soul>
   - License: CC0 1.0 Universal
   - Use: renamed; looped as the intro music bed.
-- `public/audio/intro-fire-crackle.ogg`
-  - Creator: AntumDeluge
-  - Work: **Fire Crackling**
-  - Source page: <https://opengameart.org/content/fire-crackling>
+- `public/audio/intro-fireplace-loop.wav`
+  - Creator: PagDev
+  - Work: **Fireplace Sound loop**
+  - Source page: <https://opengameart.org/content/fireplace-sound-loop>
   - License: CC0 1.0 Universal
-  - Use: renamed; looped quietly in sync with the intro music through the same
-    music control and master audio path.
+  - Original file: `fire.wav`, a 29.26-second, 44.1 kHz stereo PCM recording.
+  - Use: converted by `tools/process_intro_audio.py` to a normalized 22.05 kHz
+    mono 16-bit PCM WAV, then looped quietly beneath the intro music through the
+    same music control and master audio path. The longer natural recording
+    replaces the short, repetitive crackle used in earlier versions.
 
 ## Inventory interaction sounds
 
@@ -45,7 +48,8 @@ attribution requirement. Credits are retained here for provenance.
   - Use: three source sounds renamed for pickup, placement, and invalid-slot
     feedback; played through the existing UI/master audio controls.
 
-Source and license information was verified on 2026-07-14.
+Source and license information was verified on 2026-07-14; the replacement
+fireplace recording was verified on 2026-07-20.
 
 ## Visual & RPG Overhaul #3
 
@@ -99,16 +103,6 @@ credits are retained here for provenance.
   - Use: renamed without transcoding and synchronized with the 750 ms physical
     page-turn animation.
 
-### Journey sparkle
-
-- `public/audio/intro-sparkle.mp3`
-  - Creator: Brandon Morris (submitted by HaelDB), **Completion sound**
-  - Source page: <https://opengameart.org/content/completion-sound>
-  - License selected for this project: CC0 1.0 Universal
-  - Original file: `completetask_0.mp3`
-  - Use: renamed without transcoding and played once as the word `adventure`
-    illuminates before the cover opens.
-
 ## Photoreal Living-Book Intro
 
 The following artwork was generated specifically for Brassreach and is
@@ -126,5 +120,21 @@ source plates by `tools/build_living_book_assets.py`. This preserves identical
 lantern, lectern, binding, page, lighting, and camera geometry across slides.
 
 No new third-party runtime dependency, font, music, sound, or texture was added
-for this pass. Existing documented CC0 audio remains in use for the cover,
-binding, page, settling, sparkle, music, and fire layers.
+for that pass. The cover, binding, page, settling, and music assets remain in
+use; the subsequent refinement replaced the former sparkle and short fire loop.
+
+## Photoreal Living-Book Refinement
+
+The closed and open photographic plates were regenerated non-destructively by
+`tools/build_living_book_assets.py`. Its edge masks graduate only the distant
+upper background, narrow side boundaries, and cropped lower lectern edge into
+true black; the book, lantern, registered paintings, and camera geometry remain
+unchanged. The foreground haze and lantern pulse are original CSS effects and
+add no runtime dependency.
+
+The opening bass impact and low metallic shimmer are synthesized with the Web
+Audio API. Intra-Folio passage changes reuse the documented CC0 page-settling
+recording at a much lower gain and never play the page-turn sample.
+
+The replacement fireplace recording is documented in the intro music section
+above. Source and license information was verified on 2026-07-20.
