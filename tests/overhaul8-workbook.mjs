@@ -39,7 +39,13 @@ function runtimeValue(id){
 
 const approved=blocks.filter(block=>block.line<=571||block.id==='merchant:dorrin:greeting');
 const campaignApproved=approved.filter(block=>/^(?:chapter|scene|choice|merchant):/.test(block.id));
+// This is still the verbatim baseline everywhere outside the first-commission
+// pilot. The original workbook remains the author's reference, not a build input.
+const pilotChoices=new Set(['tutorial-accept','tutorial-question','tutorial-people','tutorial-dorrin-shop','tutorial-dorrin-ready']);
 for(const block of campaignApproved){
+  const [kind,id,field]=block.id.split(':');
+  if(kind==='choice' && pilotChoices.has(id)) continue;
+  if(kind==='scene' && (id==='tutorial-quartermaster' || (['tutorial-commission','tutorial-bell-stair'].includes(id) && field!=='title'))) continue;
   let expected=block.text;
   if(block.id==='scene:tutorial-bell-stair:story') expected=expected.replace(/ \(ADD A GLOSSARY DEFINITION AND HIGHLIGHTABLE TEXT FOR LANTERN CONSTABLES USING THE SAME LOGIC AS THE INTRO SLIDE MODALS!!!\)/,'');
   assert.equal(clean(runtimeValue(block.id)),clean(expected),`Approved workbook text is not installed exactly: ${block.id}`);

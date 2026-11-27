@@ -106,14 +106,14 @@ await page.waitForFunction(()=>document.querySelector('#intro').classList.contai
 await page.waitForTimeout(180);
 if(await page.locator('#modalEdit:not(.hidden)').count()) await page.locator('#btnEditCancel').click();
 assert(await page.locator('#freeText,#btnAct,#btnCont,#weaveStatus').count()===0,'Removed free-action controls are still mounted');
-assert((await page.locator('#story').textContent()).includes('Morning rain wets the upper terraces'),'Approved opening scene was not installed');
+assert((await page.locator('#story').textContent()).includes('You find Captain Brunna beneath the Public Bell'),'Approved opening scene was not installed');
 await page.screenshot({path:path.join(output,'04-main-story-initial.png'),fullPage:true});
 
 await page.locator('[data-choice-id="tutorial-accept"]').click();
 await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-quartermaster');
 let groups=page.locator('#story .story-group');
 assert(await groups.count()===2,'The first player choice did not follow the opening story group');
-assert((await groups.last().locator('.story-choice-caption').textContent()).includes('Take the writ and ask to which location'),'The chosen option is not preserved in its group');
+assert((await groups.last().locator('.story-choice-caption').textContent()).includes('Ask Brunna for the quickest way'),'The chosen option is not preserved in its group');
 assert((await groups.last().textContent()).includes('Quartermaster Dorrin'),'The resulting scene is not contained by the first choice group');
 
 const beforeMerchant=await groups.count();
@@ -129,8 +129,8 @@ await page.locator('[data-choice-id="tutorial-dorrin-ready"]').click();
 await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-bell-stair');
 groups=page.locator('#story .story-group');
 const latest=groups.last();
-assert((await latest.locator('.story-choice-caption').textContent()).includes('Fasten the Thread Ledger'),'Latest story group lost its selected choice');
-assert((await latest.textContent()).includes('Another tremor could tear the landing'),'Latest story group does not contain the full new scene');
+assert((await latest.locator('.story-choice-caption').textContent()).includes('Pack the Surveyor Hood'),'Latest story group lost its selected choice');
+assert((await latest.textContent()).includes('Both keepers step back.'),'Latest story group does not contain the full new scene');
 assert(!(await latest.textContent()).includes('ADD A GLOSSARY'),'The Lantern Constables author note leaked into the story');
 report.story.groups=await groups.count();
 await page.waitForTimeout(750);

@@ -111,7 +111,7 @@ await page.evaluate(()=>{ Math.random=()=>.999999; });
 await page.locator('[data-choice-id="stair-brace"]').click();
 await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-tangles');
 const successText=await page.locator('#story').innerText();
-assert(successText.includes('With the stair-keepers safe'),'Success route did not receive its connective arrival');
+assert(successText.includes('The older keeper leads you down to the dye-house'),'Success route did not receive its connective arrival');
 
 await seedScene('tutorial-bell-stair',{items:['Rope Coil'],story:'You reach the cracked landing.'});
 await page.evaluate(()=>{ Math.random=()=>0; });

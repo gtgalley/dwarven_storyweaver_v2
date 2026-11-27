@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Field kit fitting study · Brassreach</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui;color:#ede5d3;background:#151414}
+body{max-width:52rem;margin:2rem auto;padding:0 1.2rem} h1{font:2rem/1.2 Georgia,serif} label{display:inline-block;margin:.3rem 1rem .3rem 0}select{font:inherit;padding:.35rem}
+figure{margin:1rem 0}.model{height:min(62vh,40rem);aspect-ratio:1/2;background:url(first-commission-fit.png) 0% 50%/400% 100% no-repeat;border:1px solid #7d694a;max-width:100%} figcaption{margin-top:.4rem}
+</style>
+<h1>Field kit fitting study</h1><p>Compare the same helmet, field coat, and lamp on two builds. These are painted outfit states, not individual equipment overlays. The game’s equipment screen hasn’t changed.</p>
+<label>Character <select id="body"><option>Dwarf</option><option>Elf</option></select></label>
+<label>Outfit <select id="kit"><option>Work clothes</option><option>Survey kit</option></select></label>
+<figure><div role="img" id="model" class="model" aria-label="Dwarf in work clothes"></div><figcaption id="caption" aria-live="polite">Dwarf · Work clothes</figcaption></figure>
+<script>
+const body=document.querySelector('#body'),kit=document.querySelector('#kit'),model=document.querySelector('#model'),caption=document.querySelector('#caption');
+function show(){model.style.backgroundPositionX=((2*body.selectedIndex+kit.selectedIndex)*100/3)+'%';caption.textContent=body.value+' · '+kit.value;model.setAttribute('aria-label',caption.textContent);}
+body.onchange=kit.onchange=show;
+</script></html>

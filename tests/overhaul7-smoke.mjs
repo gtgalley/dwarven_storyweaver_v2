@@ -72,16 +72,14 @@ for(const width of [1920,1440,1280,1024]){
   await page.setViewportSize({width,height:1000});
   await page.waitForTimeout(50);
   const metric=await page.evaluate(()=>{
-    const stage=document.querySelector('#intro .book-stage').getBoundingClientRect();
-    const gutter=document.querySelector('#intro .book-gutter').getBoundingClientRect();
+    const stage=document.querySelector('#intro .intro-stage').getBoundingClientRect();
     const slide=document.querySelector('#intro .slide.active');
-    const art=slide.querySelector('.pic').getBoundingClientRect();
+    const art=document.querySelector('#introArtLayer');
     const copy=slide.querySelector('.copy').getBoundingClientRect();
-    return {width:innerWidth,stageCenter:stage.left+stage.width/2,gutterCenter:gutter.left+gutter.width/2,artRight:art.right,copyLeft:copy.left,overflow:document.documentElement.scrollWidth-innerWidth};
+    return {width:innerWidth,stageCenter:stage.left+stage.width/2,artLoaded:art.complete&&art.naturalWidth>0,copyLeft:copy.left,overflow:document.documentElement.scrollWidth-innerWidth};
   });
   assert(Math.abs(metric.stageCenter-width/2)<1.5,`Open book is not centered at ${width}px`);
-  assert(Math.abs(metric.gutterCenter-width/2)<2,`Book gutter is not centered at ${width}px`);
-  assert(metric.artRight<=width/2+2,`Intro artwork crosses the gutter at ${width}px`);
+  assert(metric.artLoaded,`Photographic folio artwork failed to load at ${width}px`);
   assert(metric.copyLeft>=width/2-2,`Intro copy crosses the gutter at ${width}px`);
   assert(metric.overflow<=0,`Horizontal overflow at ${width}px`);
   results.intro.push(metric);

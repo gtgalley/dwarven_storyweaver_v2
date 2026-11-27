@@ -157,7 +157,7 @@ if(await page.locator('#modalEdit:not(.hidden)').count()) await page.locator('#b
 const opening=page.locator('#story .story-group-opening');
 assert(await opening.count()===1,'The initial story passage does not have exactly one opening bracket');
 assert((await opening.locator('.story-choice-caption').textContent()).includes('The Journey Begins'),'The opening bracket title is incorrect');
-assert((await opening.textContent()).includes('Morning rain wets the upper terraces'),'The opening scene content changed or escaped its bracket');
+assert((await opening.textContent()).includes('You find Captain Brunna beneath the Public Bell'),'The opening scene content changed or escaped its bracket');
 assert((await opening.textContent()).includes('Thread Ledger'),'The opening item feedback is not contained by the opening bracket');
 report.story.openingBracket=true;
 await page.screenshot({path:path.join(output,'09-the-journey-begins-bracket.png'),fullPage:true});
