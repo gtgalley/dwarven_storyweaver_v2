@@ -134,7 +134,7 @@ await page.screenshot({path:path.join(output,'07-sella-brassworks.png'),fullPage
 
 await seedScene('gate-counter',{items:['Echo Key','Stone Key','Brass Key'],story:'The final witnesses seal the ledger.'});
 const gateText=await page.locator('#story').innerText();
-assert(/not a judge, and it does not speak/i.test(gateText),'Counter explanation lost its literal framing');
+assert(/bank of dials, not a judge/i.test(gateText)&&/red needles/i.test(gateText),'The Counter must be a physical instrument the player can read');
 await page.screenshot({path:path.join(output,'08-gate-counter.png'),fullPage:true});
 
 assert(results.consoleErrors.length===0,`Console errors: ${results.consoleErrors.join(' | ')}`);

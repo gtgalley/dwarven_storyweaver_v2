@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {CAMPAIGN_SCENES,ENDINGS} from '../public/js/campaign.js';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -99,7 +100,7 @@ for(const [sceneId,file,needle] of captures){
   await seedScene(sceneId,{prepared:true});
   const text=await page.locator('#story').innerText();
   assert(text.includes(needle),`${sceneId} did not render its revised scene text`);
-  assert(text.length>900,`${sceneId} rendered an abbreviated scene (${text.length} characters)`);
+  for(const para of CAMPAIGN_SCENES[sceneId].story.split(/\n\s*\n/)) assert(text.includes(para.trim()),`${sceneId} omitted part of its passage`);
   await page.screenshot({path:path.join(output,file),fullPage:true});
   results.scenes.push({sceneId,textLength:text.length});
 }
@@ -135,7 +136,7 @@ for(const id of ['concord','channel','bind','banish','hold']){
   const epilogue=await page.locator('#epiContent').innerText();
   assert(ending.id===id,`${id} did not resolve to the selected ending`);
   assert(ending.quality==='strong',`${id} did not recognize full preparation`);
-  assert(epilogue.length>1200,`${id} epilogue is too abbreviated (${epilogue.length} characters)`);
+  assert(epilogue.includes(ENDINGS[id].address)&&epilogue.includes(ENDINGS[id].strong),`${id} epilogue omitted the decision or its consequence`);
   assert(epilogue.includes('Counter record:'),`${id} epilogue lacks its preparation record`);
   assert(await page.locator('#btnEpiRestart').isVisible(),`${id} epilogue hides the New Run control`);
   results.endings[id]={quality:ending.quality,textLength:epilogue.length};

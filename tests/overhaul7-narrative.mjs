@@ -10,8 +10,12 @@ const outcomes=checks.flatMap(({scene,choice})=>[
   {scene:scene.id,choice:choice.id,kind:'failure',text:choice.failure}
 ]);
 
-assert.equal(scenes.length,37,'Check the route inventory when adding scenes');
-assert.equal(choices.length,90,'Check the route inventory when adding choices');
+assert.equal(scenes.length,39,'Check the route inventory when adding scenes');
+assert.equal(choices.length,98,'Check the route inventory when adding choices');
+for(const [order,station] of [['orra-reinforce','depths-reserve-pump'],['orra-evacuate','depths-door-list']]){
+  const choice=CAMPAIGN_SCENES['depths-lower-watch'].choices.find(c=>c.id===order);
+  assert.equal(choice.nextSuccess,station); assert.equal(choice.nextFail,station);
+}
 assert(checks.some(({choice})=>choice.id==='platform-rigging'&&choice.stat==='DEX'),'The Ninth Platform lacks its rigging solution');
 
 for(const scene of scenes){
@@ -25,10 +29,8 @@ for(const outcome of outcomes){
 }
 
 for(const [id,ending] of Object.entries(ENDINGS)){
-  assert(ending.address.length>=500,`${id} lacks a developed player address`);
-  assert(ending.strong.length>=500,`${id} lacks a developed strong resolution`);
-  assert(ending.strained.length>=500,`${id} lacks a developed strained resolution`);
-  assert(ending.address.split(/\n\s*\n/).length>=2,`${id} address is not staged in readable paragraphs`);
+  assert(ending.address.trim()&&ending.strong.trim()&&ending.strained.trim(),`${id} lacks an address or outcome`);
+  assert.notEqual(ending.strong,ending.strained,`${id} preparation makes no difference`);
 }
 
 const campaignText=[

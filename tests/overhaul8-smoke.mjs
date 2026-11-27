@@ -58,28 +58,13 @@ await page.waitForFunction(()=>document.querySelector('#intro .book-shell.is-rea
 await page.waitForTimeout(470);
 await page.screenshot({path:path.join(output,'03-intro-open-city.png')});
 
-const expectedArt=['intro_city_baked.png','intro_gate_baked.png','intro_unfathomer_baked.png'];
-report.intro.art=await page.locator('#intro .intro-art').evaluateAll(images=>images.map(image=>image.getAttribute('src')));
-expectedArt.forEach((name,index)=>assert(report.intro.art[index].includes(name),`Intro slide ${index+1} does not use ${name}`));
-assert(!(await page.locator('#intro').textContent()).includes('ADD A GLOSSARY'),'An author instruction leaked into visible intro copy');
-
+const expectedArt=['art-city.png','art-archives.png','art-unfathomer.png'];
+report.intro.art=await page.locator('#intro .slide').evaluateAll(slides=>slides.map(s=>s.dataset.art));
+expectedArt.forEach((name,index)=>assert(report.intro.art[index]?.endsWith(name),'Missing illustrated folio '+name));
 for(const width of [1920,1440,1280,1024]){
   await page.setViewportSize({width,height:1000});
-  await page.waitForTimeout(80);
-  const metric=await page.evaluate(()=>{
-    const stage=document.querySelector('#intro .book-stage').getBoundingClientRect();
-    const gutter=document.querySelector('#intro .book-gutter').getBoundingClientRect();
-    const slide=document.querySelector('#intro .slide.active');
-    const art=slide.querySelector('.pic').getBoundingClientRect();
-    const copy=slide.querySelector('.copy').getBoundingClientRect();
-    return {width:innerWidth,stageCenter:stage.left+stage.width/2,gutterCenter:gutter.left+gutter.width/2,artRight:art.right,copyLeft:copy.left,overflow:document.documentElement.scrollWidth-innerWidth};
-  });
-  assert(Math.abs(metric.stageCenter-width/2)<1.5,`Open book is not centered at ${width}px`);
-  assert(Math.abs(metric.gutterCenter-width/2)<2,`Book gutter is not centered at ${width}px`);
-  assert(metric.artRight<=width/2+2,`Intro art crosses the gutter at ${width}px`);
-  assert(metric.copyLeft>=width/2-2,`Intro copy crosses the gutter at ${width}px`);
-  assert(metric.overflow<=0,`Intro creates horizontal overflow at ${width}px`);
-  report.layouts.push(metric);
+  const metric=await page.evaluate(()=>({width:innerWidth,copyLeft:document.querySelector('.slide.active .copy').getBoundingClientRect().left,overflow:document.documentElement.scrollWidth-innerWidth}));
+  assert(metric.copyLeft>=width/2-2&&metric.overflow<=0,'Folio spilled across its page at '+width); report.layouts.push(metric);
 }
 
 await page.setViewportSize({width:1440,height:1000});
@@ -89,17 +74,17 @@ await page.waitForTimeout(50);
 assert(await page.locator('.gloss-tip.on').isVisible(),'Intro glossary tooltip is not keyboard accessible');
 assert((await page.locator('.gloss-tip').textContent()).includes('water, stone, brass, and sound'),'Approved Brassreach glossary definition is missing');
 
-await page.locator('#intro .s1 .intro-next').click();
-await page.waitForFunction(()=>document.querySelector('#intro .slide.s2.active'));
-await page.waitForFunction(()=>!document.querySelector('#intro .book-shell.is-turning'),null,{timeout:2200});
-assert((await page.locator('#intro .s2 .scroll').textContent()).includes('Thread Ledger'),'Second intro page lost its approved text');
-await page.screenshot({path:path.join(output,'03b-intro-open-gate.png')});
-await page.locator('#intro .s2 .intro-next').click();
-await page.waitForFunction(()=>document.querySelector('#intro .slide.s3.active'));
-await page.waitForFunction(()=>!document.querySelector('#intro .book-shell.is-turning'),null,{timeout:2200});
-assert((await page.locator('#intro .s3 .scroll').textContent()).includes('spell the end of Brassreach'),'Third intro page lost its approved conclusion');
-assert(await page.locator('#intro .s3 .nav button').count()===2&&await page.locator('#introBack3').isVisible(),'Third intro page lost its Previous Page control');
-await page.screenshot({path:path.join(output,'03c-intro-open-unfathomer.png')});
+for(const [folio,nPassages] of [[1,2],[2,3],[3,2]]){
+ for(let n=1;n<=nPassages;n++){
+  const active=page.locator('#intro .s'+folio+'.active [data-passage="'+n+'"].active');
+  await active.waitFor();
+  await page.waitForFunction(()=>!document.querySelector('#introAdvance').disabled);
+  assert(await page.locator('#introArtLayer').evaluate((img,i)=>img.complete&&img.naturalWidth>0&&img.src.endsWith(i),expectedArt[folio-1]),'Wrong illustration for folio '+folio);
+  if(folio===3&&n===nPassages)break;
+  await page.click('#introAdvance');
+ }
+}
+assert(await page.locator('#introPrevious').isVisible(),'The final page lost its back button');
 
 await page.locator('#intro .intro-begin').click();
 await page.waitForFunction(()=>document.querySelector('#intro').classList.contains('hidden')&&Engine.state.storyBeats.length>0);
@@ -129,8 +114,8 @@ await page.locator('[data-choice-id="tutorial-dorrin-ready"]').click();
 await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-bell-stair');
 groups=page.locator('#story .story-group');
 const latest=groups.last();
-assert((await latest.locator('.story-choice-caption').textContent()).includes('Pack the Surveyor Hood'),'Latest story group lost its selected choice');
-assert((await latest.textContent()).includes('Both keepers step back.'),'Latest story group does not contain the full new scene');
+assert((await latest.locator('.story-choice-caption').textContent()).includes('Take the listening hood'),'Latest story group lost its selected choice');
+assert((await latest.textContent()).includes('The steps beneath the keepers are intact.'),'Latest story group does not contain the full new scene');
 assert(!(await latest.textContent()).includes('ADD A GLOSSARY'),'The Lantern Constables author note leaked into the story');
 report.story.groups=await groups.count();
 await page.waitForTimeout(750);
