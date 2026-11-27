@@ -1,5 +1,5 @@
 // Brassreach browser game engine
-// v28 — Cinematic living-book framing, charged opening, and rebalanced intro audio.
+// v29 — First commission playtest.
 
 import { makeWeaver } from './weaver.js';
 import { CAMPAIGN_VERSION, CAMPAIGN_CHAPTERS, CAMPAIGN_SCENES, MERCHANTS, ENDINGS } from './campaign.js';
@@ -12,7 +12,8 @@ const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const modFrom=(s)=>Math.floor((s-10)/2);
 const pick=a=>a[rnd(0,a.length-1)];
 const jitter=(f,amt=0.10)=>f*(1+ (Math.random()*2-1)*amt);
-const STORAGE_PREFIX='brassreach:';
+const pilotMode=new URLSearchParams(location.search).get('playtest')==='first-commission';
+const STORAGE_PREFIX=pilotMode?'brassreach:pilot:first-commission:':'brassreach:';
 const PROJECT_STORAGE_KEYS=['dds_state','intro_seen','dm_on','dm_ep'];
 const store={
   get(k,d){
@@ -21,6 +22,7 @@ const store={
       if(current!==null) return JSON.parse(current);
 
       // One-time compatibility read for saves created before keys were namespaced.
+      if(pilotMode) return d;
       const legacy=localStorage.getItem(k);
       if(legacy===null) return d;
       const value=JSON.parse(legacy);
@@ -32,7 +34,7 @@ const store={
   del(k){
     try{
       localStorage.removeItem(STORAGE_PREFIX+k);
-      localStorage.removeItem(k);
+      if(!pilotMode) localStorage.removeItem(k);
     }catch{}
   },
   clearProject(){ PROJECT_STORAGE_KEYS.forEach(k=>this.del(k)); }
@@ -347,6 +349,23 @@ const Sound = (()=>{
     g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(a[3],t+.015); g.gain.exponentialRampToValueAtTime(.0001,t+a[2]);
     o.connect(g).connect(ui); o.start(t); o.stop(t+a[2]+.05);
   };
+  // The strike dies away before the pipe answers. Both sounds use the existing
+  // effects bus; the clue is also fully described in the stairwell text.
+  const bellAndPipe=()=>{
+    if(Engine.state.settings.audio.sfx_story===false || !ctx || ctx.state!=='running') return;
+    const now=ctx.currentTime;
+    function strike(offset,hz,level,decay){
+      const o=ctx.createOscillator(), g=ctx.createGain(), t=now+offset;
+      o.frequency.value=hz;
+      g.gain.setValueAtTime(.0001,t);
+      g.gain.exponentialRampToValueAtTime(level,t+.009);
+      g.gain.exponentialRampToValueAtTime(.0001,t+decay);
+      o.connect(g).connect(ui); o.start(t); o.stop(t+decay+.01);
+      o.onended=()=>{o.disconnect();g.disconnect();};
+    }
+    strike(0,294,.32,.75); strike(0,693,.14,.49); strike(0,1174,.08,.28);
+    for(const delay of [1.02,1.21]){ strike(delay,112,.25,.14); strike(delay,318,.09,.075); }
+  };
   const gong = ()=>{
   ensure(); const t=ctx.currentTime;
   // detuned oscillators + long decay for a gong-ish swell
@@ -454,7 +473,7 @@ const Sound = (()=>{
     return true;
   };
   const ambOn = ()=>ensure(); // for legacy calls
-  return {click, sfx, gong, inventory, intro, journey, primeIntro, ambOn, setLevels, resume, ensure, getCtx:()=>ensure(), getMaster:()=>master, debugIntro:()=>introHistory.map(entry=>({...entry}))};
+  return {click, sfx, gong, bellAndPipe, inventory, intro, journey, primeIntro, ambOn, setLevels, resume, ensure, getCtx:()=>ensure(), getMaster:()=>master, debugIntro:()=>introHistory.map(entry=>({...entry}))};
 })();
 
 /* ---------- weaver ---------- */
@@ -501,7 +520,7 @@ export function boot(){
   tuneIntroLayout();
   mountScrollFab();
 
-  const seen = store.get('intro_seen', false);
+  const seen = pilotMode || store.get('intro_seen', false);
   if (seen){
     if (Engine.el.intro) Engine.el.intro.classList.add('hidden');
     try{ Engine.el.fxIntroCtl?.stop?.(); }catch{}
@@ -1680,6 +1699,8 @@ function renderStoryBeat(beat,parent){
 
 function renderAll(){
   const s=Engine.state, C=s.character, F=s.flags;
+  // Gear can change while a choice is on screen, including through the editor.
+  if(s.campaign?.sceneId==='tutorial-bell-stair' && s._lastChoices?.length) renderChoices(makeChoiceSet());
   $('#seedVal').textContent=s.seed; $('#turnVal').textContent=s.turn;
   const keysKnown=!!s.campaign?.flags?.keysKnown;
   Engine.el.keysVal.textContent=keysKnown?`${(F.keys||[]).length} / 3`:(s.campaign?.writ==='deep'?'Deep Writ':'Probationary');
@@ -1738,6 +1759,7 @@ function renderAll(){
   }catch{}
   // Story
 
+  const readingPosition=Engine.el.story.scrollTop;
   Engine.el.story.innerHTML='';
   const groups=new Map();
   let latestTextElement=null;
@@ -1799,7 +1821,7 @@ function renderAll(){
       const top=Math.max(0,Engine.el.story.scrollTop+(targetRect.top-storyRect.top)-18);
       Engine.el.story.scrollTo({top,behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
     });
-  }
+  }else Engine.el.story.scrollTop=readingPosition;
 }
 
 /* ---------- authored campaign flow ---------- */
@@ -1914,6 +1936,7 @@ function enterScene(sceneId,{appendStory=true,arrivalKey=null}={}){
     appendPassage(next.story);
   }
   if(firstEntry){ C.enteredScenes.push(sceneId); applyEffects(next.enter||{},{source:`Entered ${next.title}`}); }
+  if(firstEntry && appendStory && next.cue==='bell-and-pipe') Sound.bellAndPipe();
   renderChoices(next.choices); S.turn++; renderAll(); persistState('Objective updated'); BGM.updateForState(S);
 }
 function beginTale(preserveProgress=false){
@@ -1992,6 +2015,8 @@ function requirementStatus(ch){
   return {ok:missing.length===0,missing,metrics};
 }
 function modifierText(ch){
+  if(ch.needsItem) return `No roll · Use your ${ch.needsItem}`;
+  if(ch.needsFlag) return 'No roll · Lead from the stairwell';
   if(ch.type==='ending'){
     const requirement=requirementStatus(ch);
     return requirement.ok?'Living Choice · outcome reflects your preparation':(ch.requirementText||`Missing: ${requirement.missing.join(', ')}`);
@@ -1999,9 +2024,14 @@ function modifierText(ch){
   if(ch.type!=='check') return ch.type==='merchant'?'Merchant · buy and sell':'No roll';
   const active=choiceBonusBreakdown(ch).parts.map(part=>`${part.label} ${fmt(part.value)}`); return `DC ${ch.dc}${active.length?` · ${active.join(' · ')}`:''}`;
 }
+function choiceAvailable(ch){
+  const S=Engine.state;
+  return (!ch.needsItem || S.character.inventory.includes(ch.needsItem)) &&
+         (!ch.needsFlag || !!S.campaign?.flags?.[ch.needsFlag]);
+}
 function renderChoices(choices){
   const list=Engine.el.choiceList; if(!list) return; list.innerHTML='';
-  const pool=Array.isArray(choices)?choices:[]; Engine.state._lastChoices=pool.map(ch=>ch.id);
+  const pool=Array.isArray(choices)?choices.filter(choiceAvailable):[]; Engine.state._lastChoices=pool.map(ch=>ch.id);
   pool.forEach((ch,index)=>{
     const requirement=ch.type==='ending'?requirementStatus(ch):{ok:true};
     const btn=document.createElement('button'); btn.className=`choice-btn choice-${ch.type||'check'}${index===0?' recommended':''}`;
@@ -2064,7 +2094,7 @@ function doNarrate(ch){
 }
 
 function resolveChoice(ch){
-  if(Engine.busy||!ch) return;
+  if(Engine.busy||!ch||!choiceAvailable(ch)) return;
   if(ch.type==='merchant'){ openMerchant(ch.merchant,ch); return; }
   if(ch.type==='ending'){
     const requirement=requirementStatus(ch);
@@ -2095,7 +2125,9 @@ function rollLabel(result){
 function completeCheckedChoice(ch,result,passed){
   ensureStoryGroup(ch);
   markEncounter(ch);
-  const resultText=passed?(ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.');
+  const worn=ch.equippedSuccess;
+  const usedGear=passed && worn && result.bonus.parts.some(part=>part.source==='equipped' && part.item===worn.item);
+  const resultText=passed?(usedGear?worn.text:ch.success||'The attempt succeeds.'):(ch.failure||'The attempt fails, but the expedition continues.');
   const paragraphs=String(resultText).split(/\n\s*\n/).map(part=>part.trim()).filter(Boolean);
   paragraphs.forEach((paragraph,index)=>appendBeat(paragraph,index===paragraphs.length-1?rollLabel(result):null,index===paragraphs.length-1?(passed?'success':'fail'):'story'));
   const effects=ch.effects?(ch.effects[passed?'success':'failure']||{}):{}; applyEffects(effects,{source:ch.label}); Sound.sfx(passed?'success':'fail');

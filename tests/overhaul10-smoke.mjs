@@ -160,7 +160,7 @@ await page.locator('#btnEditCancel').click();
 const opening=page.locator('#story .story-group-opening');
 assert(await opening.count()===1,'Opening passage does not have exactly one bracket');
 assert((await opening.textContent()).includes('The Journey Begins'),'Opening bracket title changed');
-assert((await opening.textContent()).includes('Morning rain wets the upper terraces'),'Opening story content changed');
+assert((await opening.textContent()).includes('You find Captain Brunna beneath the Public Bell'),'Opening story content changed');
 report.story.openingBracket=true;
 await page.screenshot({path:path.join(output,'07-the-journey-begins.png'),fullPage:true});
 
