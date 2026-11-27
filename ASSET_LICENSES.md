@@ -1,5 +1,10 @@
 # Brassreach External Asset Credits
 
+## Campaign fieldwork: Archives recording and illustrations
+
+- **J. S. Bach, Goldberg Variations, BWV 988: Aria**, piano by **Kimiko Ishizaka**, Open Goldberg Variations. The project released this performance under CC0; the composition is public domain. The local Ogg is the complete recording, not a synthesized arrangement. [Release](https://opengoldbergvariations.org/) · [recording and license](https://commons.wikimedia.org/wiki/File:Goldberg_Variations_01_Aria.ogg) · [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Runtime file: `public/audio/goldberg-aria.ogg`.
+- The five `public/img/field-*.webp` assets were created for this pass with built-in image generation and optimized for the site. The two character sheets share a casting order; the three separate scene plates are optional. No external illustration, font or new runtime dependency was added. See [campaign notes](docs/WHOLE_CAMPAIGN_REVIEW.md) for the art briefs and cue sheet.
+
 The assets below were added for Visual Overhaul #2. Each is distributed under
 CC0 1.0 Universal and may be copied, modified, and redistributed without an
 attribution requirement. Credits are retained here for provenance.

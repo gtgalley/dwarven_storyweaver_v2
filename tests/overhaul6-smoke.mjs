@@ -111,7 +111,7 @@ await page.evaluate(()=>{ Math.random=()=>.999999; });
 await page.locator('[data-choice-id="stair-brace"]').click();
 await page.waitForFunction(()=>Engine.state.campaign.sceneId==='tutorial-tangles');
 const successText=await page.locator('#story').innerText();
-assert(successText.includes('With the stair-keepers safe'),'Success route did not receive its connective arrival');
+assert(successText.includes('The older keeper leads you down to the dye-house'),'Success route did not receive its connective arrival');
 
 await seedScene('tutorial-bell-stair',{items:['Rope Coil'],story:'You reach the cracked landing.'});
 await page.evaluate(()=>{ Math.random=()=>0; });
@@ -134,7 +134,7 @@ await page.screenshot({path:path.join(output,'07-sella-brassworks.png'),fullPage
 
 await seedScene('gate-counter',{items:['Echo Key','Stone Key','Brass Key'],story:'The final witnesses seal the ledger.'});
 const gateText=await page.locator('#story').innerText();
-assert(/not a judge, and it does not speak/i.test(gateText),'Counter explanation lost its literal framing');
+assert(/bank of dials, not a judge/i.test(gateText)&&/red needles/i.test(gateText),'The Counter must be a physical instrument the player can read');
 await page.screenshot({path:path.join(output,'08-gate-counter.png'),fullPage:true});
 
 assert(results.consoleErrors.length===0,`Console errors: ${results.consoleErrors.join(' | ')}`);

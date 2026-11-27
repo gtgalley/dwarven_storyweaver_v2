@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {CAMPAIGN_SCENES,ENDINGS} from '../public/js/campaign.js';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -72,16 +73,14 @@ for(const width of [1920,1440,1280,1024]){
   await page.setViewportSize({width,height:1000});
   await page.waitForTimeout(50);
   const metric=await page.evaluate(()=>{
-    const stage=document.querySelector('#intro .book-stage').getBoundingClientRect();
-    const gutter=document.querySelector('#intro .book-gutter').getBoundingClientRect();
+    const stage=document.querySelector('#intro .intro-stage').getBoundingClientRect();
     const slide=document.querySelector('#intro .slide.active');
-    const art=slide.querySelector('.pic').getBoundingClientRect();
+    const art=document.querySelector('#introArtLayer');
     const copy=slide.querySelector('.copy').getBoundingClientRect();
-    return {width:innerWidth,stageCenter:stage.left+stage.width/2,gutterCenter:gutter.left+gutter.width/2,artRight:art.right,copyLeft:copy.left,overflow:document.documentElement.scrollWidth-innerWidth};
+    return {width:innerWidth,stageCenter:stage.left+stage.width/2,artLoaded:art.complete&&art.naturalWidth>0,copyLeft:copy.left,overflow:document.documentElement.scrollWidth-innerWidth};
   });
   assert(Math.abs(metric.stageCenter-width/2)<1.5,`Open book is not centered at ${width}px`);
-  assert(Math.abs(metric.gutterCenter-width/2)<2,`Book gutter is not centered at ${width}px`);
-  assert(metric.artRight<=width/2+2,`Intro artwork crosses the gutter at ${width}px`);
+  assert(metric.artLoaded,`Photographic folio artwork failed to load at ${width}px`);
   assert(metric.copyLeft>=width/2-2,`Intro copy crosses the gutter at ${width}px`);
   assert(metric.overflow<=0,`Horizontal overflow at ${width}px`);
   results.intro.push(metric);
@@ -101,7 +100,7 @@ for(const [sceneId,file,needle] of captures){
   await seedScene(sceneId,{prepared:true});
   const text=await page.locator('#story').innerText();
   assert(text.includes(needle),`${sceneId} did not render its revised scene text`);
-  assert(text.length>900,`${sceneId} rendered an abbreviated scene (${text.length} characters)`);
+  for(const para of CAMPAIGN_SCENES[sceneId].story.split(/\n\s*\n/)) assert(text.includes(para.trim()),`${sceneId} omitted part of its passage`);
   await page.screenshot({path:path.join(output,file),fullPage:true});
   results.scenes.push({sceneId,textLength:text.length});
 }
@@ -137,7 +136,7 @@ for(const id of ['concord','channel','bind','banish','hold']){
   const epilogue=await page.locator('#epiContent').innerText();
   assert(ending.id===id,`${id} did not resolve to the selected ending`);
   assert(ending.quality==='strong',`${id} did not recognize full preparation`);
-  assert(epilogue.length>1200,`${id} epilogue is too abbreviated (${epilogue.length} characters)`);
+  assert(epilogue.includes(ENDINGS[id].address)&&epilogue.includes(ENDINGS[id].strong),`${id} epilogue omitted the decision or its consequence`);
   assert(epilogue.includes('Counter record:'),`${id} epilogue lacks its preparation record`);
   assert(await page.locator('#btnEpiRestart').isVisible(),`${id} epilogue hides the New Run control`);
   results.endings[id]={quality:ending.quality,textLength:epilogue.length};

@@ -4,6 +4,10 @@ This guide governs authored campaign prose, interface copy, item text, and any l
 
 ## Core standard
 
+Give the explanation before the choice that needs it. At Dorrin’s counter you hear his fingernail tap through the hood’s plate; then you can choose it instead of the rope. At the stair you do not yet know why the pipe knocks. Explain how the tool works without solving the mystery for the player.
+
+Read each choice with its failed outcome and the first paragraph of the next scene. Check the people, tools, injuries and locations in all three. A journal entry should record what happened on **that** route, not summarize what the author knows. If a scene makes sense in two sentences, do not pad it to meet a word count.
+
 Every passage must make five facts easy to identify on one reading:
 
 1. Who acts.

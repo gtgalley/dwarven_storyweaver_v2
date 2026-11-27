@@ -1233,3 +1233,14 @@ body.hc .crest,body.hc #glow{opacity:.08}
   #intro .ink-trace{display:none!important}
 }
 
+.field-portrait,.field-model{background-repeat:no-repeat;background-size:400% 300%}
+.field-portrait{background-image:url('../img/field-portraits.webp')}
+.portrait-preview{height:100px;width:100px;margin:0 auto .5rem;border:1px solid #806841}
+.field-model{background-image:url('../img/field-models.webp')}
+.rig-stage .field-model{position:relative;align-self:center;width:100%;aspect-ratio:3/5}
+.equipment-figure.field-model{width:138px;height:228px;pointer-events:none}
+.equipment-figure.field-model span{display:none!important}
+.field-pin{position:absolute;transform:translate(-50%,-50%);display:grid;place-content:center;width:18px;height:18px;background:#201c17;border:1px solid #d0a763;color:#f3dfac;border-radius:50%;font:12px Georgia,serif}
+.field-view{min-width:0;margin-top:7px}
+.field-view summary{color:#d9be86;cursor:pointer;font-size:.82rem}
+.field-view img{display:block;width:100%;height:auto;margin-top:7px;border:1px solid #716344}
